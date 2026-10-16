@@ -538,7 +538,12 @@ static void lfo_trig(trk_t *t)
 
 /* ---------------------------------------------------------------------------------------------- voices */
 
-static m2k_pattern_t pat[M2K_PATTERNS] POOL;
+/* the store: the patterns, then the settings */
+static struct {
+    m2k_pattern_t p[M2K_PATTERNS];
+    uint8_t set[S_COUNT];
+} store_ POOL;
+#define pat (store_.p)
 static int cur_pat;
 static uint8_t master_vol = 100;
 

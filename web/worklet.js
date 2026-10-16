@@ -33,12 +33,13 @@ class Mono2k extends AudioWorkletProcessor {
       case "btn": x.w_button(m.b, m.d); break;
       case "enc": x.w_encoder(m.e, m.d); break;
       case "midi": x.w_midi(m.s, m.a, m.b); break;
+      case "set": x.w_setting(m.i, m.v); break;
       case "store": {
         const n = x.w_store_len();
         this.port.postMessage({ t: "store", bytes: new Uint8Array(x.memory.buffer, x.w_store(), n).slice() });
         break;
       }
-      case "reset": x.w_init(m.seed >>> 0); break;
+      case "reset": { const keep = new Uint8Array(x.memory.buffer, x.w_store(), x.w_store_len()).slice(-16); x.w_init(m.seed >>> 0); new Uint8Array(x.memory.buffer, x.w_store(), x.w_store_len()).set(keep, x.w_store_len() - 16); break; }
       default: break;
     }
   }

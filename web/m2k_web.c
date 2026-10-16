@@ -21,6 +21,7 @@ EXPORT uint8_t *w_store(void) { int n; return m2k_store(&n); }
 EXPORT int w_store_len(void) { int n; m2k_store(&n); return n; }
 EXPORT void w_restore(void) { m2k_restore(); }
 EXPORT int w_dirty(void) { return m2k_dirty(); }
+EXPORT void w_setting(int i, int v) { m2k_setting(i, v); }
 
 /* what the page shows next to the panel */
 EXPORT const uint8_t *w_info(void)

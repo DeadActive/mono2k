@@ -83,6 +83,9 @@ typedef struct {
     m2k_lock_t lock[M2K_LOCKS];
 } m2k_pattern_t;
 
+/* settings: the instrument's, not a pattern's; saved with the store. 0..127 */
+enum { S_SCREEN, S_COUNT = 16 };       /* S_SCREEN: below 64 light (ink on paper), from 64 dark (the negative) */
+
 /* the API */
 void m2k_init(uint32_t seed);
 void m2k_render(int16_t *lr, int frames);           /* interleaved stereo, frames a multiple of M2K_SUB */
@@ -95,5 +98,6 @@ const uint8_t *m2k_leds(void);                      /* 27 key LEDs then 14 butto
 uint8_t *m2k_store(int *len);                       /* the patterns, to save or to overwrite before m2k_restore() */
 void m2k_restore(void);
 int m2k_dirty(void);                                /* 1 when SAVE asked for the store to be written */
+void m2k_setting(int i, int v);                     /* e.g. the web page's theme sets S_SCREEN */
 
 #endif

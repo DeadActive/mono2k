@@ -242,24 +242,21 @@
 
   // ------------------------------------------------------------------------------------------------- the LCD
   const lcd = $("lcd"), lg = lcd.getContext("2d"), limg = lg.createImageData(240, 240);
+  /* the screen's two colours: the firmware draws light (ink on paper) or dark (its negative, GLO > SET), and
+   * the palette gives the dark and the light colour for either */
   const PALETTES = [
-    { name: "Paper", ink: "#0b0b0b", paper: "#f2f1ec" },
-    { name: "Negative", ink: "#f2f1ec", paper: "#0b0b0b" },
-    { name: "LCD", ink: "#16211b", paper: "#a9b79c" },
-    { name: "UV", ink: "#38e4ff", paper: "#06050b" },
-    { name: "Hot", ink: "#ff2f8e", paper: "#06050b" },
+    { name: "Paper", dark: "#0b0b0b", light: "#f2f1ec" },
+    { name: "LCD", dark: "#16211b", light: "#a9b79c" },
+    { name: "UV", dark: "#06050b", light: "#38e4ff" },
+    { name: "Hot", dark: "#06050b", light: "#ff2f8e" },
   ];
-  let pal = 0, palPicked = false;
+  let pal = 0;
   const isDark = () => { const t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; };
-  try {
-    const v = localStorage.getItem("mono2k.palette");
-    palPicked = v !== null;
-    pal = palPicked ? +v % PALETTES.length : (isDark() ? 1 : 0);
-  } catch (e) { pal = 0; }
+  try { pal = +(localStorage.getItem("mono2k.palette2") || 0) % PALETTES.length; } catch (e) { pal = 0; }
   let lastFb = null;
   function drawLcd(fb) {
     lastFb = fb;
-    const I = hex(PALETTES[pal].ink), P = hex(PALETTES[pal].paper), d = limg.data;
+    const I = hex(PALETTES[pal].dark), P = hex(PALETTES[pal].light), d = limg.data;
     for (let i = 0, p = 0; i < 7200; i++) {
       const b = fb[i];
       for (let j = 7; j >= 0; j--, p += 4) {
@@ -269,9 +266,9 @@
     }
     lg.putImageData(limg, 0, 0);
   }
-  function setPalette(i, picked = true) {
+  function setPalette(i) {
     pal = i % PALETTES.length;
-    if (picked) { palPicked = true; try { localStorage.setItem("mono2k.palette", String(pal)); } catch (e) { /* private mode */ } }
+    try { localStorage.setItem("mono2k.palette2", String(pal)); } catch (e) { /* private mode */ }
     $("palette").textContent = "Screen: " + PALETTES[pal].name;
     if (lastFb) drawLcd(lastFb);
   }
@@ -300,11 +297,12 @@
   const status = (s) => { $("status").textContent = s; };
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=11");
+    const r = await fetch("m2k.wasm?v=13");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();
     pre.w_init(2000);
+    pre.w_setting(0, isDark() ? 127 : 0);
     preT0 = performance.now();
     machines();
     requestAnimationFrame(preTick);
@@ -324,7 +322,7 @@
     try {
       try { ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }); }
       catch (e) { ctx = new AudioContext({ latencyHint: "interactive" }); }
-      await ctx.audioWorklet.addModule("worklet.js?v=9");
+      await ctx.audioWorklet.addModule("worklet.js?v=13");
       node = new AudioWorkletNode(ctx, "mono2k", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(ctx.destination);
       node.port.onmessage = (ev) => {
@@ -335,6 +333,7 @@
           info(m.info);
           if (m.store) saveStore(m.store);
         } else if (m.t === "ready") {
+          displayMode();
           status(ctx.sampleRate === 44100 ? "Running at 44.1 kHz, as on the FM-1." : `Running at ${ctx.sampleRate} Hz, resampled from 44.1 kHz.`);
         }
       };
@@ -349,6 +348,12 @@
     }
   }
   const send = (m) => { if (node) node.port.postMessage(m); };
+  /* the display follows the page: light page, light screen; dark page, its negative */
+  function displayMode() {
+    const v = isDark() ? 127 : 0;
+    if (pre) pre.w_setting(0, v);
+    send({ t: "set", i: 0, v });
+  }
 
   // ---------------------------------------------------------------------------------------------- readouts
   let machineNames = [];
@@ -529,7 +534,7 @@
     else document.documentElement.setAttribute("data-theme", theme);
     try { if (theme === "auto") localStorage.removeItem("mono2k.theme"); else localStorage.setItem("mono2k.theme", theme); } catch (e) { /* private mode */ }
     themeLabel();
-    if (!palPicked) setPalette(isDark() ? 1 : 0, false);
+    displayMode();
     redrawTheme();
   }
   $("theme").addEventListener("click", () => { theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]; applyTheme(); });

@@ -489,8 +489,13 @@ static uint8_t dirty;
 
 uint8_t *m2k_store(int *len)
 {
-    *len = (int)sizeof pat;
-    return (uint8_t *)pat;
+    *len = (int)sizeof store_;
+    return (uint8_t *)&store_;
+}
+
+void m2k_setting(int i, int v)
+{
+    if (i >= 0 && i < S_COUNT) store_.set[i] = (uint8_t)CLAMP(v, 0, 127);
 }
 
 void m2k_restore(void)
@@ -532,6 +537,7 @@ void m2k_init(uint32_t seed)
     bus.hs = 0xACE1u;
     for (int i = 0; i < M2K_TRACKS; i++) sq.rec_skip[i] = -1;
     factory();
+    m_set(store_.set, 0, sizeof store_.set);
     cur_pat = 0;
     sq.queued = 0;
     lockmap_build();

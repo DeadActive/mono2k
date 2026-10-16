@@ -13,7 +13,7 @@
 enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOWL, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
-    K_BPM, K_SWNG, K_LEN, K_PCT, K_GSIZ, K_FINE
+    K_BPM, K_SWNG, K_LEN, K_PCT, K_GSIZ, K_FINE, K_SCRN
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -36,6 +36,10 @@ static const pi_t PI_GLOB[G_COUNT] = {
     {"BPM", "TEMPO", K_BPM}, {"SWNG", "SWING", K_SWNG}, {"LEN", "PATTERN LENGTH", K_LEN}, {"ACNT", "ACCENT", K_NUM},
     {"TAPE", "TAPE WOW", K_NUM}, {"ADPC", "ADPCM CRUNCH", K_NUM}, {"GLCH", "GLITCH CHANCE", K_PCT}, {"SIZE", "REPEAT SIZE", K_GSIZ},
     {"VERB", "SPU DECAY", K_NUM}, {"DAMP", "SPU DAMPING", K_NUM}, {"HISS", "HISS AND DUST", K_NUM}, {"DRIV", "BUS DRIVE", K_NUM},
+};
+
+static const pi_t PI_SET[1] = {
+    {"SCRN", "SCREEN", K_SCRN},
 };
 
 typedef struct {
@@ -89,6 +93,7 @@ static const char *const NOTE_N[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G"
 
 static const pi_t *pinfo(int t, int id)
 {
+    if (id >= 0xC0) return &PI_SET[0];
     if (id >= 0x80) return &PI_GLOB[id & 0x7F];
     if (id < 8) return &MI[pat[cur_pat].machine[t]].syn[id];
     if (id < P_LFO) return &PI_COMMON[id - 8];
@@ -101,6 +106,7 @@ static int kind_choices(int k)
     case K_RATIO: case K_WAVE: return 32;
     case K_SIDW: return 8;
     case K_SIDM: case K_ALGO: case K_ASPD: case K_ARNG: return 4;
+    case K_SCRN: return 2;
     case K_VOIC: case K_LWAV: return 7;
     case K_TRK: case K_AMOD: return 6;
     case K_LTRG: case K_GSIZ: return 5;
@@ -193,6 +199,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_LEN: s_int(out, v); *unit = "STEPS"; break;
     case K_PCT: s_int(out, (v * 100) / 256); *unit = "%"; break;
     case K_GSIZ: s_cpy(out, GSIZ_N[(v * 5) >> 7]); *unit = "NOTE"; break;
+    case K_SCRN: s_cpy(out, c ? "DARK" : "LIGHT"); *unit = "DISPLAY"; break;
     default: s_int(out, v); break;
     }
 }
@@ -200,7 +207,8 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
 /* -------------------------------------------------------------------------------------------- the pages */
 
 enum { PG_HOME, PG_SYN, PG_AMP, PG_FILT, PG_FX, PG_LFO, PG_ARP, PG_GLO, PG_COUNT };
-static const uint8_t NSUB[PG_COUNT] = {1, 2, 2, 2, 3, 6, 1, 3};
+static const uint8_t NSUB[PG_COUNT] = {1, 2, 2, 2, 3, 6, 1, 4};
+#define SETTING(i) (0xC0 | (i))
 #define GL(g) (0x80 | (g))
 #define NONE 0xFF
 
@@ -214,7 +222,7 @@ static int knob_param(int page, int sub, int k)
     case PG_FX: return P_EQF + sub * 4 + k;
     case PG_LFO: return P_LFO + (sub >> 1) * 8 + (sub & 1) * 4 + k;
     case PG_ARP: return P_AMOD + k;
-    case PG_GLO: return GL(sub * 4 + k);
+    case PG_GLO: return sub < 3 ? GL(sub * 4 + k) : k == 0 ? SETTING(S_SCREEN) : NONE;
     default: return NONE;
     }
 }
@@ -225,7 +233,7 @@ static void page_label(int page, int sub, char *o)
     switch (page) {
     case PG_FX: s_cpy(o, sub == 0 ? "FX" : sub == 1 ? "DELAY" : "DSTR"); break;
     case PG_LFO: { char *e = s_cpy(o, "LFO"); e = s_int(e, (sub >> 1) + 1); s_cpy(e, (sub & 1) ? "B" : "A"); break; }
-    case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "BUS" : "SPU"); break;
+    case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "BUS" : sub == 2 ? "SPU" : "SET"); break;
     case PG_SYN: case PG_AMP: case PG_FILT: { char *e = s_cpy(o, N[page]); *e++ = ' '; e = s_int(e, sub + 1); s_cpy(e, "/2"); break; }
     default: s_cpy(o, N[page]); break;
     }
@@ -319,6 +327,7 @@ static void go(int page)
 static int knob_value(int code)
 {
     const m2k_pattern_t *p = &pat[cur_pat];
+    if (code >= 0xC0) return store_.set[code & 0x3F];
     if (code >= 0x80) return p->glob[code & 0x7F];
     if (ui.grid && ui.nheld) {
         int i = lock_find(ui.trk, ui.held[0], code);
@@ -346,7 +355,9 @@ static void edit(int k, int d)
     int n = kind_choices(pi->kind), nv;
     if (n) nv = enc(CLAMP(((v * n) >> 7) + d, 0, n - 1), n);
     else nv = CLAMP(v + d, kind_min(pi->kind), kind_max(pi->kind));
-    if (code >= 0x80) {
+    if (code >= 0xC0) {
+        store_.set[code & 0x3F] = (uint8_t)nv;
+    } else if (code >= 0x80) {
         p->glob[code & 0x7F] = (uint8_t)nv;
     } else if (ui.grid && ui.nheld) {
         for (int i = 0; i < ui.nheld; i++) lock_set(ui.trk, ui.held[i], code, nv);
@@ -881,7 +892,17 @@ static void picture(void)
         break;
     }
     case PG_GLO: {
-        if (ui.sub == 1) {             /* the master, and the repeat when it bites */
+        if (ui.sub == 3) {             /* the display: a disc, half ink; the mode under it */
+            int cx = X + W / 2, cy = Y + 36, r = 24;
+            for (int j = -r; j <= r; j++)
+                for (int i = -r; i <= r; i++) {
+                    int d = i * i + j * j;
+                    if (d > r * r) continue;
+                    if (d > (r - 2) * (r - 2) || i >= 0) px(cx + i, cy + j, 1);
+                    else if (T_BAYER[(cy + j) & 7][(cx + i) & 7] < 8) px(cx + i, cy + j, 1);
+                }
+            text_c(&F_M, cx, Y + 70, store_.set[S_SCREEN] >= 64 ? "DARK" : "LIGHT", 1, 1);
+        } else if (ui.sub == 1) {      /* the master, and the repeat when it bites */
             int prev = 0;
             for (int i = 0; i < W; i++) {
                 int v = mon.scope[(uint8_t)(mon.scope_w - W * 2 + i * 2)];
@@ -1153,6 +1174,15 @@ static void overlays(void)
     hline(0, 15, 240, 1);
 }
 
+static uint8_t fb_show[M2K_FB_BYTES];
+
+static const uint8_t *present(void)
+{
+    if (store_.set[S_SCREEN] < 64) return fb_out;
+    for (int i = 0; i < M2K_FB_BYTES; i++) fb_show[i] = (uint8_t)~fb_out[i];
+    return fb_show;
+}
+
 void m2k_render_ui_tick(void);
 
 const uint8_t *m2k_frame(uint32_t ms)
@@ -1184,8 +1214,7 @@ const uint8_t *m2k_frame(uint32_t ms)
     if (bt < 1800) {
         boot(bt);
         m_cpy(fb_out, fb, sizeof fb_out);
-        if (bt > 1650 && !ui.in_trans) { /* hand over */ }
-        return fb_out;
+        return present();
     }
     if (bt < 1800 + 40 && !ui.in_trans && ui.trans_t < ui.boot_t0 + 1800) start_trans(360);
 
@@ -1202,7 +1231,7 @@ const uint8_t *m2k_frame(uint32_t ms)
         m_cpy(fb_out, fb, sizeof fb_out);
     }
     if (ui.glitch_t && ms - ui.glitch_t < 120) glitch(fb_out, ms - ui.glitch_t, ui.glitch_seed, ui.glitch_amt);
-    return fb_out;
+    return present();
 }
 
 const uint8_t *m2k_leds(void)
