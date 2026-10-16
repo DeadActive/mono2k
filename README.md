@@ -58,8 +58,8 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 1. **The FM-1 build**: Felucca 1.6.1's platform (HAL, loader, USB, storage, installer) around this core, the audio on
    the second core as CS-1 does, the 1-bit framebuffer blitted in strips with the palette's two colours. The projects'
    images move to the 1 MiB flash (`m2k_proj.c` get / put), and RAM keeps the playing bank, not all 64 patterns.
-2. **Calibration against the Monomachine** (the user's own OS file, in the gearmulator plugin, never shipped): a
-   reference renderer, then the machines tuned note by note.
+2. **Calibration against the Monomachine**, machine by machine: levels, spectra, the machines' own envelopes, the
+   filter envelope. The amp envelope is done (below).
 3. More machines (DPRO-BBOX, FX machines that take the previous track), songs, MIDI out and clock.
 
 ## Author
@@ -67,6 +67,25 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 MONO2K is made by Sequencist: [GitHub](https://github.com/InigoHernandez) ·
 [Bandcamp](https://sequencist.bandcamp.com/) · [YouTube](https://www.youtube.com/@sequencist) ·
 [Instagram](https://www.instagram.com/sequencist.fm) · [SoundCloud](https://soundcloud.com/sequencist)
+
+## Calibration
+
+MONO2K's machines are its own, but they are measured against the Monomachine. `tools/ref/mm_ref` boots an owner's
+Monomachine OS image in [gearmulator-md-mm](https://github.com/joelanders/gearmulator-md-mm)'s emulation and plays it
+over MIDI only, as the instrument is played; `host/m2k_ref.c` plays MONO2K the same way; the scripts compare them. The
+OS image is read from the path given and never copied: no ROM, no ROM code and no recordings of it are in this repo.
+
+```
+cmake -S tools/ref -B build/ref -G Ninja -DGEARMULATOR=/path/to/gearmulator-md-mm && cmake --build build/ref
+build/ref/mm_ref /path/to/os.bin render build/ref/mm < tools/ref/amp.spec > /dev/null
+build/host/m2k_ref build/ref/m2k < tools/ref/amp.spec
+.venv/bin/python tools/ref/envtimes.py build/ref/mm build/ref/m2k
+```
+
+Done so far: the **amp envelope**. On OS 1.32B the attack rises in a straight line in 0.90 ms × e^(0.0814·v), decay
+and release fall 20 dB in 8.3 ms × e^(0.0665·v), and the hold lasts 14.6 ms a step; a key let go ends the hold and the
+decay. MONO2K now follows within a few percent from 0 to 127. Patterns saved before (version 1) are moved onto the
+new times as they load, so they sound as they did.
 
 ## Credits and licence
 

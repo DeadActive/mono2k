@@ -42,6 +42,30 @@ out.append(arr("T_ENV_COEF", "uint32_t",
                [round((2 ** 31 - 1) * math.exp(-6.9078 * SUB / (etime(v) * SR))) for v in range(128)], 8))
 # the times as the screen shows them, in ms (0.1 ms below 10)
 out.append(arr("T_ENV_MS10", "uint32_t", [round(etime(v) * 10000) for v in range(128)], 8))
+
+# the amp envelope, after the Monomachine's, measured on OS 1.32B in gearmulator (tools/ref, amp.spec, hold.spec):
+#   the attack rises in a straight line, in 0.90 ms * e^(0.0814 v); decay and release fall 20 dB in 8.3 ms * e^(0.0665 v)
+#   (here: to -60 dB, three times that); the hold lasts 14.6 ms a step. 127: hold and decay last while the gate is open.
+def a_atk(v):
+    return 0.000903 * math.exp(0.0814 * v)
+def a_dec(v):
+    return 3 * 0.00829 * math.exp(0.06646 * v)
+def a_hold(v):
+    return 0.0146 * v
+out.append(arr("T_AATK_INC", "uint32_t", [min(1 << 30, round((1 << 30) * SUB / (a_atk(v) * SR))) for v in range(128)], 8))
+out.append(arr("T_ADEC_COEF", "uint32_t", [round((2 ** 31 - 1) * math.exp(-6.9078 * SUB / (a_dec(v) * SR))) for v in range(128)], 8))
+out.append(arr("T_AHOLD", "uint32_t", [round(a_hold(v) * SR / SUB) for v in range(128)], 8))
+out.append(arr("T_AATK_MS10", "uint32_t", [round(a_atk(v) * 10000) for v in range(128)], 8))
+out.append(arr("T_ADEC_MS10", "uint32_t", [round(a_dec(v) * 10000) for v in range(128)], 8))
+out.append(arr("T_AHLD_MS10", "uint32_t", [round(a_hold(v) * 10000) for v in range(128)], 8))
+# patterns saved before (version 1) timed ATK HOLD DEC REL on etime(): each value to the one nearest its time
+def nearest(t, f, lo=0, hi=126):
+    return min(range(lo, hi + 1), key=lambda v: abs(math.log(max(f(v), 1e-6)) - math.log(max(t, 1e-6))))
+v1 = [[nearest(etime(v), a_atk) for v in range(128)],
+      [0 if v == 0 else 127 if v == 127 else nearest(etime(v), a_hold, 1) for v in range(128)],
+      [127 if v == 127 else nearest(etime(v), a_dec) for v in range(128)],
+      [nearest(etime(v), a_dec) for v in range(128)]]
+out.append("static const uint8_t T_AMPV1[4][128] = {\n" + "".join("    {" + ",".join(str(x) for x in r) + "},\n" for r in v1) + "};\n")
 # portamento: per control block, Q16 share of the distance left
 out.append(arr("T_GLIDE", "uint16_t",
                [65535 if v == 0 else round(65536 * (1 - math.exp(-SUB / (0.0008 * 2 ** (v / 13.0) * SR)))) for v in range(128)]))

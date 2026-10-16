@@ -11,14 +11,14 @@
 /* ------------------------------------------------------------------------------------------- parameters */
 
 enum {
-    K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
+    K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOWL, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
     K_BPM, K_SWNG, K_LEN, K_PCT, K_GSIZ, K_FINE, K_SCRN, K_PROJ, K_LOAD
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
 static const pi_t PI_COMMON[P_LFO - 8] = {
-    {"ATCK", "ATTACK", K_TIME}, {"HOLD", "HOLD", K_HOLD}, {"DEC", "DECAY", K_DECT}, {"REL", "RELEASE", K_TIME},
+    {"ATCK", "ATTACK", K_ATIM}, {"HOLD", "HOLD", K_AHLD}, {"DEC", "DECAY", K_ADEC}, {"REL", "RELEASE", K_AREL},
     {"DIST", "DISTORTION", K_NUM}, {"VOL", "VOLUME", K_NUM}, {"PAN", "PAN", K_PAN}, {"PORT", "PORTAMENTO", K_NUM},
     {"BASE", "FILTER BASE", K_HZ}, {"WDTH", "FILTER WIDTH", K_NUM}, {"HPQ", "HP RESONANCE", K_NUM}, {"LPQ", "LP RESONANCE", K_NUM},
     {"ATCK", "FILTER ATTACK", K_TIME}, {"DEC", "FILTER DECAY", K_DECT}, {"B-OF", "BASE BY ENV", K_BI}, {"W-OF", "WIDTH BY ENV", K_BI},
@@ -154,12 +154,14 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     switch (pi->kind) {
     case K_BI: s_int(out, v - 64); break;
     case K_FINE: s_int(out, ((v - 64) * 100) / 64); *unit = "CENT"; break;
-    case K_TIME: case K_HOLD: case K_DECT: {
-        if ((pi->kind == K_HOLD || pi->kind == K_DECT) && v == 127) { s_cpy(out, "INF"); break; }
-        uint32_t ms10 = T_ENV_MS10[v];
+    case K_TIME: case K_HOLD: case K_DECT: case K_ATIM: case K_AHLD: case K_ADEC: case K_AREL: {
+        int k = pi->kind;
+        if ((k == K_HOLD || k == K_DECT || k == K_AHLD || k == K_ADEC) && v == 127) { s_cpy(out, "INF"); break; }
+        uint32_t ms10 = k == K_ATIM ? T_AATK_MS10[v] : k == K_AHLD ? T_AHLD_MS10[v] : (k == K_ADEC || k == K_AREL) ? T_ADEC_MS10[v] : T_ENV_MS10[v];
         if (ms10 < 100) { s_dec1(out, (int)ms10); *unit = "MS"; }
         else if (ms10 < 10000) { s_int(out, (int)(ms10 / 10)); *unit = "MS"; }
-        else { s_dec1(out, (int)(ms10 / 1000)); *unit = "S"; }
+        else if (ms10 < 1000000) { s_dec1(out, (int)(ms10 / 1000)); *unit = "S"; }
+        else { s_int(out, (int)(ms10 / 10000)); *unit = "S"; }
         break;
     }
     case K_HZ: {

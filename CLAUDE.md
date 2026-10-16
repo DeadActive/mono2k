@@ -22,6 +22,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   `build/host/m2k_host --selftest` checks the projects (save, reload, store, export / import, full images);
   `build/host/m2k_host build/patterns --analyze` solos every track of bank A and writes each pattern's WAV.
 - Web: `sh web/build.sh`, serve `web/` (`.claude/launch.json`: mono2k-web on port 8742).
+- Calibration (README, Calibration): `tools/ref/mm_ref` (gearmulator, the user's OS image at a path, never in the repo;
+  it logs to stdout, so send stdout to /dev/null) against `host/m2k_ref.c`, same specs in `tools/ref/*.spec`.
+  Pattern format version 2: amp ATK/HOLD/DEC/REL on the measured curve; version 1 is converted on load.
 
 ## Style
 

@@ -29,7 +29,7 @@ static int pat_pack(const m2k_pattern_t *p, uint8_t *o)
 {
     int n = 0;
     o[n++] = 'P';
-    o[n++] = 1;
+    o[n++] = 2;                        /* 2: the amp envelope on the Monomachine's times */
     m_cpy(o + n, p->name, 8); n += 8;
     m_cpy(o + n, p->machine, M2K_TRACKS); n += M2K_TRACKS;
     m_cpy(o + n, p->glob, G_COUNT); n += G_COUNT;
@@ -63,7 +63,8 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
     const int head = 2 + 8 + M2K_TRACKS + G_COUNT + 1 + (int)sizeof p->kit + M2K_TRACKS * M2K_STEPS / 8 + 2;
-    if (len < head || o[0] != 'P' || o[1] != 1) return 0;
+    if (len < head || o[0] != 'P' || (o[1] != 1 && o[1] != 2)) return 0;
+    int v1 = o[1] == 1;
     m_set(p, 0, sizeof *p);
     n = 2;
     m_cpy(p->name, o + n, 8); n += 8;
@@ -96,6 +97,7 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
         if (p->lock[i].trk >= M2K_TRACKS || p->lock[i].step >= M2K_STEPS || p->lock[i].param >= P_COUNT) p->lock[i].trk = 0xFF;
         n += 4;
     }
+    if (v1) amp_v1(p);
     return 1;
 }
 

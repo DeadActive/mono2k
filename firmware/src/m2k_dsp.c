@@ -34,7 +34,7 @@ static inline int32_t svf_tick(svf_t *f, int32_t x, int32_t *hp_out, int32_t *bp
 #define DL_LEN 16384u                  /* bytes per track: 0.74 s at half rate, mu-law */
 
 typedef struct {
-    uint8_t note, gate, vel, sounding, slide;
+    uint8_t note, gate, vel, sounding, slide, let_go;   /* let_go: a key or a MIDI note-off, not the sequencer */
     int32_t pitch, ptarget;            /* 1/64 semitones */
     uint8_t astage, fstage;
     uint32_t aenv, fenv;               /* Q30 */
@@ -434,30 +434,33 @@ static void mach_block(int ti, int m, int32_t pitch)
 
 static void env_block(trk_t *t)
 {
-    /* amp: attack, hold (127: while the gate is open), decay (127: none), release on note-off */
+    /* amp: attack, hold (127: while the gate is open), decay (127: none), release on note-off, timed as the
+     * Monomachine times them (measured, tools/ref) */
     switch (t->astage) {
     case 1:
-        t->aenv += T_ENV_INC[t->eff[P_ATK]];
+        t->aenv += T_AATK_INC[t->eff[P_ATK]];
         if (t->aenv >= (1u << 30)) {
             t->aenv = 1u << 30;
             t->astage = 2;
             int h = t->eff[P_HOLD];
-            t->hold = h == 127 ? -1 : h == 0 ? 0 : (int32_t)((1u << 30) / T_ENV_INC[h]);
+            t->hold = h == 127 ? -1 : (int32_t)T_AHOLD[h];
         }
         break;
     case 2:
         if (t->hold < 0) { if (!t->gate) t->astage = 4; }
+        else if (t->let_go) t->astage = 4;                  /* a key let go ends the hold, as on the Monomachine */
         else if (t->hold-- <= 0) t->astage = 3;
         break;
     case 3: {
+        if (t->let_go) { t->astage = 4; break; }            /* and the decay */
         int d = P7(t, P_DEC);
-        if (d < 127) t->aenv = mulu_hi(t->aenv, T_ENV_COEF[d], 31);
+        if (d < 127) t->aenv = mulu_hi(t->aenv, T_ADEC_COEF[d], 31);
         else if (!t->gate) t->astage = 4;
         if (t->aenv < (1u << 15)) { t->aenv = 0; t->astage = 0; }
         break;
     }
     case 4:
-        t->aenv = mulu_hi(t->aenv, T_ENV_COEF[P7(t, P_REL)], 31);
+        t->aenv = mulu_hi(t->aenv, T_ADEC_COEF[P7(t, P_REL)], 31);
         if (t->aenv < (1u << 15)) { t->aenv = 0; t->astage = 0; }
         break;
     default:
@@ -562,6 +565,7 @@ static void voice_on(int ti, int note, int vel, int slide)
     t->slide = 0;
     if (!t->sounding || t->eff[P_PORT] == 0) t->pitch = t->ptarget;
     t->gate = 1;
+    t->let_go = 0;
     t->sounding = 1;
     t->astage = 1;
     t->fstage = 1;
@@ -577,6 +581,7 @@ static void voice_off(int ti)
     trk_t *t = &trk[ti];
     t->gate = 0;
     t->gate_left = -1;
+    t->let_go = 1;
 }
 
 /* one control block of one track: modulation, envelopes, the machine, then the chain, summed into lr */
@@ -585,7 +590,7 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     trk_t *t = &trk[ti];
     const m2k_pattern_t *pp = &pat[cur_pat];
     int m = pp->machine[ti];
-    if (t->gate_left > 0 && --t->gate_left == 0) voice_off(ti);
+    if (t->gate_left > 0 && --t->gate_left == 0) { t->gate = 0; t->gate_left = -1; }   /* the step's gate: hold and decay go on */
     env_block(t);
     if (!t->sounding && t->astage == 0) {
         t->amp0 = t->amp1 = 0;

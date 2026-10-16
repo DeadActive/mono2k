@@ -49,15 +49,28 @@ static void beat(m2k_pattern_t *p, int t, const char *g, const uint8_t *notes, i
 #define NOTES(...) (const uint8_t[]){__VA_ARGS__}, (int)sizeof((const uint8_t[]){__VA_ARGS__})
 #define BEAT(p, t, g, ...) beat(p, t, g, NOTES(__VA_ARGS__))
 
+/* a pattern from before version 2 timed ATK HOLD DEC REL on MONO2K's first curve: each value moves to the one whose
+ * time on the Monomachine's curve is nearest, in the kit and in the locks */
+static uint8_t amp_v1_val(int prm, int v) { return prm >= P_ATK && prm <= P_REL ? T_AMPV1[prm - P_ATK][v & 127] : (uint8_t)v; }
+static void amp_v1(m2k_pattern_t *p)
+{
+    for (int t = 0; t < M2K_TRACKS; t++)
+        for (int k = P_ATK; k <= P_REL; k++) p->kit[t][k] = amp_v1_val(k, p->kit[t][k]);
+    for (int i = 0; i < M2K_LOCKS; i++)
+        if (p->lock[i].trk != 0xFF) p->lock[i].val = amp_v1_val(p->lock[i].param, p->lock[i].val);
+}
+
+/* the demos were voiced on MONO2K's first envelope curve: their ATK HOLD DEC REL are given on it and moved onto the
+ * Monomachine's as they are set (amp_v1_val), so they sound as they were written */
 static void lk(m2k_pattern_t *p, int t, int s, int prm, int v)
 {
     for (int i = 0; i < M2K_LOCKS; i++)
-        if (p->lock[i].trk == 0xFF) { p->lock[i] = (m2k_lock_t){(uint8_t)t, (uint8_t)s, (uint8_t)prm, (uint8_t)v}; return; }
+        if (p->lock[i].trk == 0xFF) { p->lock[i] = (m2k_lock_t){(uint8_t)t, (uint8_t)s, (uint8_t)prm, amp_v1_val(prm, v)}; return; }
 }
 
 static void set(m2k_pattern_t *p, int t, const uint8_t *pv, int n)   /* (param, value) pairs */
 {
-    for (int i = 0; i + 1 < n; i += 2) p->kit[t][pv[i]] = pv[i + 1];
+    for (int i = 0; i + 1 < n; i += 2) p->kit[t][pv[i]] = amp_v1_val(pv[i], pv[i + 1]);
 }
 #define SET(p, t, ...) do { const uint8_t _v[] = {__VA_ARGS__}; set(p, t, _v, sizeof _v); } while (0)
 
@@ -78,7 +91,11 @@ static m2k_pattern_t *pat_new(int i, const char *name, int bpm, const uint8_t *m
 {
     m2k_pattern_t *p = &pat[i];
     pat_init(p, name);
-    for (int t = 0; t < M2K_TRACKS; t++) kit_default(p, t, machines[t]);
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        kit_default(p, t, machines[t]);
+        static const uint8_t AMP0[4] = {0, 0, 60, 30};          /* the blank kit the demos were voiced from */
+        for (int k = 0; k < 4; k++) p->kit[t][P_ATK + k] = amp_v1_val(P_ATK + k, AMP0[k]);
+    }
     p->glob[G_TMPO] = (uint8_t)(bpm - 30);
     p->glob[G_VERB] = 40;
     return p;

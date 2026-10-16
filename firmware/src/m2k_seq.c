@@ -331,7 +331,7 @@ static void kit_default(m2k_pattern_t *p, int t, int m)
     uint8_t *k = p->kit[t];
     static const uint8_t D[P_COUNT] = {
         0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 60, 30, 0, 100, 64, 0,           /* ATK HOLD DEC REL DIST VOL PAN PORT */
+        0, 0, 64, 64, 0, 100, 64, 0,           /* ATK HOLD DEC REL (the Monomachine's init) DIST VOL PAN PORT */
         0, 127, 0, 0, 0, 64, 64, 64,           /* BASE WDTH HPQ LPQ FATK FDEC BOF WOF */
         64, 64, 0, 12, 0, 50, 0, 110,          /* EQF EQG SRR DTIM DSND DFB DBAS DWID */
         0, 0, 0, 0,                            /* BITS FOLD XOR SPU */
