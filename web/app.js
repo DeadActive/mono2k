@@ -165,29 +165,33 @@
     pat("pLines", 1, 2, [[0, 0]]);
     const S = { fill: "none", stroke: "currentColor", "stroke-width": 1.5 };
     rect([22, 22, 860, 522], 38, { fill: "var(--paper)", stroke: "currentColor", "stroke-width": 2.5 });
-    const kb = el("g", { style: "--ink: var(--inv-ink); --paper: var(--inv-paper); color: var(--inv-ink)" });
-    pat("pSparseI", 4, 4, [[0, 0]], "var(--inv-ink)");
-    pat("pDotsI", 2, 2, [[0, 0]], "var(--inv-ink)");
-    pat("pCheckI", 2, 2, [[0, 0], [1, 1]], "var(--inv-ink)");
+    /* the keys: an island in the other theme's colours, as the screen is; patterns are drawn in the defs' colours,
+     * so the island's ink is the page's paper */
+    const kb = el("g", { class: "inv" });
+    pat("pDotsI", 2, 2, [[0, 0]], "var(--paper)");
+    pat("pCheckI", 2, 2, [[0, 0], [1, 1]], "var(--paper)");
     rect([52, 306, 800, 198], 20, { fill: "var(--paper)" }, kb);
     {
       const c = document.createElement("canvas");
       c.width = 400; c.height = 99;
       const g = c.getContext("2d");
-      g.fillStyle = css().getPropertyValue("--inv-ink").trim() || "#f2f1ec";
+      g.fillStyle = paper();
       for (let y = 0; y < 99; y++) for (let x = 0; x < 400; x++) if (BAYER[y & 7][x & 7] < (y / 99) * 26) g.fillRect(x, y, 1, 1);
       const p = el("pattern", { id: "pBed", x: 52, y: 306, width: 800, height: 198, patternUnits: "userSpaceOnUse" }, defs);
       el("image", { href: c.toDataURL(), width: 800, height: 198, preserveAspectRatio: "none", style: "image-rendering: pixelated" }, p);
     }
     rect([52, 306, 800, 198], 20, { fill: "url(#pBed)", stroke: "currentColor", "stroke-width": 1, "stroke-dasharray": "2 3" }, kb);
-    /* the buttons: an island set against the panel, as the keys are */
-    const bg = el("g", { style: "--ink: var(--inv-ink); --paper: var(--inv-paper); color: var(--inv-ink)" });
+    /* the buttons: in the page's colours */
+    const bg = el("g", {});
     for (const [r, rad] of [[[484, 162, 338, 124], 8], [[77, 243, 127, 36], 6]]) {
       rect(r, rad, { fill: "var(--paper)" }, bg);
-      rect(r, rad, { fill: "url(#pSparseI)", stroke: "currentColor", "stroke-width": 1, "stroke-dasharray": "2 3" }, bg);
+      rect(r, rad, { fill: "url(#pSparse)", stroke: "currentColor", "stroke-width": 1, "stroke-dasharray": "2 3" }, bg);
     }
-    rect([247, 59, 201, 201], 6, { fill: "currentColor" });
-    text(58, 47, "MONO2K", 13, { "text-anchor": "start", "font-weight": 900, "letter-spacing": "-0.04em" });
+    /* the screen: the LCD (247, 59, 201 square) in a bezel of its own colour, 10 of padding, rounded, and a line */
+    rect([233, 45, 229, 229], 18, { fill: "none", stroke: "currentColor", "stroke-width": 1.5 });
+    bezel = rect([237, 49, 221, 221], 14, { fill: "currentColor" });
+    bezelDark = -1;
+    text(58, 47, "MONO2K", 13, { "text-anchor": "start", "font-weight": 900, "letter-spacing": "0", style: "font-family: var(--head)" });
     text(846, 47, "SIX MONO MACHINES · M-VAVE FM-1", 6.5, { "text-anchor": "end" });
     text(822, 296, "M-VAVE FM-1 · 27 KEYS · F3–G5", 6.5, { "text-anchor": "end" });
     for (let k = 0; k < 27; k++) {
@@ -243,7 +247,7 @@
       const v = L[27 + i], e = btnEl[i], q = v > 200 ? 3 : v > 60 ? 2 : 0;
       if (q === e.lvl) continue;
       e.lvl = q;
-      e.cap.setAttribute("fill", q === 3 ? "currentColor" : q === 2 ? "url(#pCheckI)" : "var(--paper)");
+      e.cap.setAttribute("fill", q === 3 ? "currentColor" : q === 2 ? "url(#pCheck)" : "var(--paper)");
       e.t.setAttribute("fill", q === 3 ? "var(--paper)" : "currentColor");
       if (e.hint) e.hint.setAttribute("fill", q === 3 ? "var(--paper)" : "currentColor");
     }
@@ -262,23 +266,30 @@
   let pal = 0;
   const isDark = () => { const t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; };
   try { pal = +(localStorage.getItem("mono2k.palette2") || 0) % PALETTES.length; } catch (e) { pal = 0; }
-  let lastFb = null;
+  let lastFb = null, bezel = null, bezelDark = -1;
   function drawLcd(fb) {
     lastFb = fb;
     const I = hex(PALETTES[pal].dark), P = hex(PALETTES[pal].light), d = limg.data;
+    let inked = 0;
     for (let i = 0, p = 0; i < 7200; i++) {
       const b = fb[i];
       for (let j = 7; j >= 0; j--, p += 4) {
-        const c = (b >> j) & 1 ? I : P;
+        const on = (b >> j) & 1, c = on ? I : P;
+        inked += on;
         d[p] = c[0]; d[p + 1] = c[1]; d[p + 2] = c[2]; d[p + 3] = 255;
       }
     }
     lg.putImageData(limg, 0, 0);
+    /* the bezel takes the screen's background: mostly ink is a dark screen (with some slack, so a wipe or a
+     * gradient doesn't flicker it) */
+    const dark = inked > 57600 * 0.62 ? 1 : inked < 57600 * 0.38 ? 0 : bezelDark < 0 ? 0 : bezelDark;
+    if (bezel && dark !== bezelDark) { bezelDark = dark; bezel.setAttribute("fill", dark ? PALETTES[pal].dark : PALETTES[pal].light); }
   }
   function setPalette(i) {
     pal = i % PALETTES.length;
     try { localStorage.setItem("mono2k.palette2", String(pal)); } catch (e) { /* private mode */ }
     $("palette").textContent = "Screen: " + PALETTES[pal].name;
+    bezelDark = -1;
     if (lastFb) drawLcd(lastFb);
   }
 
@@ -306,7 +317,7 @@
   const status = (s) => { $("status").textContent = s; };
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=19");
+    const r = await fetch("m2k.wasm?v=21");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();
@@ -333,7 +344,7 @@
     try {
       try { ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }); }
       catch (e) { ctx = new AudioContext({ latencyHint: "interactive" }); }
-      await ctx.audioWorklet.addModule("worklet.js?v=19");
+      await ctx.audioWorklet.addModule("worklet.js?v=21");
       node = new AudioWorkletNode(ctx, "mono2k", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(ctx.destination);
       node.port.onmessage = (ev) => {
@@ -376,7 +387,7 @@
     }
   }
   const send = (m) => { if (node) node.port.postMessage(m); };
-  /* the display against the page, for contrast: a dark page shows a light screen, a light page a dark one */
+  /* the display is set against the page: a light page, a dark screen, and the other way round */
   function displayMode() {
     const v = isDark() ? 0 : 127;
     if (pre) pre.w_setting(0, v);
