@@ -274,7 +274,7 @@ static struct {
     /* animations */
     uint32_t trans_t, glitch_t, card_t, save_t, toast_t;
     uint16_t trans_len;                /* ms; the boot's is longer than a byte */
-    uint8_t glitch_amt, in_trans, trans_down, trans_wipe;
+    uint8_t glitch_amt, in_trans, trans_down;
     uint32_t glitch_seed;
     char toast[24], toast2[24];
     uint8_t seen_trig[M2K_TRACKS];
@@ -308,7 +308,6 @@ static void start_glitch(int amt);
 static void start_trans_dir(int len, int down)
 {
     ui.trans_down = (uint8_t)down;
-    ui.trans_wipe = 0;
     m_cpy(fb_prev, fb_out, sizeof fb_prev);
     ui.trans_t = ui.now;
     ui.trans_len = (uint16_t)len;
@@ -657,6 +656,33 @@ static void select_pattern(int n)
 
 void m2k_pattern(int n) { select_pattern(n); }
 
+/* the web page's own controls: what the panel does, without the panel's ways */
+void m2k_track(int t)
+{
+    if (t < 0 || t >= M2K_TRACKS || t == ui.trk) return;
+    for (int i = 0; i < 8 && sq.nheld; i++) live_off(sq.held[0]);
+    ui.trk = (uint8_t)t;
+    sq.ktrk = ui.trk;
+    start_trans_dir(190, 1);
+}
+
+void m2k_mute(int t)
+{
+    if (t < 0 || t >= M2K_TRACKS) return;
+    pat[cur_pat].mute ^= (uint8_t)(1u << t);
+    toast((pat[cur_pat].mute >> t) & 1 ? "MUTED" : "UNMUTED", (const char[]){'T', (char)('1' + t), 0});
+}
+
+void m2k_tempo(int d)
+{
+    const pi_t *pi = pinfo(ui.trk, GL(G_TMPO));
+    uint8_t *g = &pat[cur_pat].glob[G_TMPO];
+    *g = (uint8_t)CLAMP(*g + d, kind_min(pi->kind), kind_max(pi->kind));
+    char o[12];
+    s_cpy(s_int(o, (int)seq_bpm()), " BPM");
+    toast("TEMPO", o);
+}
+
 void m2k_encoder(int e, int d)
 {
     if (!d) return;
@@ -845,6 +871,19 @@ static void machine_dots(int cx, int y, int m)
     }
 }
 
+/* the filter's response at column i of w: high and low pass as q3 cutoffs (0..1016), their resonances 0..127 */
+static int filt_y(int i, int w, int hp, int lp, int hq, int lq, int top, int yb)
+{
+    int q = i * 1016 / (w - 1), g = 256;
+    if (q < hp) g = CLAMP(256 - (hp - q) * 3, 0, 256);
+    if (q > lp) g = CLAMP(256 - (q - lp) * 3, 0, g);
+    int dh = q - hp, dl = q - lp;
+    if (dh > -40 && dh < 40) g += (hq * (40 - (dh < 0 ? -dh : dh))) >> 4;
+    if (dl > -40 && dl < 40) g += (lq * (40 - (dl < 0 ? -dl : dl))) >> 4;
+    int y = yb - ((yb - top) * g >> 8);
+    return y < top - 12 ? top - 12 : y;
+}
+
 /* the right column: what the page is about, live */
 static void picture(void)
 {
@@ -874,27 +913,81 @@ static void picture(void)
         break;
     }
     case PG_AMP: {
-        /* attack, hold, decay, release as lengths on a log scale; the voice's position on it */
+        int fk = ui.focus_t && ui.now - ui.focus_t < 2500 ? ui.focus : -1;   /* the knob being turned */
+        if (ui.sub == 1) {
+            /* distortion as a transfer curve, the volume as its height and a bar, the pan on a line, the glide
+             * as a ramp between two notes; the part being turned is drawn heavy and its tag inverted */
+            int dg = 256 + k[P_DIST] * 24, vol = T_VOL[k[P_VOL]];
+            int bx = X + 2, by = Y + 2, bs = 46, mid = by + bs / 2;
+            frame(bx, by, bs, bs, 1);
+            for (int j = 4; j < bs; j += 4) px(bx + j, by + bs - 1 - j, 1);           /* the clean line */
+            int prev = mid;
+            for (int i = 0; i < bs - 2; i++) {
+                int32_t in = (i - (bs - 2) / 2) * 65535 / (bs - 2);
+                int32_t o = (sat_soft((in * dg) >> 8) * (vol >> 3)) >> 12;           /* Q15 */
+                int y = mid - (int)((o * (bs / 2 - 2)) >> 15);
+                if (i) { line(bx + i, prev, bx + 1 + i, y, 1); if (fk == 0) line(bx + i, prev + 1, bx + 1 + i, y + 1, 1); }
+                prev = y;
+            }
+            int vx = X + 54, vw = W - 56, vh = (bs - 2) * vol >> 15;
+            frame(vx, by, vw, bs, 1);
+            rect_grad(vx + 1, by + bs - 1 - vh, vw - 2, vh, fk == 1 ? 40 : 14, 64, 1);
+            hline(vx - 2, by + bs - 1 - vh, vw + 4, 1);
+            tag(bx, by + bs + 3, "DS", fk == 0);
+            tag(vx, by + bs + 3, "VL", fk == 1);
+            int lx = X + 26, lw = W - 26, pan = k[P_PAN];
+            int py = Y + 75;
+            tag(X, py - 7, "PN", fk == 2);
+            hline(lx, py, lw, 1);
+            vline(lx + lw / 2, py - 3, 7, 1);
+            vline(lx, py - 2, 5, 1); vline(lx + lw - 1, py - 2, 5, 1);
+            int mx = lx + 2 + pan * (lw - 5) / 127;
+            if (fk == 2) rect(mx - 2, py - 5, 5, 11, 1); else { rect(mx - 2, py - 5, 5, 11, 0); frame(mx - 2, py - 5, 5, 11, 1); }
+            int gy = Y + 98, gl = 2 + k[P_PORT] * (lw - 10) / 127;
+            tag(X, gy - 12, "GL", fk == 3);
+            hline(lx, gy, 4, 1);
+            line(lx + 4, gy, lx + 4 + gl, gy - 9, 1);
+            if (fk == 3) line(lx + 5, gy, lx + 5 + gl, gy - 9, 1);
+            hline(lx + 4 + gl, gy - 9, lw - 4 - gl, 1);
+            break;
+        }
+        /* attack, hold, decay, release as lengths on a log scale. The segment being turned fills dense, the others
+         * light; handles mark where each ends; the letters sit under their segments, and the live voice runs on it */
         int wa = 6 + k[P_ATK] * 24 / 127, wh = k[P_HOLD] == 127 ? 18 : 2 + k[P_HOLD] * 18 / 127;
         int wd = k[P_DEC] == 127 ? 18 : 12 + k[P_DEC] * 30 / 127, wr = 8 + k[P_REL] * 24 / 127;
         int tot = wa + wh + wd + wr;
-        wa = wa * (W - 4) / tot; wh = wh * (W - 4) / tot; wd = wd * (W - 4) / tot; wr = (W - 4) - wa - wh - wd;
-        int x0 = X + 2, yb = Y + 86, top = Y + 14, hgt = yb - top;
+        wa = wa * (W - 6) / tot; wh = wh * (W - 6) / tot; wd = wd * (W - 6) / tot; wr = (W - 6) - wa - wh - wd;
+        int x0 = X + 3, yb = Y + 84, top = Y + 10, hgt = yb - top;
         int xs[5] = {x0, x0 + wa, x0 + wa + wh, x0 + wa + wh + wd, x0 + wa + wh + wd + wr};
-        int py = yb;
+        int ys[5], py = yb;
         for (int x = xs[0]; x <= xs[4] && x < X + W; x++) {
-            int y;
-            if (x <= xs[1]) y = yb - hgt * (x - xs[0]) / (wa ? wa : 1);
-            else if (x <= xs[2]) y = top;
-            else if (x <= xs[3]) { int q = (x - xs[2]) * 256 / (wd ? wd : 1); int l = 256 - q; l = k[P_DEC] == 127 ? 256 : (l * l) >> 8; y = yb - (hgt * l >> 8); }
+            int y, seg = x <= xs[1] ? 0 : x <= xs[2] ? 1 : x <= xs[3] ? 2 : 3;
+            if (seg == 0) y = yb - hgt * (x - xs[0]) / (wa ? wa : 1);
+            else if (seg == 1) y = top;
+            else if (seg == 2) { int q = (x - xs[2]) * 256 / (wd ? wd : 1); int l = 256 - q; l = k[P_DEC] == 127 ? 256 : (l * l) >> 8; y = yb - (hgt * l >> 8); }
             else { int q = (x - xs[3]) * 256 / (wr ? wr : 1); int l0 = k[P_DEC] == 127 ? 256 : 40; int l = (l0 * (256 - q)) >> 8; y = yb - (hgt * l >> 8); }
-            for (int j = y; j <= yb; j++) if (T_BAYER[j & 7][x & 7] < 44 - (j - y) * 40 / (yb - top + 1)) px(x, j, 1);
+            int dense = seg == fk ? 64 : fk < 0 ? 44 : 22;
+            for (int j = y; j <= yb; j++) if (T_BAYER[j & 7][x & 7] < dense - (j - y) * (dense - 4) / (hgt + 1)) px(x, j, 1);
             line(x - 1, py, x, y, 1);
+            if (seg == fk) line(x - 1, py - 1, x, y - 1, 1);
+            for (int b = 1; b < 5; b++) if (x == xs[b]) ys[b] = y;
             py = y;
+        }
+        ys[4] = yb;
+        for (int b = 1; b < 4; b++) dotted_v(xs[b], top - 6, ys[b] - top + 6);
+        for (int b = 1; b < 5; b++) {
+            if (b - 1 == fk) { rect(xs[b] - 3, ys[b] - 3, 7, 7, 1); continue; }
+            rect(xs[b] - 2, ys[b] - 2, 5, 5, 0);
+            frame(xs[b] - 2, ys[b] - 2, 5, 5, 1);
         }
         hline(X, yb + 1, W, 1);
         static const char *const L[4] = {"A", "H", "D", "R"};
-        for (int i = 0; i < 4; i++) if (xs[i + 1] - xs[i] > 5) text(&F_S, xs[i] + 1, yb + 4, L[i], 1, 0);
+        int lx = -100;
+        for (int i = 0; i < 4; i++) {          /* under its segment; a letter that would touch the last is left out */
+            int c = (xs[i] + xs[i + 1]) / 2, w = text_w(&F_S, L[i], 0);
+            if (i == fk) { rect(c - w / 2 - 2, yb + 3, w + 5, F_S.h + 2, 1); text(&F_S, c - w / 2, yb + 4, L[i], 0, 0); lx = c + w / 2 + 3; }
+            else if (c - w / 2 > lx + 2 && (fk < 0 || fk != i + 1 || c + w / 2 + 6 < (xs[fk] + xs[fk + 1]) / 2 - 4)) { text(&F_S, c - w / 2, yb + 4, L[i], 1, 0); lx = c + w / 2; }
+        }
         /* the live voice */
         int st = mon.astage[ui.trk], lv = mon.aenv[ui.trk];
         if (st) {
@@ -906,25 +999,76 @@ static void picture(void)
         break;
     }
     case PG_FILT: {
-        int hp = mon.cut_hp[ui.trk], lp = mon.cut_lp[ui.trk];
-        if (!t->sounding) { hp = k[P_BASE] * 8; lp = CLAMP((k[P_BASE] + k[P_WDTH]) * 8, 0, 1016); }
-        int yb = Y + 90, top = Y + 30, prev = yb;
+        int fk = ui.focus_t && ui.now - ui.focus_t < 2500 ? ui.focus : -1;
+        int yb = Y + 80, top = Y + 14;
+        int hp0 = k[P_BASE] * 8, lp0 = CLAMP((k[P_BASE] + k[P_WDTH]) * 8, 0, 1016);
+        if (ui.sub == 1) {
+            /* the filter envelope: the band at rest in dots, where the envelope takes it solid, and the envelope's
+             * attack and decay under it */
+            int hp1 = CLAMP(hp0 + (k[P_BOF] - 64) * 32, 0, 1016);
+            int lp1 = CLAMP(hp1 + k[P_WDTH] * 8 + (k[P_WOF] - 64) * 32, 0, 1016);
+            int yb2 = Y + 70, prev0 = yb2, prev1 = yb2;
+            for (int i = 0; i < W; i++) {
+                int y0 = filt_y(i, W, hp0, lp0, k[P_HPQ], k[P_LPQ], top, yb2), y1 = filt_y(i, W, hp1, lp1, k[P_HPQ], k[P_LPQ], top, yb2);
+                int dense = fk >= 2 ? 52 : 34;
+                for (int j = y1 + 1; j <= yb2; j++) if (T_BAYER[j & 7][(X + i) & 7] < dense - (j - y1) * (dense - 4) / (yb2 - top + 1)) px(X + i, j, 1);
+                if (i) line(X + i - 1, prev1, X + i, y1, 1);
+                if (i && ((i >> 1) & 1)) line(X + i - 1, prev0, X + i, y0, 2);        /* the band at rest, dashed */
+                prev0 = y0; prev1 = y1;
+            }
+            hline(X, yb2 + 1, W, 1);
+            /* how far the envelope takes the base: an arrow over the band */
+            int xh0 = X + hp0 * (W - 1) / 1016, xh1 = X + hp1 * (W - 1) / 1016, ay = top - 8;
+            if (xh1 != xh0) {
+                hline(xh0 < xh1 ? xh0 : xh1, ay, (xh1 > xh0 ? xh1 - xh0 : xh0 - xh1) + 1, 1);
+                if (fk == 2) hline(xh0 < xh1 ? xh0 : xh1, ay + 1, (xh1 > xh0 ? xh1 - xh0 : xh0 - xh1) + 1, 1);
+                vline(xh0, ay - 2, 5, 1);
+                int dir = xh1 > xh0 ? -1 : 1;
+                for (int j = 1; j <= 3; j++) vline(xh1 + dir * j, ay - j, 2 * j + 1, 1);
+            }
+            tag(X, yb2 + 4, "BO", fk == 2);
+            tag(X, yb2 + 19, "WO", fk == 3);
+            /* the envelope: attack up, decay down */
+            int ex = X + 30, ew = W - 30, eb = yb2 + 31, et = yb2 + 7;
+            int a = 2 + k[P_FATK] * (ew / 3 - 2) / 127, d = 3 + k[P_FDEC] * (ew - a - 4) / 127;
+            for (int x = 0; x <= a + d; x++) {
+                int y = x <= a ? eb - (eb - et) * x / (a ? a : 1) : eb - ((eb - et) * (((256 - (x - a) * 256 / d) * (256 - (x - a) * 256 / d)) >> 8) >> 8);
+                int seg = x <= a ? 0 : 1;
+                for (int j = y; j <= eb; j++) if (T_BAYER[j & 7][(ex + x) & 7] < (seg == fk ? 56 : 20)) px(ex + x, j, 1);
+                px(ex + x, y, 1);
+                if (seg == fk) px(ex + x, y - 1, 1);
+            }
+            hline(ex, eb + 1, ew, 1);
+            break;
+        }
+        /* the band: high and low pass as a base and a width, their resonances as peaks. Handles stand on each
+         * cutoff, the width is a bracket under the line; what is being turned is heavy */
+        int hp = hp0, lp = lp0;
+        if (t->sounding) { hp = mon.cut_hp[ui.trk]; lp = mon.cut_lp[ui.trk]; }
+        int prev = yb;
         for (int i = 0; i < W; i++) {
-            int q = i * 1016 / (W - 1), g = 256;
-            if (q < hp) g = CLAMP(256 - (hp - q) * 3, 0, 256);
-            if (q > lp) g = CLAMP(256 - (q - lp) * 3, 0, g);
-            int dh = q - hp, dl = q - lp;
-            if (dh > -40 && dh < 40) g += (k[P_HPQ] * (40 - (dh < 0 ? -dh : dh))) >> 4;
-            if (dl > -40 && dl < 40) g += (k[P_LPQ] * (40 - (dl < 0 ? -dl : dl))) >> 4;
-            int y = yb - ((yb - top) * g >> 8);
-            if (y < Y) y = Y;
+            int y = filt_y(i, W, hp, lp, k[P_HPQ], k[P_LPQ], top, yb);
             for (int j = y + 1; j <= yb; j++) if (T_BAYER[j & 7][(X + i) & 7] < 48 - (j - y) * 44 / (yb - top + 1)) px(X + i, j, 1);
             line(X + i - 1, prev, X + i, y, 1);
             prev = y;
         }
         hline(X, yb + 1, W, 1);
-        text(&F_S, X, yb + 4, "HP", 1, 1);
-        text_r(&F_S, X + W, yb + 4, "LP", 1, 1);
+        int xh = X + hp * (W - 1) / 1016, xl = X + lp * (W - 1) / 1016;
+        int yh = filt_y(xh - X, W, hp, lp, k[P_HPQ], k[P_LPQ], top, yb), yl = filt_y(xl - X, W, hp, lp, k[P_HPQ], k[P_LPQ], top, yb);
+        dotted_v(xh, top - 8, yb - top + 8);
+        dotted_v(xl, top - 8, yb - top + 8);
+        int hot_h = fk == 0 || fk == 2, hot_l = fk == 3;
+        if (hot_h) rect(xh - 3, yh - 3, 7, 7, 1); else { rect(xh - 2, yh - 2, 5, 5, 0); frame(xh - 2, yh - 2, 5, 5, 1); }
+        if (hot_l) rect(xl - 3, yl - 3, 7, 7, 1); else { rect(xl - 2, yl - 2, 5, 5, 0); frame(xl - 2, yl - 2, 5, 5, 1); }
+        /* the width */
+        int wy = yb + 4;
+        vline(xh, wy, 5, 1); vline(xl, wy, 5, 1);
+        if (fk == 1) rect(xh, wy + 1, xl - xh + 1, 3, 1); else dotted_h(xh, wy + 2, xl - xh + 1);
+        /* the names, under their cutoffs and inside the column, apart */
+        int wH = text_w(&F_S, "HP", 1) + 6, wL = text_w(&F_S, "LP", 1) + 6;
+        int th = CLAMP(xh - wH / 2, X, X + W - wH - wL - 2), tl = CLAMP(xl - wL / 2, th + wH + 2, X + W - wL);
+        tag(th, wy + 7, "HP", hot_h);
+        tag(tl, wy + 7, "LP", hot_l);
         break;
     }
     case PG_FX: {
@@ -1355,7 +1499,7 @@ const uint8_t *m2k_frame(uint32_t ms)
         m_cpy(fb_out, fb, sizeof fb_out);
         return present();
     }
-    if (bt < 1800 + 40 && !ui.in_trans && ui.trans_t < ui.boot_t0 + 1800) { start_trans(360); ui.trans_wipe = 1; start_glitch(2); }
+    if (bt < 1800 + 40 && !ui.in_trans && ui.trans_t < ui.boot_t0 + 1800) start_trans(420);   /* out of the splash */
 
     cls();
     if (ui.page == PG_HOME) { header(); home(); }
@@ -1365,7 +1509,6 @@ const uint8_t *m2k_frame(uint32_t ms)
     if (ui.in_trans) {
         uint32_t a = ms - ui.trans_t;
         if (a >= ui.trans_len) { ui.in_trans = 0; m_cpy(fb_out, fb, sizeof fb_out); }
-        else if (ui.trans_wipe) wipe((int)(a * 64 / ui.trans_len), ui.trans_down);
         else cyber((int)(a * 256 / ui.trans_len), ui.glitch_seed ^ ui.trans_t, ui.trans_down);
     } else {
         m_cpy(fb_out, fb, sizeof fb_out);

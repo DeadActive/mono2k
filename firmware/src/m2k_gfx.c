@@ -249,25 +249,6 @@ static void dissolve(int level)
     }
 }
 
-/* the wipe: the new frame sweeps in behind a dithered edge, 80 px of gradient, left to right (or top down).
- * p: 0..64 */
-static void wipe(int p, int down)
-{
-    for (int y = 0; y < M2K_H; y++) {
-        const uint8_t *a = &fb_prev[y * ROWB], *b = &fb[y * ROWB];
-        uint8_t *o = &fb_out[y * ROWB];
-        for (int bx = 0; bx < ROWB; bx++) {
-            uint8_t m = 0;
-            for (int i = 0; i < 8; i++) {
-                int x = bx * 8 + i;
-                int t = (down ? y : x) * 48 / 240 + (T_BAYER[y & 7][i] >> 2);
-                if (t < p) m |= (uint8_t)(0x80u >> i);
-            }
-            o[bx] = (uint8_t)((b[bx] & m) | (a[bx] & ~m));
-        }
-    }
-}
-
 static inline uint32_t hash32(uint32_t x)
 {
     x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;

@@ -30,6 +30,16 @@ EXPORT int w_dirty(void) { return m2k_dirty(); }
 EXPORT void w_setting(int i, int v) { m2k_setting(i, v); }
 EXPORT void w_pattern(int n) { m2k_pattern(n); }
 EXPORT int w_patterns(void) { return M2K_PATTERNS; }
+EXPORT void w_track(int t) { m2k_track(t); }
+EXPORT void w_mute(int t) { m2k_mute(t); }
+EXPORT void w_tempo(int d) { m2k_tempo(d); }
+/* what knob k turns on a page, for machine m: the panel's labels follow the screen */
+EXPORT const char *w_knob(int page, int sub, int m, int k)
+{
+    int code = knob_param(page % PG_COUNT, sub, k & 3);
+    if (code == NONE) return "";
+    return code < 8 ? MI[m % M_COUNT].syn[code].s4 : pinfo(0, code)->s4;
+}
 
 /* what the page shows next to the panel */
 EXPORT const uint8_t *w_info(void)

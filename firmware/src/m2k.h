@@ -109,5 +109,8 @@ int m2k_project_current(void);
 int m2k_dirty(void);                                /* 1 when SAVE asked for the store to be written */
 void m2k_setting(int i, int v);                     /* e.g. the web page's theme sets S_SCREEN */
 void m2k_pattern(int n);                            /* select a pattern, as PRESETS does */
+void m2k_track(int t);                              /* select a track, as SELECT does (the web's track cells) */
+void m2k_mute(int t);                               /* mute or unmute a track of the pattern */
+void m2k_tempo(int d);                              /* the tempo up or down by d BPM */
 
 #endif

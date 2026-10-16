@@ -45,6 +45,9 @@ class Mono2k extends AudioWorkletProcessor {
       case "midi": x.w_midi(m.s, m.a, m.b); break;
       case "set": x.w_setting(m.i, m.v); break;
       case "pattern": x.w_pattern(m.n); break;
+      case "track": x.w_track(m.n); break;
+      case "mute": x.w_mute(m.n); break;
+      case "tempo": x.w_tempo(m.d); break;
       case "reset": x.w_init(m.seed >>> 0); this.names(); break;
       case "names": this.names(); break;
       case "project": {                       /* load (save 0) or save (save 1) a project, then keep it */

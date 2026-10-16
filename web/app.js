@@ -222,10 +222,11 @@
       el("circle", { cx, cy, r: 9, fill: "url(#pCheck)", stroke: "currentColor", "stroke-width": 1 }, g);
       const ptr = el("line", { x1: cx, y1: cy - 10, x2: cx, y2: cy - 19, stroke: "currentColor", "stroke-width": 3, "stroke-linecap": "square" }, g);
       text(cx, cy - 37, ENC[i], 6.5, { "font-weight": 600 });
-      text(cx, cy - 28, EROLE[i], 8, { "font-weight": 900 });
-      encEl.push({ sel, ptr, cx, cy });
+      const role = text(cx, cy - 28, EROLE[i], 8, { "font-weight": 900 });
+      encEl.push({ sel, ptr, cx, cy, role });
     }
     showSel();
+    lastInfo = ""; knobKey = "";
   }
   function showSel() { encEl.forEach((e, i) => e.sel.setAttribute("opacity", i === selKnob ? 1 : 0)); }
   function turnVisual(i, d) {
@@ -317,7 +318,7 @@
   const status = (s) => { $("status").textContent = s; };
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=23");
+    const r = await fetch("m2k.wasm?v=24");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();
@@ -344,7 +345,7 @@
     try {
       try { ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }); }
       catch (e) { ctx = new AudioContext({ latencyHint: "interactive" }); }
-      await ctx.audioWorklet.addModule("worklet.js?v=23");
+      await ctx.audioWorklet.addModule("worklet.js?v=24");
       node = new AudioWorkletNode(ctx, "mono2k", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(ctx.destination);
       node.port.onmessage = (ev) => {
@@ -380,7 +381,7 @@
       await ctx.resume();
       running = true;
       armed = true;
-      svg.focus();
+      svg.focus({ preventScroll: true });   /* the readout can start it too: stay where the reader is */
     } catch (e) {
       status("Could not start the audio: " + e.message);
       $("start").classList.remove("gone");
@@ -462,12 +463,25 @@
   });
 
   const PAGES = ["HOME", "SYN", "AMP", "FILT", "FX", "LFO", "ARP", "GLO"];
-  let lastInfo = "";
+  let lastInfo = "", knobKey = "", curTrk = 0;
   function info(I) {
     const key = Array.prototype.join.call(I, ",");
     if (key === lastInfo) return;
     lastInfo = key;
     const trk = I[0], pat = I[3];
+    curTrk = trk;
+    /* the four knobs are named for what they turn on this page, as the screen's footer names them */
+    const kk = I[1] + "," + I[2] + "," + I[6];
+    if (kk !== knobKey && pre && pre.w_knob && encEl.length === 8) {
+      knobKey = kk;
+      for (let k = 0; k < 4; k++) encEl[3 + k].role.textContent = cstr(pre, pre.w_knob(I[1], I[2], I[6], k)) || "—";
+    }
+    if (readBtn.step) {
+      readBtn.step.textContent = I[4] ? "■" : "▶";
+      readBtn.step.setAttribute("aria-label", I[4] ? "Stop" : "Play");
+      readBtn.grid.setAttribute("aria-pressed", String(!!I[7]));
+      readBtn.rec.setAttribute("aria-pressed", String(!!I[8]));
+    }
     $("r-trk").textContent = "T" + (trk + 1);
     $("r-mach").textContent = machineNames[I[6]] || "";
     $("r-pat").textContent = label(pat) + (I[12] !== pat && I[4] ? "›" + label(I[12]) : "");
@@ -475,16 +489,71 @@
     $("r-step").textContent = I[4] ? String(I[10] + 1).padStart(2, "0") + "/" + I[11] : "—";
     $("r-mode").textContent = (I[7] ? "GRID" : "PLAY") + (I[9] ? " FILL" : I[8] ? " REC" : "");
     const ol = $("tracks");
-    if (ol.children.length !== 6) { ol.innerHTML = ""; for (let t = 0; t < 6; t++) ol.appendChild(document.createElement("li")); }
+    if (ol.children.length !== 6) {
+      ol.innerHTML = "";
+      for (let t = 0; t < 6; t++) {
+        const li = document.createElement("li");
+        const sel = ctlButton("", "Track " + (t + 1), () => send({ t: "track", n: t }));
+        const mute = ctlButton("M", "Mute track " + (t + 1), () => send({ t: "mute", n: t }));
+        sel.className = "tsel"; mute.className = "tmute";
+        li.append(sel, mute);
+        ol.appendChild(li);
+      }
+    }
     for (let t = 0; t < 6; t++) {
-      const li = ol.children[t];
-      li.className = (t === trk ? "on" : "") + ((I[13] >> t) & 1 ? " mute" : "");
-      li.innerHTML = `<b>${t + 1}</b>${machineNames[I[17 + t]] || ""}`;
+      const li = ol.children[t], muted = (I[13] >> t) & 1, name = machineNames[I[17 + t]] || "";
+      li.className = (t === trk ? "on" : "") + (muted ? " mute" : "");
+      li.firstChild.innerHTML = `<b>${t + 1}</b>${name}`;
+      li.firstChild.setAttribute("aria-label", `Track ${t + 1}, ${name}`);
+      li.firstChild.setAttribute("aria-pressed", String(t === trk));
+      li.lastChild.setAttribute("aria-pressed", String(!!muted));
     }
     if (pat !== curPat) viewBank = pat >> 4;
     curPat = pat; queuedPat = I[12]; playingNow = I[4]; curProj = I[23];
     patterns();
     void PAGES;
+  }
+
+  /* the readout plays too: arrows on track, machine, pattern and tempo (held, the tempo runs; Shift, by ten);
+   * STEP starts and stops; KEYS turns the keys into the grid and arms recording. A track cell selects its track,
+   * its M mutes it. Before the sound is on, the first touch turns it on. */
+  const readBtn = {};
+  const act = (fn) => { if (running) fn(); else start().then(() => { if (running) fn(); }); };
+  const tap = (b) => { send({ t: "btn", b, d: 1 }); send({ t: "btn", b, d: 0 }); };
+  function ctlButton(txt, label, fn, repeat) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = txt;
+    b.setAttribute("aria-label", label);
+    if (!repeat) { b.addEventListener("click", (ev) => act(() => fn(ev))); return b; }
+    let rt = 0, ri = 0;
+    const stop = () => { clearTimeout(rt); clearInterval(ri); };
+    b.addEventListener("click", (ev) => { if (ev.detail === 0) act(() => fn(ev)); });      /* from the keyboard */
+    b.addEventListener("pointerdown", (ev) => {
+      const sh = ev.shiftKey;
+      act(() => fn({ shiftKey: sh }));
+      rt = setTimeout(() => { ri = setInterval(() => fn({ shiftKey: sh }), 70); }, 380);
+    });
+    for (const e of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(e, stop);
+    return b;
+  }
+  function readControls() {
+    const box = (id, ...btns) => { const s = document.createElement("span"); s.className = "ctls"; s.append(...btns); $(id).parentElement.appendChild(s); };
+    const arrows = (id, name, fn, repeat) => {
+      const dn = ctlButton("−", name + " down", (ev) => fn(-1, ev), repeat), up = ctlButton("+", name + " up", (ev) => fn(1, ev), repeat);
+      dn.className = up.className = "ar";
+      box(id, dn, up);
+    };
+    arrows("r-trk", "Track", (d) => send({ t: "track", n: (curTrk + 6 + d) % 6 }));
+    arrows("r-mach", "Machine", (d) => turn(1, d));
+    arrows("r-pat", "Pattern", (d) => turn(2, d));
+    arrows("r-bpm", "Tempo", (d, ev) => send({ t: "tempo", d: d * (ev && ev.shiftKey ? 10 : 1) }), true);
+    readBtn.step = ctlButton("▶", "Play", () => tap(10));
+    readBtn.step.className = "ar";
+    box("r-step", readBtn.step);
+    readBtn.grid = ctlButton("Grid", "Keys as steps (GRID)", () => tap(9));
+    readBtn.rec = ctlButton("Rec", "Record", () => tap(11));
+    box("r-mode", readBtn.grid, readBtn.rec);
   }
 
   // ---------------------------------------------------------------------------------------- machine sheet
@@ -668,6 +737,7 @@
   (document.fonts ? Promise.all([document.fonts.load('900 64px "Orbitron"'), document.fonts.ready]) : Promise.resolve())
     .then(() => { wordmark(); requestAnimationFrame(wmTick); });
   reveal();
+  readControls();
   boot().catch((e) => status("Could not load the firmware: " + e.message));
 
   /* scroll: each part arrives once, as it comes into view, in steps as the screen moves; nothing moves for those
