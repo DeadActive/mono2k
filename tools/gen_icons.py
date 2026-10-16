@@ -18,11 +18,13 @@ G = 128         # the design grid
 
 # The marks are isotypes, not letters (after Fors' plugin marks): each a small symbol for what its machine does,
 # and all of one family:
-#   a 12-unit grid, the symbol inside 1..11; solid ink only; three primitives: square tiles, 45-degree triangles,
-#   circles and their arcs; and one signature, THE SLIT: every piece is set apart from the next by half a unit.
+#   a 12-unit grid, the symbol inside 1..11; solid ink only; solid masses set against thin lines (0.8 units);
+#   circles, their arcs, 45-degree and fanned lines; negative space; and one signature, THE SLIT: every piece is
+#   set apart from the next by half a unit.
 SS = 4                      # supersampling while drawing
 U = G * SS / 12.0           # one unit, in drawing pixels
 SL = 0.5                    # the slit
+LN = 0.8                    # a thin line
 
 
 def mark(name):
@@ -39,15 +41,7 @@ def mark(name):
     def DISC(cx, cy, r, c=W):
         d.ellipse([(cx - r) * U, (cy - r) * U, (cx + r) * U - 1, (cy + r) * U - 1], fill=c)
 
-    def ARC(cx, cy, ro, ri, a0, a1):                 # a ring sector, degrees clockwise from 3 o'clock; adds ink only
-        t = Image.new("L", im.size, 0)
-        td = ImageDraw.Draw(t)
-        td.pieslice([(cx - ro) * U, (cy - ro) * U, (cx + ro) * U - 1, (cy + ro) * U - 1], a0, a1, fill=255)
-        if ri > 0:
-            td.pieslice([(cx - ri) * U, (cy - ri) * U, (cx + ri) * U - 1, (cy + ri) * U - 1], a0, a1, fill=0)
-        im.paste(255, mask=t)
-
-    def STROKE(pts, w):                               # a curve of width w, its ends cut square
+    def STROKE(pts, w, c=W):                          # a line of width w along pts, its ends cut square
         L, Rr = [], []
         for i, (x, y) in enumerate(pts):
             x0, y0 = pts[max(i - 1, 0)]
@@ -57,69 +51,75 @@ def mark(name):
             nx, ny = -ty / n * w / 2, tx / n * w / 2
             L.append((x + nx, y + ny))
             Rr.append((x - nx, y - ny))
-        P(L + Rr[::-1])
+        P(L + Rr[::-1], c)
 
-    def SLIT(cx, cy, ang, length):                    # a cut across a form, half a unit wide
-        ux, uy = math.cos(ang), math.sin(ang)
-        vx, vy = -uy * SL / 2, ux * SL / 2
-        hx, hy = ux * length / 2, uy * length / 2
-        P([(cx - hx - vx, cy - hy - vy), (cx + hx - vx, cy + hy - vy), (cx + hx + vx, cy + hy + vy),
-           (cx - hx + vx, cy - hy + vy)], 0)
+    def LINE(x0, y0, x1, y1, w=LN, c=W):
+        STROKE([(x0, y0), (x1, y1)], w, c)
 
-    if name == "GSIN":          # the sine: one cycle, a slit where it crosses zero
-        pts = [(1.2 + 9.6 * k / 80, 6 - 3.2 * math.sin(2 * math.pi * k / 80)) for k in range(81)]
-        STROKE(pts, 2.0)
-        slope = 3.2 * 2 * math.pi / 9.6                 # at the crossing the curve rises, down the screen
-        SLIT(6.0, 6.0, math.atan2(slope, 1) + math.pi / 2, 4)
-    elif name == "GNOI":        # noise: a field of tiles, some gone, some halved
-        cells = ["X.XX", ".XT.", "Xt.X", ".XX."]
-        for j, row in enumerate(cells):
-            for i, c in enumerate(row):
-                x0, y0 = 1.25 + i * 2.5, 1.25 + j * 2.5
-                if c == "X":
-                    R(x0, y0, x0 + 2, y0 + 2)
-                elif c == "T":
-                    P([(x0, y0 + 2), (x0 + 2, y0), (x0 + 2, y0 + 2)])
-                elif c == "t":
-                    P([(x0, y0), (x0 + 2, y0), (x0, y0 + 2)])
-    elif name == "SID":         # the chip: a body, its notch, three pins a side
-        R(3.75, 2.5, 8.25, 9.5)
-        DISC(6, 2.5, 1.0, 0)
-        for k in range(3):
-            y = 3.5 + k * 2
-            R(1.5, y, 3.25, y + 1)
-            R(8.75, y, 10.5, y + 1)
-    elif name == "FMS":         # static FM: a carrier, and the modulators held in orbit around it
-        DISC(7, 7, 3.2)
-        ARC(7, 7, 5.0, 3.7, 180, 270)
-        ARC(7, 7, 6.3, 5.5, 195, 255)
-    elif name == "FMD":         # dynamic FM: the carrier, and its modulators streaking in
-        for k, (y, x0) in enumerate([(3.4, 1.0), (5.4, 2.2), (7.4, 1.6)]):
-            R(x0, y, 8, y + 1.2)
-        DISC(8, 6, 3.6, 0)
-        DISC(8, 6, 3.1)
-    elif name == "SAW":         # the supersaw: three teeth in a row
-        for k in range(3):
-            x0 = 1.0 + k * 3.5
-            P([(x0, 9), (x0 + 3, 3), (x0 + 3, 9)])
+    def ELLIPSE(cx, cy, a, b, rot, t0, t1, n=90):     # points of a turned ellipse, from angle t0 to t1
+        cr, sr = math.cos(rot), math.sin(rot)
+        out = []
+        for k in range(n + 1):
+            t = t0 + (t1 - t0) * k / n
+            x, y = a * math.cos(t), b * math.sin(t)
+            out.append((cx + x * cr - y * sr, cy + x * sr + y * cr))
+        return out
+
+    if name == "GSIN":          # the sine: a disc, cut in two by one cycle of it
+        DISC(6, 6, 5)
+        pts = [(0.5 + 11 * k / 80, 6 - 2.2 * math.sin(2 * math.pi * k / 80)) for k in range(81)]
+        STROKE(pts, SL * 1.4, 0)
+    elif name == "GNOI":        # noise: a solid block, dissolving into tiles
+        R(1, 1.5, 5, 10.5)
+        keep = [[1, 1, 0, 1, 1, 1], [1, 0, 1, 0, 1, 0], [0, 1, 0, 0, 1, 0], [0, 0, 1, 0, 0, 0]]
+        for i in range(4):
+            for j in range(6):
+                if keep[i][j]:
+                    x0, y0 = 5.5 + i * 1.5, 1.5 + j * 1.5
+                    R(x0, y0, x0 + 1.0, y0 + 1.0)
+    elif name == "SID":         # the chip: a body, its notch, thin pins
+        R(3.5, 1.5, 8.5, 10.5)
+        DISC(6, 1.5, 1.0, 0)
+        for k in range(4):
+            y = 2.9 + k * 2.1
+            R(1.0, y, 3.0, y + LN)
+            R(9.0, y, 11.0, y + LN)
+    elif name == "FMS":         # static FM: a carrier, a modulator's orbit around it, behind and in front
+        ring = lambda t0, t1: ELLIPSE(6, 6, 5.3, 1.7, -0.42, t0, t1)
+        STROKE(ring(math.pi, 2 * math.pi), LN)                     # behind
+        DISC(6, 6, 3.4 + SL, 0)
+        DISC(6, 6, 3.4)
+        STROKE(ring(0, math.pi), LN + 2 * SL, 0)                   # in front, with its slit
+        STROKE(ring(0, math.pi), LN)
+    elif name == "FMD":         # dynamic FM: the carrier, its sidebands fanning out
+        DISC(3.6, 6, 2.6)
+        for k in range(5):
+            a = (k - 2) * 0.24
+            r0 = 2.6 + SL + 0.2
+            LINE(3.6 + r0 * math.cos(a), 6 + r0 * math.sin(a), 3.6 + 8.2 * math.cos(a), 6 + 8.2 * math.sin(a))
+    elif name == "SAW":         # the supersaw: a tooth, two detuned slivers of it behind
+        P([(5, 10.5), (11, 1.5), (11, 10.5)])
+        for off, w in [(1.4, 0.8), (2.6, 0.55)]:
+            P([(5 - off, 10.5), (11 - off, 1.5), (11 - off + w, 1.5), (5 - off + w, 10.5)])
     elif name == "ENS":         # the ensemble: three voices of a chord, each cut out of the last
         DISC(4.4, 7.4, 2.7)
         DISC(7.6, 7.4, 2.7 + SL, 0)
         DISC(7.6, 7.4, 2.7)
         DISC(6.0, 4.6, 2.7 + SL, 0)
         DISC(6.0, 4.6, 2.7)
-    elif name == "WAV":         # the wavetable: a cycle, sampled into six bars
-        for i in range(6):
-            x0 = 1.25 + i * 1.75
-            h = 4.4 * math.sin(2 * math.pi * (i + 0.5) / 6)
-            if h >= 0:
-                R(x0, 5.75 - h, x0 + 1.25, 5.75)
-            else:
-                R(x0, 6.25, x0 + 1.25, 6.25 - h)
-    elif name == "VOX":         # the voice: a mouth, and the formants leaving it
-        ARC(3.0, 6, 3.0, 0, 270, 360); ARC(3.0, 6, 3.0, 0, 0, 90)
-        ARC(3.0, 6, 5.5, 3.5, 305, 360); ARC(3.0, 6, 5.5, 3.5, 0, 55)
-        ARC(3.0, 6, 8.0, 6.0, 318, 360); ARC(3.0, 6, 8.0, 6.0, 0, 42)
+    elif name == "WAV":         # the wavetable: its frames stacked, their ends a cycle
+        for k in range(8):
+            y = 1.6 + k * 1.25
+            L = 6.0 + 4.6 * math.sin(2 * math.pi * (k + 0.5) / 8)
+            R(1, y, 1 + max(1.2, L), y + LN)
+    elif name == "VOX":         # the voice: lips, parted by a slit, and the sound fading out of them
+        top = [(1 + 6 * k / 40, 6 - 2.6 * math.sin(math.pi * k / 40) ** 0.75) for k in range(41)]
+        bot = [(1 + 6 * k / 40, 6 + 2.6 * math.sin(math.pi * k / 40) ** 0.75) for k in range(41)]
+        P(top + bot[::-1])
+        R(0.5, 6 - SL / 2, 7.5, 6 + SL / 2, 0)
+        for k, h in enumerate([6.0, 4.2, 2.4]):
+            x = 8.3 + k * 1.3
+            R(x, 6 - h / 2, x + LN, 6 + h / 2)
     return im                   # G * SS square, 8 bit
 
 

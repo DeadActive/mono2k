@@ -19,6 +19,8 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   `tools/gen_icons.py [--sheet build/icons.png]`.
 - Host: `cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2k_host host/m2k_host.c -lm && build/host/m2k_host build/host`,
   then `.venv/bin/python tools/montage.py build/host build/screens.png 2` to see every page.
+  `build/host/m2k_host --selftest` checks the projects (save, reload, store, export / import, full images);
+  `build/host/m2k_host build/patterns --analyze` solos every track of bank A and writes each pattern's WAV.
 - Web: `sh web/build.sh`, serve `web/` (`.claude/launch.json`: mono2k-web on port 8742).
 
 ## Style

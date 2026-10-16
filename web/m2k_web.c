@@ -17,9 +17,15 @@ EXPORT void w_key(int k, int d) { m2k_key(k, d); }
 EXPORT void w_button(int b, int d) { m2k_button(b, d); }
 EXPORT void w_encoder(int e, int d) { m2k_encoder(e, d); }
 EXPORT void w_midi(int s, int a, int b) { m2k_midi(s, a, b); }
-EXPORT uint8_t *w_store(void) { int n; return m2k_store(&n); }
-EXPORT int w_store_len(void) { int n; m2k_store(&n); return n; }
-EXPORT void w_restore(void) { m2k_restore(); }
+EXPORT uint8_t *w_store_buf(void) { int m; return m2k_store_buf(&m); }
+EXPORT int w_store_max(void) { int m; m2k_store_buf(&m); return m; }
+EXPORT int w_store_pack(void) { return m2k_store_pack(); }
+EXPORT int w_store_unpack(int n) { return m2k_store_unpack(n); }
+EXPORT int w_proj_export(int slot) { return m2k_proj_export(slot); }
+EXPORT int w_proj_import(int slot, int n) { return m2k_proj_import(slot, n); }
+EXPORT void w_project(int slot, int save) { m2k_project(slot, save); }
+EXPORT const char *w_project_name(int slot) { return m2k_project_name(slot); }
+EXPORT int w_projects(void) { return M2K_PROJECTS; }
 EXPORT int w_dirty(void) { return m2k_dirty(); }
 EXPORT void w_setting(int i, int v) { m2k_setting(i, v); }
 EXPORT void w_pattern(int n) { m2k_pattern(n); }
@@ -46,6 +52,7 @@ EXPORT const uint8_t *w_info(void)
     w_inf[15] = master_vol;
     w_inf[16] = ui.nheld;
     for (int t = 0; t < M2K_TRACKS; t++) w_inf[17 + t] = pat[cur_pat].machine[t];
+    w_inf[23] = (uint8_t)m2k_project_current();
     return w_inf;
 }
 

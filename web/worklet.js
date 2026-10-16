@@ -9,21 +9,31 @@ class Mono2k extends AudioWorkletProcessor {
     this.port.onmessage = (ev) => this.msg(ev.data);
   }
 
+  /* a saved blob back into the core; a blob that is not ours leaves the factory as it is */
+  unpack(bytes) {
+    const x = this.x, n = Math.min(bytes.length, x.w_store_max());
+    new Uint8Array(x.memory.buffer, x.w_store_buf(), n).set(bytes.subarray(0, n));
+    return x.w_store_unpack(n);
+  }
+
+  names() {
+    const x = this.x, mem = new Uint8Array(x.memory.buffer), s = (p) => { let r = ""; while (mem[p]) r += String.fromCharCode(mem[p++]); return r; };
+    const pats = [], projs = [];
+    for (let i = 0; i < x.w_patterns(); i++) pats.push(s(x.w_pat_name(i)));
+    for (let i = 0; i < x.w_projects(); i++) projs.push(s(x.w_project_name(i)));
+    this.port.postMessage({ t: "names", pats, projs });
+  }
+
   msg(m) {
     if (m.t === "wasm") {
       const inst = new WebAssembly.Instance(new WebAssembly.Module(m.bytes), {});
       this.x = inst.exports;
       if (this.x._initialize) this.x._initialize();
       this.x.w_init(m.seed >>> 0);
-      if (m.store) {
-        const n = this.x.w_store_len();
-        if (m.store.byteLength === n) {
-          new Uint8Array(this.x.memory.buffer, this.x.w_store(), n).set(new Uint8Array(m.store));
-          this.x.w_restore();
-        }
-      }
+      if (m.store) this.unpack(new Uint8Array(m.store));
       this.audio = new Int16Array(this.x.memory.buffer, this.x.w_audio(), 256);
       this.port.postMessage({ t: "ready" });
+      this.names();
       return;
     }
     const x = this.x;
@@ -35,12 +45,32 @@ class Mono2k extends AudioWorkletProcessor {
       case "midi": x.w_midi(m.s, m.a, m.b); break;
       case "set": x.w_setting(m.i, m.v); break;
       case "pattern": x.w_pattern(m.n); break;
-      case "store": {
-        const n = x.w_store_len();
-        this.port.postMessage({ t: "store", bytes: new Uint8Array(x.memory.buffer, x.w_store(), n).slice() });
+      case "reset": x.w_init(m.seed >>> 0); this.names(); break;
+      case "names": this.names(); break;
+      case "project": {                       /* load (save 0) or save (save 1) a project, then keep it */
+        x.w_project(m.slot, m.save ? 1 : 0);
+        const n = x.w_store_pack();
+        this.port.postMessage({ t: "store", bytes: new Uint8Array(x.memory.buffer, x.w_store_buf(), n).slice() });
+        this.names();
         break;
       }
-      case "reset": { const keep = new Uint8Array(x.memory.buffer, x.w_store(), x.w_store_len()).slice(-16); x.w_init(m.seed >>> 0); new Uint8Array(x.memory.buffer, x.w_store(), x.w_store_len()).set(keep, x.w_store_len() - 16); break; }
+      case "export": {
+        const n = x.w_proj_export(m.slot);
+        this.port.postMessage({ t: "export", slot: m.slot, bytes: new Uint8Array(x.memory.buffer, x.w_store_buf(), n).slice() });
+        break;
+      }
+      case "import": {
+        const b = new Uint8Array(m.bytes), n = Math.min(b.length, x.w_store_max());
+        new Uint8Array(x.memory.buffer, x.w_store_buf(), n).set(b.subarray(0, n));
+        const ok = x.w_proj_import(m.slot, n);
+        if (ok) {
+          const k = x.w_store_pack();
+          this.port.postMessage({ t: "store", bytes: new Uint8Array(x.memory.buffer, x.w_store_buf(), k).slice() });
+        }
+        this.port.postMessage({ t: "imported", ok, slot: m.slot });
+        this.names();
+        break;
+      }
       default: break;
     }
   }
@@ -86,7 +116,9 @@ class Mono2k extends AudioWorkletProcessor {
       const info = new Uint8Array(mem, x.w_info(), 32).slice();
       const msg = { t: "frame", fb, leds, info };
       if (x.w_dirty()) {
-        msg.store = new Uint8Array(mem, x.w_store(), x.w_store_len()).slice();
+        const n = x.w_store_pack();
+        msg.store = new Uint8Array(x.memory.buffer, x.w_store_buf(), n).slice();
+        msg.names = true;
       }
       this.port.postMessage(msg, [fb.buffer, leds.buffer, info.buffer]);
     }

@@ -371,30 +371,15 @@ static void pat_init(m2k_pattern_t *p, const char *name)
 }
 
 #include "m2k_factory.c"
+#include "m2k_proj.c"
 
 /* ------------------------------------------------------------------------------------------------ store */
 
 static uint8_t dirty;
 
-uint8_t *m2k_store(int *len)
-{
-    *len = (int)sizeof store_;
-    return (uint8_t *)&store_;
-}
-
 void m2k_setting(int i, int v)
 {
     if (i >= 0 && i < S_COUNT) store_.set[i] = (uint8_t)CLAMP(v, 0, 127);
-}
-
-void m2k_restore(void)
-{
-    /* a store that doesn't look like ours: back to the factory */
-    for (int i = 0; i < M2K_PATTERNS; i++)
-        for (int t = 0; t < M2K_TRACKS; t++)
-            if (pat[i].machine[t] >= M_COUNT) { factory(); i = M2K_PATTERNS; break; }
-    lockmap_build();
-    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[cur_pat].kit[t], P_COUNT);
 }
 
 int m2k_dirty(void)
@@ -425,8 +410,8 @@ void m2k_init(uint32_t seed)
     }
     bus.hs = 0xACE1u;
     for (int i = 0; i < M2K_TRACKS; i++) sq.rec_skip[i] = -1;
-    factory();
     m_set(store_.set, 0, sizeof store_.set);
+    projects_factory();
     cur_pat = 0;
     sq.queued = 0;
     lockmap_build();

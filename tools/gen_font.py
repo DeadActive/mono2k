@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# MONO2K's 1-bit fonts: Inter Tight (OFL 1.1, the grotesk closest to Helvetica we can ship), rendered without
-# anti-aliasing (FreeType mono hinting) at four sizes, plus the logotype. Writes firmware/gen/m2k_fonts.h.
+# MONO2K's 1-bit fonts: Orbitron (The League of Moveable Type, SIL OFL 1.1), rendered without anti-aliasing
+# (FreeType mono hinting) at four sizes, plus the logotype. Every capital and digit sits between the same two rows
+# (straighten). Writes firmware/gen/m2k_fonts.h.
 #   .venv/bin/python tools/gen_font.py [--sheet build/fonts.png]
 import os, sys
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
-TTF = os.path.join(ROOT, "assets", "fonts", "InterTight[wght].ttf")
+TTF = os.path.join(ROOT, "assets", "fonts", "orbitron", "Orbitron[wght].ttf")
 OUT = os.path.join(ROOT, "firmware", "gen", "m2k_fonts.h")
 
 # name, pixel size, weight, first, last, extra advance
 FONTS = [
-    ("F_S", 12, 650, 32, 95, 1),
-    ("F_M", 16, 700, 32, 95, 0),
-    ("F_L", 28, 700, 32, 95, 0),
-    ("F_XL", 66, 800, 32, 95, -2),
+    ("F_S", 11, 700, 32, 95, 1),       # labels
+    ("F_M", 15, 700, 32, 95, 0),       # values
+    ("F_L", 24, 800, 32, 95, 0),       # the odd large word
+    ("F_V", 36, 800, 32, 95, -1),      # every big value: one size, between the two
 ]
 
 
@@ -126,11 +127,11 @@ def main():
                      (name, h, base, first, last, track, name, name, name))
         print("%s: %dpx w%d, line %d, %d bytes" % (name, size, wght, h, len(bits)))
 
-    # the logotype: MONO2K, black weight, tight, fit to 232 px
+    # the logotype: MONO2K, black weight, fit to 232 px
     logo_font = None
     for size in range(120, 30, -1):
         f = load(size, 900)
-        w = sum(round(f.getlength(c)) for c in "MONO2K") - 3 * 5
+        w = sum(round(f.getlength(c)) for c in "MONO2K") - 1 * 5
         if w <= 232:
             logo_font = f
             break
@@ -142,7 +143,7 @@ def main():
     x = 0
     for c in "MONO2K":
         d.text((x, -bb[1]), c, font=logo_font, fill=1)
-        x += round(logo_font.getlength(c)) - 3
+        x += round(logo_font.getlength(c)) - 1
     lb = pack(logo)
     lines.append("#define LOGO_W %d\n#define LOGO_H %d\nstatic const uint8_t LOGO_BITS[%d] = {\n" % (lw, lh, len(lb)))
     for j in range(0, len(lb), 24):

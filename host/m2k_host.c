@@ -102,7 +102,7 @@ static int analyze(const char *out)
     char path[512];
     int bad = 0;
     printf("pattern   mix pk/rms   T1        T2        T3        T4        T5        T6     (rms dB, crest)\n");
-    for (int p = 0; p < M2K_PATTERNS - 1; p++) {
+    for (int p = 0; p < 15; p++) {             /* bank A: the demos */
         double pk, rms;
         double sec = 10.0;
         int frames = (int)(M2K_SR * sec) / 128 * 128;
@@ -127,8 +127,72 @@ static int analyze(const char *out)
     return 0;
 }
 
+#define CHECK(c, m) do { if (!(c)) { printf("FAIL: %s\n", m); fails++; } else printf("ok   %s\n", m); } while (0)
+
+static int selftest(void)
+{
+    int fails = 0;
+    m2k_init(7);
+    CHECK(!strcmp(pat[0].name, "LATEX") && !strcmp(pat[16].name, "INIT"), "factory: A01 LATEX, B01 INIT");
+    CHECK(!strcmp(m2k_project_name(0), "DEMO") && !strcmp(m2k_project_name(1), "P2"), "projects: DEMO, P2");
+    printf("     DEMO packed: %u bytes for 64 patterns (A01 %d bytes, B01 %d)\n", proj[0].used, proj[0].len[0], proj[0].len[16]);
+    /* edit, reload */
+    int v0 = pat[0].kit[0][P_DEC];
+    pat[0].kit[0][P_DEC] = 3;
+    pattern_reload();
+    CHECK(pat[0].kit[0][P_DEC] == v0, "reload brings the saved pattern back");
+    /* save a pattern, edit, reload: the saved edit stays */
+    pat[0].kit[0][P_DEC] = 11;
+    pattern_save();
+    pat[0].kit[0][P_DEC] = 99;
+    pattern_reload();
+    CHECK(pat[0].kit[0][P_DEC] == 11, "save sets the reload point");
+    /* trigs and locks survive a pack */
+    int trigs = 0, locks = 0;
+    for (int t = 0; t < 6; t++) for (int st = 0; st < 64; st++) trigs += pat[0].step[t][st].flags & 1;
+    for (int i = 0; i < M2K_LOCKS; i++) locks += pat[0].lock[i].trk != 0xFF;
+    m2k_pattern_t keep = pat[0];
+    pattern_save(); pattern_reload();
+    int same = !memcmp(&keep.kit, &pat[0].kit, sizeof keep.kit) && !memcmp(keep.machine, pat[0].machine, 6);
+    for (int t = 0; t < 6; t++) for (int st = 0; st < 64; st++)
+        if ((keep.step[t][st].flags & 1) && memcmp(&keep.step[t][st], &pat[0].step[t][st], 4)) same = 0;
+    CHECK(same, "pack / unpack keeps sounds, trigs, notes, conditions");
+    printf("     A01: %d trigs, %d locks\n", trigs, locks);
+    /* a project: save into P2, change, load back */
+    project_save(1);
+    CHECK(cur_proj == 1, "save project into P2 opens it");
+    pat[5].kit[2][P_VOL] = 1;
+    project_load(1);
+    CHECK(pat[5].kit[2][P_VOL] != 1, "load project discards unsaved work");
+    project_load(0);
+    CHECK(!strcmp(pat[1].name, "PVC"), "load DEMO again");
+    /* the store, out and back */
+    pat[3].kit[1][P_PAN] = 17;
+    int n = m2k_store_pack();
+    printf("     store: %d bytes\n", n);
+    m2k_init(9);
+    CHECK(pat[3].kit[1][P_PAN] != 17, "fresh init is the factory");
+    CHECK(m2k_store_unpack(n) == 1, "store unpacks");
+    CHECK(pat[3].kit[1][P_PAN] == 17, "the working state comes back");
+    /* export / import */
+    int e = m2k_proj_export(0);
+    CHECK(m2k_proj_import(3, e) == 1 && !strcmp(m2k_project_name(3), "DEMO"), "export DEMO, import into P4");
+    store_buf[0] = 'X';
+    CHECK(m2k_proj_import(2, e) == 0, "a bad file is refused");
+    /* a full project: fill every pattern with trigs and locks until the image refuses */
+    for (int i = 0; i < M2K_PATTERNS; i++) {
+        for (int t = 0; t < 6; t++) for (int st = 0; st < 64; st++) { pat[i].step[t][st].flags = 1; pat[i].step[t][st].note = 60; }
+        for (int k = 0; k < M2K_LOCKS; k++) pat[i].lock[k] = (m2k_lock_t){(uint8_t)(k % 6), (uint8_t)(k % 64), 9, 9};
+    }
+    CHECK(project_save(2) == 0, "a project too big for an image is refused, not corrupted");
+    CHECK(!strcmp(m2k_project_name(2), "P3"), "the refused slot is untouched");
+    printf("%s (%d failed)\n", fails ? "SELFTEST FAILED" : "selftest passed", fails);
+    return fails != 0;
+}
+
 int main(int argc, char **argv)
 {
+    if (argc > 1 && !strcmp(argv[1], "--selftest")) return selftest();
     const char *out = argc > 1 ? argv[1] : "build/host";
     char path[512];
     if (argc > 2 && !strcmp(argv[2], "--analyze")) return analyze(out);

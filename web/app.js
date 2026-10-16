@@ -158,23 +158,28 @@
     keyEl.length = 0; btnEl.length = 0; encEl.length = 0;
     svg.style.color = "var(--ink)";
     const defs = el("defs", {});
-    const pat = (id, w, h, cells) => { const p = el("pattern", { id, width: w, height: h, patternUnits: "userSpaceOnUse" }, defs); for (const [x, y] of cells) el("rect", { x, y, width: 1, height: 1, fill: "currentColor" }, p); };
+    const pat = (id, w, h, cells, fill = "currentColor") => { const p = el("pattern", { id, width: w, height: h, patternUnits: "userSpaceOnUse" }, defs); for (const [x, y] of cells) el("rect", { x, y, width: 1, height: 1, fill }, p); };
     pat("pSparse", 4, 4, [[0, 0]]);
     pat("pDots", 2, 2, [[0, 0]]);
     pat("pCheck", 2, 2, [[0, 0], [1, 1]]);
     pat("pLines", 1, 2, [[0, 0]]);
     const S = { fill: "none", stroke: "currentColor", "stroke-width": 1.5 };
     rect([22, 22, 860, 522], 38, { fill: "var(--paper)", stroke: "currentColor", "stroke-width": 2.5 });
+    const kb = el("g", { style: "--ink: var(--inv-ink); --paper: var(--inv-paper); color: var(--inv-ink)" });
+    pat("pSparseI", 4, 4, [[0, 0]], "var(--inv-ink)");
+    pat("pDotsI", 2, 2, [[0, 0]], "var(--inv-ink)");
+    pat("pCheckI", 2, 2, [[0, 0], [1, 1]], "var(--inv-ink)");
+    rect([52, 306, 800, 198], 20, { fill: "var(--paper)" }, kb);
     {
       const c = document.createElement("canvas");
       c.width = 400; c.height = 99;
       const g = c.getContext("2d");
-      g.fillStyle = ink();
+      g.fillStyle = css().getPropertyValue("--inv-ink").trim() || "#f2f1ec";
       for (let y = 0; y < 99; y++) for (let x = 0; x < 400; x++) if (BAYER[y & 7][x & 7] < (y / 99) * 26) g.fillRect(x, y, 1, 1);
       const p = el("pattern", { id: "pBed", x: 52, y: 306, width: 800, height: 198, patternUnits: "userSpaceOnUse" }, defs);
       el("image", { href: c.toDataURL(), width: 800, height: 198, preserveAspectRatio: "none", style: "image-rendering: pixelated" }, p);
     }
-    rect([52, 306, 800, 198], 20, { fill: "url(#pBed)", stroke: "currentColor", "stroke-width": 1, "stroke-dasharray": "2 3" });
+    rect([52, 306, 800, 198], 20, { fill: "url(#pBed)", stroke: "currentColor", "stroke-width": 1, "stroke-dasharray": "2 3" }, kb);
     rect([484, 162, 338, 124], 8, { fill: "url(#pSparse)", stroke: "currentColor", "stroke-width": 1, "stroke-dasharray": "2 3" });
     rect([77, 243, 127, 36], 6, { fill: "url(#pSparse)", stroke: "currentColor", "stroke-width": 1, "stroke-dasharray": "2 3" });
     rect([247, 59, 201, 201], 6, { fill: "currentColor" });
@@ -182,7 +187,7 @@
     text(846, 47, "SIX MONO MACHINES · M-VAVE FM-1", 6.5, { "text-anchor": "end" });
     text(822, 296, "M-VAVE FM-1 · 27 KEYS · F3–G5", 6.5, { "text-anchor": "end" });
     for (let k = 0; k < 27; k++) {
-      const r = KEYR[k], cx = r[0] + 21, g = el("g", { "data-c": "k" + k, class: "ctl" });
+      const r = KEYR[k], cx = r[0] + 21, g = el("g", { "data-c": "k" + k, class: "ctl" }, kb);
       const cap = rect(r, 6, { fill: "var(--paper)", stroke: "currentColor", "stroke-width": 1.5 }, g);
       const led = rect([cx - 3, r[1] + 10, 6, 26], 1, { fill: "none", stroke: "currentColor", "stroke-width": 1 }, g);
       const m = 53 + k;
@@ -221,7 +226,7 @@
     e.ptr.setAttribute("x1", e.cx + 10 * s); e.ptr.setAttribute("y1", e.cy - 10 * c);
     e.ptr.setAttribute("x2", e.cx + 19 * s); e.ptr.setAttribute("y2", e.cy - 19 * c);
   }
-  const lvlFill = (v) => (v > 200 ? "currentColor" : v > 90 ? "url(#pCheck)" : v > 20 ? "url(#pDots)" : "var(--paper)");
+  const lvlFill = (v) => (v > 200 ? "currentColor" : v > 90 ? "url(#pCheckI)" : v > 20 ? "url(#pDotsI)" : "var(--paper)");
   function leds(L) {
     for (let k = 0; k < 27; k++) {
       const v = L[k], e = keyEl[k], q = v > 200 ? 3 : v > 90 ? 2 : v > 20 ? 1 : 0;
@@ -276,7 +281,7 @@
   // -------------------------------------------------------------------------------------- the firmware core
   let wasmBytes = null, pre = null, preT0 = 0, node = null, ctx = null, running = false;
   const cstr = (x, p) => { const m = new Uint8Array(x.memory.buffer); let s = ""; while (m[p]) s += String.fromCharCode(m[p++]); return s; };
-  const STORE_KEY = "mono2k.store.v1";
+  const STORE_KEY = "mono2k.store.v2";
   const loadStore = () => {
     try {
       const s = localStorage.getItem(STORE_KEY);
@@ -297,14 +302,15 @@
   const status = (s) => { $("status").textContent = s; };
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=14");
+    const r = await fetch("m2k.wasm?v=17");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();
     pre.w_init(2000);
-    pre.w_setting(0, isDark() ? 127 : 0);
+    pre.w_setting(0, isDark() ? 0 : 127);
     preT0 = performance.now();
     machines();
+    namesFrom(pre);
     patterns();
     requestAnimationFrame(preTick);
   }
@@ -323,7 +329,7 @@
     try {
       try { ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }); }
       catch (e) { ctx = new AudioContext({ latencyHint: "interactive" }); }
-      await ctx.audioWorklet.addModule("worklet.js?v=14");
+      await ctx.audioWorklet.addModule("worklet.js?v=17");
       node = new AudioWorkletNode(ctx, "mono2k", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(ctx.destination);
       node.port.onmessage = (ev) => {
@@ -333,6 +339,22 @@
           leds(m.leds);
           info(m.info);
           if (m.store) saveStore(m.store);
+          if (m.names) send({ t: "names" });
+        } else if (m.t === "names") {
+          patNames = m.pats; projNames = m.projs;
+          patterns();
+        } else if (m.t === "store") {
+          saveStore(m.bytes);
+        } else if (m.t === "export") {
+          const a = document.createElement("a");
+          const nm = (projNames[m.slot] || "PROJECT").replace(/[^A-Z0-9]+/gi, "-");
+          a.href = URL.createObjectURL(new Blob([m.bytes], { type: "application/octet-stream" }));
+          a.download = `mono2k-P${m.slot + 1}-${nm}.m2kp`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+          status(`Exported P${m.slot + 1}.`);
+        } else if (m.t === "imported") {
+          status(m.ok ? `Imported into P${m.slot + 1}. Load it to play it.` : "That file is not a MONO2K project.");
         } else if (m.t === "ready") {
           displayMode();
           if (startPattern >= 0) { send({ t: "pattern", n: startPattern }); startPattern = -1; }
@@ -350,31 +372,80 @@
     }
   }
   const send = (m) => { if (node) node.port.postMessage(m); };
-  /* the display follows the page: light page, light screen; dark page, its negative */
+  /* the display against the page, for contrast: a dark page shows a light screen, a light page a dark one */
   function displayMode() {
-    const v = isDark() ? 127 : 0;
+    const v = isDark() ? 0 : 127;
     if (pre) pre.w_setting(0, v);
     send({ t: "set", i: 0, v });
   }
 
   // ---------------------------------------------------------------------------------------------- readouts
   let machineNames = [];
-  /* the patterns: one button each; while playing, a click queues it for the end of the bar */
-  let startPattern = -1;
+  /* the patterns: bank tabs, sixteen buttons; while playing, a click queues the pattern for the end of the bar */
+  let startPattern = -1, viewBank = 0, patNames = [], projNames = [], curPat = 0, queuedPat = 0, playingNow = 0, curProj = 0;
+  const label = (n) => "ABCD"[n >> 4] + String((n & 15) + 1).padStart(2, "0");
   function patterns() {
-    const box = $("pats"), n = pre.w_patterns();
-    box.innerHTML = "";
-    for (let i = 0; i < n; i++) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.innerHTML = `<b>A${String(i + 1).padStart(2, "0")}</b>${cstr(pre, pre.w_pat_name(i))}`;
-      b.addEventListener("click", () => {
-        if (!running) { startPattern = i; start(); return; }
-        send({ t: "pattern", n: i });
-      });
-      box.appendChild(b);
+    const banks = $("banks"), box = $("pats");
+    if (!banks.children.length) {
+      for (let b = 0; b < 4; b++) {
+        const t = document.createElement("button");
+        t.type = "button";
+        t.setAttribute("role", "tab");
+        t.textContent = "ABCD"[b];
+        t.addEventListener("click", () => { viewBank = b; patterns(); });
+        banks.appendChild(t);
+      }
+      for (let i = 0; i < 16; i++) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.addEventListener("click", () => {
+          const n = viewBank * 16 + i;
+          if (!running) { startPattern = n; start(); return; }
+          send({ t: "pattern", n });
+        });
+        box.appendChild(b);
+      }
     }
+    [...banks.children].forEach((t, b) => { t.className = b === viewBank ? "on" : ""; t.setAttribute("aria-selected", b === viewBank); });
+    [...box.children].forEach((b, i) => {
+      const n = viewBank * 16 + i;
+      b.innerHTML = `<b>${label(n)}</b>${patNames[n] || ""}`;
+      b.className = n === curPat ? "on" : n === queuedPat && playingNow ? "q" : "";
+    });
+    const sel = $("projsel");
+    if (sel.options.length !== projNames.length) {
+      sel.innerHTML = "";
+      projNames.forEach((_, k) => sel.add(new Option("", String(k))));
+    }
+    projNames.forEach((nm, k) => { sel.options[k].text = `P${k + 1} ${nm}${k === curProj ? " (open)" : ""}`; });
   }
+  function namesFrom(x) {
+    const nP = x.w_patterns(), nJ = x.w_projects();
+    patNames = Array.from({ length: nP }, (_, i) => cstr(x, x.w_pat_name(i)));
+    projNames = Array.from({ length: nJ }, (_, i) => cstr(x, x.w_project_name(i)));
+  }
+  /* projects: load, save, as files */
+  $("projload").addEventListener("click", () => {
+    const k = +$("projsel").value;
+    if (!running) { status("Press Start first."); return; }
+    if (confirm(`Load P${k + 1} ${projNames[k] || ""}? Unsaved changes to the open project are lost.`)) { send({ t: "project", slot: k, save: 0 }); viewBank = 0; status(`P${k + 1} loaded.`); }
+  });
+  $("projsave").addEventListener("click", () => {
+    const k = +$("projsel").value;
+    if (!running) { status("Press Start first."); return; }
+    if (k === curProj || confirm(`Save the open project over P${k + 1} ${projNames[k] || ""}?`)) { send({ t: "project", slot: k, save: 1 }); status(`Saved as P${k + 1}.`); }
+  });
+  $("projexport").addEventListener("click", () => { if (running) send({ t: "export", slot: +$("projsel").value }); else status("Press Start first."); });
+  $("projimport").addEventListener("click", () => { if (running) $("projfile").click(); else status("Press Start first."); });
+  $("projfile").addEventListener("change", async (ev) => {
+    const f = ev.target.files[0];
+    ev.target.value = "";
+    if (!f) return;
+    const k = +$("projsel").value;
+    if (!confirm(`Replace P${k + 1} ${projNames[k] || ""} with ${f.name}?`)) return;
+    send({ t: "import", slot: k, bytes: await f.arrayBuffer() });
+  });
+
   const PAGES = ["HOME", "SYN", "AMP", "FILT", "FX", "LFO", "ARP", "GLO"];
   let lastInfo = "";
   function info(I) {
@@ -384,10 +455,7 @@
     const trk = I[0], pat = I[3];
     $("r-trk").textContent = "T" + (trk + 1);
     $("r-mach").textContent = machineNames[I[6]] || "";
-    const pl = (n) => "A" + String(n + 1).padStart(2, "0");
-    $("r-pat").textContent = pl(pat) + (I[12] !== pat && I[4] ? "›" + String(I[12] + 1).padStart(2, "0") : "");
-    const pb = $("pats").children;
-    for (let i = 0; i < pb.length; i++) pb[i].className = i === pat ? "on" : i === I[12] && I[4] ? "q" : "";
+    $("r-pat").textContent = label(pat) + (I[12] !== pat && I[4] ? "›" + label(I[12]) : "");
     $("r-bpm").textContent = String(I[5] + 30);
     $("r-step").textContent = I[4] ? String(I[10] + 1).padStart(2, "0") + "/" + I[11] : "—";
     $("r-mode").textContent = (I[7] ? "GRID" : "PLAY") + (I[9] ? " FILL" : I[8] ? " REC" : "");
@@ -398,6 +466,9 @@
       li.className = (t === trk ? "on" : "") + ((I[13] >> t) & 1 ? " mute" : "");
       li.innerHTML = `<b>${t + 1}</b>${machineNames[I[17 + t]] || ""}`;
     }
+    if (pat !== curPat) viewBank = pat >> 4;
+    curPat = pat; queuedPat = I[12]; playingNow = I[4]; curProj = I[23];
+    patterns();
     void PAGES;
   }
 
@@ -420,7 +491,8 @@
       grid.appendChild(card);
       const cv = card.querySelector("canvas"), g = cv.getContext("2d");
       const draw = (bits) => {
-        const img = g.createImageData(72, 72), I = hex(ink()), P = hex(paper());
+        const gs = getComputedStyle(grid);
+        const img = g.createImageData(72, 72), I = hex(gs.getPropertyValue("--ink").trim()), P = hex(gs.getPropertyValue("--paper").trim());
         for (let p = 0; p < 72 * 72; p++) { const o = p * 4; img.data[o] = P[0]; img.data[o + 1] = P[1]; img.data[o + 2] = P[2]; img.data[o + 3] = 255; }
         for (let i = 0; i < 512; i++) for (let j = 0; j < 8; j++) {
           if (!((bits[i] >> (7 - j)) & 1)) continue;
@@ -562,6 +634,7 @@
   $("reset").addEventListener("click", () => {
     try { localStorage.removeItem(STORE_KEY); } catch (e) { /* nothing saved */ }
     send({ t: "reset", seed: (Math.random() * 4294967295) >>> 0 });
+    displayMode();
     status("Back to the factory patterns.");
   });
   $("start").addEventListener("click", start);

@@ -13,7 +13,7 @@
 enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOWL, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
-    K_BPM, K_SWNG, K_LEN, K_PCT, K_GSIZ, K_FINE, K_SCRN
+    K_BPM, K_SWNG, K_LEN, K_PCT, K_GSIZ, K_FINE, K_SCRN, K_PROJ, K_LOAD
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -38,8 +38,10 @@ static const pi_t PI_GLOB[G_COUNT] = {
     {"VERB", "SPU DECAY", K_NUM}, {"DAMP", "SPU DAMPING", K_NUM}, {"HISS", "HISS AND DUST", K_NUM}, {"DRIV", "BUS DRIVE", K_NUM},
 };
 
-static const pi_t PI_SET[1] = {
+static const pi_t PI_SET[3] = {
     {"SCRN", "SCREEN", K_SCRN},
+    {"PROJ", "PROJECT", K_PROJ},
+    {"LOAD", "LOAD PROJECT", K_LOAD},
 };
 
 typedef struct {
@@ -93,7 +95,7 @@ static const char *const NOTE_N[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G"
 
 static const pi_t *pinfo(int t, int id)
 {
-    if (id >= 0xC0) return &PI_SET[0];
+    if (id >= 0xC0) return &PI_SET[(id & 0x3F) == 16 ? 1 : (id & 0x3F) == 17 ? 2 : 0];
     if (id >= 0x80) return &PI_GLOB[id & 0x7F];
     if (id < 8) return &MI[pat[cur_pat].machine[t]].syn[id];
     if (id < P_LFO) return &PI_COMMON[id - 8];
@@ -107,6 +109,7 @@ static int kind_choices(int k)
     case K_SIDW: return 8;
     case K_SIDM: case K_ALGO: case K_ASPD: case K_ARNG: return 4;
     case K_SCRN: return 2;
+    case K_PROJ: return M2K_PROJECTS;
     case K_VOIC: case K_LWAV: return 7;
     case K_TRK: case K_AMOD: return 6;
     case K_LTRG: case K_GSIZ: return 5;
@@ -134,7 +137,13 @@ static char *s_int(char *d, int v)
 }
 static char *s_dec1(char *d, int v10) { d = s_int(d, v10 / 10); *d++ = '.'; *d++ = (char)('0' + v10 % 10); *d = 0; return d; }
 /* a pattern's name on the panel: A01 .. A16 */
-static char *s_pat(char *d, int n) { d[0] = 'A'; d[1] = (char)('0' + (n + 1) / 10); d[2] = (char)('0' + (n + 1) % 10); d[3] = 0; return d + 3; }
+/* a pattern's name on the panel: the bank's letter and its place, A01 .. D16 */
+static char *s_pat(char *d, int n)
+{
+    int k = n % 16 + 1;
+    d[0] = (char)('A' + n / 16); d[1] = (char)('0' + k / 10); d[2] = (char)('0' + k % 10); d[3] = 0;
+    return d + 3;
+}
 static char *s_note(char *d, int n) { d = s_cpy(d, NOTE_N[n % 12]); return s_int(d, n / 12 - 1); }
 
 /* the value as the screen shows it, and its unit */
@@ -202,6 +211,8 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_PCT: s_int(out, (v * 100) / 256); *unit = "%"; break;
     case K_GSIZ: s_cpy(out, GSIZ_N[(v * 5) >> 7]); *unit = "NOTE"; break;
     case K_SCRN: s_cpy(out, c ? "DARK" : "LIGHT"); *unit = "DISPLAY"; break;
+    case K_PROJ: { char *e = s_cpy(out, "P"); s_int(e, c + 1); *unit = m2k_project_name(c); break; }
+    case K_LOAD: s_cpy(out, "TURN"); *unit = "TWICE TO LOAD"; break;
     default: s_int(out, v); break;
     }
 }
@@ -224,7 +235,7 @@ static int knob_param(int page, int sub, int k)
     case PG_FX: return P_EQF + sub * 4 + k;
     case PG_LFO: return P_LFO + (sub >> 1) * 8 + (sub & 1) * 4 + k;
     case PG_ARP: return P_AMOD + k;
-    case PG_GLO: return sub < 3 ? GL(sub * 4 + k) : k == 0 ? SETTING(S_SCREEN) : NONE;
+    case PG_GLO: return sub < 3 ? GL(sub * 4 + k) : k == 0 ? SETTING(S_SCREEN) : k == 1 ? SETTING(16) : k == 2 ? SETTING(17) : NONE;
     default: return NONE;
     }
 }
@@ -251,7 +262,9 @@ static struct {
     /* steps held in GRID */
     uint8_t held[8], nheld, held_added[8], held_edit;
     uint8_t btn[B_COUNT], glo_used, keys[M2K_KEYS];
-    uint32_t rec_t0;
+    uint32_t rec_t0, save_t0;
+    uint8_t save_fired, proj_sel;
+    uint32_t load_t;
     /* the focus */
     uint8_t focus;
     uint32_t focus_t;
@@ -329,6 +342,8 @@ static void go(int page)
 static int knob_value(int code)
 {
     const m2k_pattern_t *p = &pat[cur_pat];
+    if (code == SETTING(16)) return enc(ui.proj_sel, M2K_PROJECTS);
+    if (code == SETTING(17)) return 0;
     if (code >= 0xC0) return store_.set[code & 0x3F];
     if (code >= 0x80) return p->glob[code & 0x7F];
     if (ui.grid && ui.nheld) {
@@ -357,7 +372,23 @@ static void edit(int k, int d)
     int n = kind_choices(pi->kind), nv;
     if (n) nv = enc(CLAMP(((v * n) >> 7) + d, 0, n - 1), n);
     else nv = CLAMP(v + d, kind_min(pi->kind), kind_max(pi->kind));
-    if (code >= 0xC0) {
+    if (code == SETTING(16)) {
+        ui.proj_sel = (uint8_t)((nv * M2K_PROJECTS) >> 7);
+        ui.load_t = 0;
+    } else if (code == SETTING(17)) {
+        if (ui.load_t && ui.now - ui.load_t < 2000) {          /* the second turn loads */
+            ui.load_t = 0;
+            project_load(ui.proj_sel);
+            char o[16] = {'P', (char)('1' + ui.proj_sel), ' ', 0};
+            s_cpy(o + 3, m2k_project_name(ui.proj_sel));
+            toast("LOADED", o);
+            start_glitch(4);
+            dirty = 1;
+        } else {
+            ui.load_t = ui.now | 1u;
+            toast("TURN AGAIN", "TO LOAD");
+        }
+    } else if (code >= 0xC0) {
         store_.set[code & 0x3F] = (uint8_t)nv;
     } else if (code >= 0x80) {
         p->glob[code & 0x7F] = (uint8_t)nv;
@@ -477,10 +508,92 @@ static void held_note(int d)
     if (ui.nheld) { apply_locks(ui.trk, ui.held[0]); voice_on(ui.trk, p->step[ui.trk][ui.held[0]].note, 100, 0); trk[ui.trk].gate_left = gate_blocks(ui.trk); }
 }
 
+static void glo_combo(int b);
+
+/* the clipboard: a whole pattern (from HOME) or one track's sound (from a track's pages) */
+static m2k_pattern_t clip_pat POOL;
+static struct { uint8_t kind, machine, kit[P_COUNT]; } clipb;
+
+static void glo_combo(int b)
+{
+    m2k_pattern_t *p = &pat[cur_pat];
+    int whole = ui.page == PG_HOME || ui.page == PG_GLO;
+    char a[24];
+    s_pat(a, cur_pat);
+    switch (b) {
+    case B_REC:                                        /* copy */
+        if (whole) { m_cpy(&clip_pat, p, sizeof clip_pat); clipb.kind = 1; toast("COPY", a); }
+        else {
+            clipb.kind = 2;
+            clipb.machine = p->machine[ui.trk];
+            m_cpy(clipb.kit, p->kit[ui.trk], P_COUNT);
+            char o[8] = {'T', (char)('1' + ui.trk), ' ', 0};
+            s_cpy(o + 3, "SOUND");
+            toast("COPY", o);
+        }
+        break;
+    case B_PLAY:                                       /* paste */
+        if (clipb.kind == 1 && whole) {
+            m_cpy(p, &clip_pat, sizeof *p);
+            work_reset_current();
+            toast("PASTE", a);
+        } else if (clipb.kind == 2 && !whole) {
+            p->machine[ui.trk] = clipb.machine;
+            m_cpy(p->kit[ui.trk], clipb.kit, P_COUNT);
+            m_cpy(trk[ui.trk].eff, clipb.kit, P_COUNT);
+            char o[8] = {'T', (char)('1' + ui.trk), ' ', 0};
+            s_cpy(o + 3, "SOUND");
+            toast("PASTE", o);
+            ui.card_t = ui.now | 1u;
+        } else {
+            toast("NOTHING", whole ? "COPY A PATTERN FIRST" : "COPY A SOUND FIRST");
+        }
+        start_glitch(2);
+        break;
+    case B_SEQ:                                        /* clear: the pattern's trigs, or the track's */
+        if (whole) {
+            for (int t = 0; t < M2K_TRACKS; t++)
+                for (int s = 0; s < M2K_STEPS; s++) { p->step[t][s].flags = 0; p->step[t][s].cond = 0; p->step[t][s].rtrg = 0; }
+            for (int i = 0; i < M2K_LOCKS; i++) p->lock[i].trk = 0xFF;
+            toast("CLEAR", a);
+        } else {
+            for (int s = 0; s < M2K_STEPS; s++) { p->step[ui.trk][s].flags = 0; p->step[ui.trk][s].cond = 0; p->step[ui.trk][s].rtrg = 0; }
+            for (int i = 0; i < M2K_LOCKS; i++) if (p->lock[i].trk == ui.trk) p->lock[i].trk = 0xFF;
+            char o[8] = {'T', (char)('1' + ui.trk), 0};
+            toast("CLEAR", o);
+        }
+        lockmap_build();
+        break;
+    case B_SAVE:                                       /* reload: back to the saved pattern */
+        if (pattern_reload()) toast("RELOAD", a);
+        start_glitch(3);
+        break;
+    default:
+        break;
+    }
+}
+
 void m2k_button(int b, int down)
 {
     if (b < 0 || b >= B_COUNT) return;
+    int was = ui.btn[b];
     ui.btn[b] = (uint8_t)down;
+    /* GLO held: the editing functions (Elektron's FUNC): REC copy, PLAY paste, SEQ clear, SAVE reload */
+    if (b != B_GLO && ui.btn[B_GLO] && (b == B_REC || b == B_PLAY || b == B_SEQ || b == B_SAVE)) {
+        if (down) { glo_combo(b); ui.glo_used = 1; }
+        return;
+    }
+    if (b != B_GLO && !down && !was) return;
+    if (b == B_SAVE) {
+        if (down) { ui.save_t0 = ui.now | 1u; ui.save_fired = 0; return; }
+        if (!ui.save_t0) return;
+        ui.save_t0 = 0;
+        if (ui.save_fired) return;            /* the hold already saved the project */
+        char a[24], *e = s_pat(a, cur_pat);
+        if (pattern_save()) { *e = 0; toast("SAVED", a); dirty = 1; ui.save_t = ui.now | 1u; }
+        else toast("PROJECT FULL", "PATTERN NOT SAVED");
+        return;
+    }
     if (b == B_REC) {                  /* a tap arms recording; held, it is FILL */
         if (down) { ui.rec_t0 = ui.now | 1u; return; }
         if (ui.now - ui.rec_t0 < 300) sq.rec ^= 1;
@@ -502,14 +615,7 @@ void m2k_button(int b, int down)
     case B_EDIT: go(PG_SYN); break;
     case B_HOME: go(PG_HOME); break;
     case B_ARP: go(PG_ARP); break;
-    case B_SAVE: {
-        dirty = 1;
-        ui.save_t = ui.now | 1u;
-        char a[8];
-        s_pat(a, cur_pat);
-        toast("SAVED", a);
-        break;
-    }
+
     case B_SEQ:
         ui.grid ^= 1;
         ui.nheld = 0;
@@ -655,11 +761,13 @@ static void header(void)
  * solid at the foot (the poster's gradient type). It changes in place: text never leaves its line. */
 static void big_value(int x, int y, int w, const char *s, int density, uint32_t roll)
 {
-    const m2k_font_t *f = &F_XL;
+    /* one size for every big value, centred between the label (above) and the unit (below); the odd word
+     * too wide for the column drops to the large size, on the same centre */
+    const m2k_font_t *f = &F_V;
     if (text_w(f, s, 0) > w) f = &F_L;
-    int yy = f == &F_XL ? y : y + 20;
+    int yy = y + 33 - f->h / 2;
     (void)roll;
-    text_grad(yy, f->h - 6, CLAMP(density, 4, 60) - 4, 64);
+    text_grad(yy, f->h, CLAMP(density, 4, 60) - 4, 64);
     text(f, x, yy, s, TX_GRAD, 0);
 }
 
@@ -905,8 +1013,12 @@ static void picture(void)
         break;
     }
     case PG_GLO: {
-        if (ui.sub == 3) {             /* the display: a disc, half ink; the mode under it */
-            int cx = X + W / 2, cy = Y + 36, r = 24;
+        if (ui.sub == 3) {             /* the project picked, the open one; the display disc */
+            char o[16] = {'P', (char)('1' + ui.proj_sel), 0};
+            text(&F_L, X + 2, Y + 2, o, 1, 0);
+            text(&F_S, X + 2, Y + 34, m2k_project_name(ui.proj_sel), 1, 1);
+            if (ui.proj_sel == cur_proj) tag(X + 2, Y + 48, "OPEN", 1);
+            int cx = X + W - 18, cy = Y + 84, r = 12;
             for (int j = -r; j <= r; j++)
                 for (int i = -r; i <= r; i++) {
                     int d = i * i + j * j;
@@ -914,7 +1026,7 @@ static void picture(void)
                     if (d > (r - 2) * (r - 2) || i >= 0) px(cx + i, cy + j, 1);
                     else if (T_BAYER[(cy + j) & 7][(cx + i) & 7] < 8) px(cx + i, cy + j, 1);
                 }
-            text_c(&F_M, cx, Y + 70, store_.set[S_SCREEN] >= 64 ? "DARK" : "LIGHT", 1, 1);
+            (void)cx;
         } else if (ui.sub == 1) {      /* the master, and the repeat when it bites */
             int prev = 0;
             for (int i = 0; i < W; i++) {
@@ -1060,12 +1172,12 @@ static void home(void)
         text(&F_S, 4, FOCUS_Y + 2, "PATTERN", 1, 1);
         char a[8];
         s_pat(a, cur_pat);
-        text_grad(FOCUS_Y + 16, F_XL.h - 6, 10, 64);
-        text(&F_XL, 2, FOCUS_Y + 16, a, TX_GRAD, 0);
-        char o[32], *e = s_int(o, (int)seq_bpm());
-        e = s_cpy(e, " BPM  ");
-        e = s_int(e, seq_len());
-        s_cpy(e, " STEPS");
+        big_value(2, FOCUS_Y + 16, GX - 6, a, 10, 1000);
+        char o[40], *e = s_cpy(o, "P");
+        e = s_int(e, cur_proj + 1);
+        e = s_cpy(e, "  ");
+        e = s_int(e, (int)seq_bpm());
+        s_cpy(e, " BPM");
         text(&F_S, 4, 106, o, 1, 1);
     }
     dotted_v(GX - 2, FOCUS_Y, 104);
@@ -1222,6 +1334,14 @@ const uint8_t *m2k_frame(uint32_t ms)
     ui.lfo_w = (uint8_t)((ui.lfo_w + 1) % 88);
     if (sq.playing && ui.follow && !ui.nheld) ui.spage = (uint8_t)(play_step() / 16);
     if (ui.rec_t0 && ui.btn[B_REC] && ms - ui.rec_t0 >= 300) sq.fill = 1;
+    if (ui.save_t0 && ui.btn[B_SAVE] && !ui.save_fired && ms - ui.save_t0 >= 700) {
+        int slot = ui.page == PG_GLO && ui.sub == 3 ? ui.proj_sel : cur_proj;
+        ui.save_fired = 1;
+        char o[16] = {'P', (char)('1' + slot), ' ', 0};
+        s_cpy(o + 3, "SAVED");
+        if (project_save(slot)) { toast("PROJECT", o); dirty = 1; ui.save_t = ms | 1u; }
+        else toast("PROJECT FULL", "NOT SAVED");
+    }
 
     uint32_t bt = ms - ui.boot_t0;
     if (bt < 1800) {
