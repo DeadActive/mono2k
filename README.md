@@ -62,6 +62,12 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
    reference renderer, then the machines tuned note by note.
 3. More machines (DPRO-BBOX, FX machines that take the previous track), songs, MIDI out and clock.
 
+## Author
+
+MONO2K is made by Sequencist: [GitHub](https://github.com/InigoHernandez) ·
+[Bandcamp](https://sequencist.bandcamp.com/) · [YouTube](https://www.youtube.com/@sequencist) ·
+[Instagram](https://www.instagram.com/sequencist.fm) · [SoundCloud](https://soundcloud.com/sequencist)
+
 ## Credits and licence
 
 GPL-3.0-only. Built on the open FM-1 work: Felucca by Leo Kuroshita (Hügelton Instruments), CS-1, X0X, FoMni, zp12

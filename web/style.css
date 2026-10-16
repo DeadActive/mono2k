@@ -61,6 +61,13 @@ p, h2, h3, dl, dd, ol { margin: 0; }
 .bar { position: relative; z-index: 1; align-items: center; min-height: var(--s6); border-bottom: 1px solid var(--ink); }
 .bar > * { grid-column: span 3; }
 .bar.foot { border-bottom: 0; border-top: 1px solid var(--ink); margin-top: var(--s8); }
+/* the author, elsewhere: six cells of two columns, above the foot */
+.links { margin-top: var(--s8); border-top: 3px solid var(--ink); }
+.links > * { grid-column: span 2; }
+.links + .foot { margin-top: 0; }
+.links a { color: var(--ink); text-decoration: none; }
+.links a::after { content: " \2197"; }
+.links a:hover { text-decoration: underline; text-underline-offset: 4px; }
 .r { text-align: right; }
 .themebtn {
   display: inline-flex; align-items: center; gap: var(--s1); height: var(--s4); padding: 0 var(--s1);
@@ -193,6 +200,7 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 }
 @media (max-width: 720px) {
   .bar > * { grid-column: span 6; }
+  .bar { row-gap: var(--s1); padding-top: var(--s2); padding-bottom: var(--s2); }   /* bars that wrap: rows apart */
   header.bar > :nth-child(2), header.bar > :nth-child(3) { display: none; }   /* the name and the switch only */
   .hero__sub .kicker, .hero__sub .lede, .sec__n, .sec__body, .keys, .keys:last-child { grid-column: 1 / -1; }
   .hero__sub { row-gap: var(--s2); }
