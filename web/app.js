@@ -180,8 +180,12 @@
       el("image", { href: c.toDataURL(), width: 800, height: 198, preserveAspectRatio: "none", style: "image-rendering: pixelated" }, p);
     }
     rect([52, 306, 800, 198], 20, { fill: "url(#pBed)", stroke: "currentColor", "stroke-width": 1, "stroke-dasharray": "2 3" }, kb);
-    rect([484, 162, 338, 124], 8, { fill: "url(#pSparse)", stroke: "currentColor", "stroke-width": 1, "stroke-dasharray": "2 3" });
-    rect([77, 243, 127, 36], 6, { fill: "url(#pSparse)", stroke: "currentColor", "stroke-width": 1, "stroke-dasharray": "2 3" });
+    /* the buttons: an island set against the panel, as the keys are */
+    const bg = el("g", { style: "--ink: var(--inv-ink); --paper: var(--inv-paper); color: var(--inv-ink)" });
+    for (const [r, rad] of [[[484, 162, 338, 124], 8], [[77, 243, 127, 36], 6]]) {
+      rect(r, rad, { fill: "var(--paper)" }, bg);
+      rect(r, rad, { fill: "url(#pSparseI)", stroke: "currentColor", "stroke-width": 1, "stroke-dasharray": "2 3" }, bg);
+    }
     rect([247, 59, 201, 201], 6, { fill: "currentColor" });
     text(58, 47, "MONO2K", 13, { "text-anchor": "start", "font-weight": 900, "letter-spacing": "-0.04em" });
     text(846, 47, "SIX MONO MACHINES · M-VAVE FM-1", 6.5, { "text-anchor": "end" });
@@ -198,10 +202,10 @@
       keyEl.push({ cap, led, lab, role, hint, lvl: -1 });
     }
     for (let i = 0; i < 14; i++) {
-      const r = BTNR[i], oct = i >= 12, g = el("g", { "data-c": "b" + i, class: "ctl" });
+      const r = BTNR[i], oct = i >= 12, g = el("g", { "data-c": "b" + i, class: "ctl" }, bg);
       const cap = rect(r, 3, { fill: "var(--paper)", stroke: "currentColor", "stroke-width": 1.5 }, g);
       const t = text(r[0] + r[2] / 2, r[1] + (oct ? 15 : 15), BTN[i], oct ? 9 : 8.5, { "font-weight": 800 }, g);
-      if (!oct) text(r[0] + r[2] / 2, r[1] - 5, ROLE[i], 7, { "font-weight": 900 });
+      if (!oct) text(r[0] + r[2] / 2, r[1] - 5, ROLE[i], 7, { "font-weight": 900 }, bg);
       const h = hintOf("b", i);
       const hint = h ? text(r[0] + r[2] / 2, oct ? r[1] + r[3] + 10 : r[1] + 29, h, 7, { "font-family": "ui-monospace, Menlo, monospace" }, g) : null;
       btnEl.push({ cap, t, hint, lvl: -1 });
@@ -239,7 +243,7 @@
       const v = L[27 + i], e = btnEl[i], q = v > 200 ? 3 : v > 60 ? 2 : 0;
       if (q === e.lvl) continue;
       e.lvl = q;
-      e.cap.setAttribute("fill", q === 3 ? "currentColor" : q === 2 ? "url(#pCheck)" : "var(--paper)");
+      e.cap.setAttribute("fill", q === 3 ? "currentColor" : q === 2 ? "url(#pCheckI)" : "var(--paper)");
       e.t.setAttribute("fill", q === 3 ? "var(--paper)" : "currentColor");
       if (e.hint) e.hint.setAttribute("fill", q === 3 ? "var(--paper)" : "currentColor");
     }
@@ -302,7 +306,7 @@
   const status = (s) => { $("status").textContent = s; };
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=18");
+    const r = await fetch("m2k.wasm?v=19");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();
@@ -329,7 +333,7 @@
     try {
       try { ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }); }
       catch (e) { ctx = new AudioContext({ latencyHint: "interactive" }); }
-      await ctx.audioWorklet.addModule("worklet.js?v=18");
+      await ctx.audioWorklet.addModule("worklet.js?v=19");
       node = new AudioWorkletNode(ctx, "mono2k", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(ctx.destination);
       node.port.onmessage = (ev) => {

@@ -16,15 +16,14 @@ FRAMES = 12
 G = 128         # the design grid
 
 
-# The marks are isotypes, not letters (after Fors' plugin marks): each a small symbol for what its machine does,
-# and all of one family:
-#   a 12-unit grid, the symbol inside 1..11; solid ink only; solid masses set against thin lines (0.8 units);
-#   circles, their arcs, 45-degree and fanned lines; negative space; and one signature, THE SLIT: every piece is
-#   set apart from the next by half a unit.
+# The marks are one family of stamps (after Fors' plugin marks, made homogeneous): every mark is the same solid
+# rounded square, and its machine is cut out of it.
+#   a 12-unit grid; the tile 1.2..10.8, corners of 1.8; solid ink; the cuts are THE SLIT (0.6 units) and round or
+#   square holes; nothing else. One silhouette, one weight; the motif tells the machines apart.
 SS = 4                      # supersampling while drawing
 U = G * SS / 12.0           # one unit, in drawing pixels
-SL = 0.5                    # the slit
-LN = 0.8                    # a thin line
+SL = 0.6                    # the slit
+T0, T1, TR = 1.2, 10.8, 1.8 # the tile
 
 
 def mark(name):
@@ -41,7 +40,10 @@ def mark(name):
     def DISC(cx, cy, r, c=W):
         d.ellipse([(cx - r) * U, (cy - r) * U, (cx + r) * U - 1, (cy + r) * U - 1], fill=c)
 
-    def STROKE(pts, w, c=W):                          # a line of width w along pts, its ends cut square
+    def TILE(x0=T0, y0=T0, x1=T1, y1=T1, c=W):
+        d.rounded_rectangle([x0 * U, y0 * U, x1 * U - 1, y1 * U - 1], radius=int(TR * U), fill=c)
+
+    def CUT(pts, w=SL):                               # a slit along pts, its ends square
         L, Rr = [], []
         for i, (x, y) in enumerate(pts):
             x0, y0 = pts[max(i - 1, 0)]
@@ -51,75 +53,65 @@ def mark(name):
             nx, ny = -ty / n * w / 2, tx / n * w / 2
             L.append((x + nx, y + ny))
             Rr.append((x - nx, y - ny))
-        P(L + Rr[::-1], c)
+        P(L + Rr[::-1], 0)
 
-    def LINE(x0, y0, x1, y1, w=LN, c=W):
-        STROKE([(x0, y0), (x1, y1)], w, c)
+    def ARCCUT(cx, cy, r, a0, a1, w=SL):              # a slit along an arc (radians)
+        CUT([(cx + r * math.cos(a0 + (a1 - a0) * k / 60), cy + r * math.sin(a0 + (a1 - a0) * k / 60)) for k in range(61)], w)
 
-    def ELLIPSE(cx, cy, a, b, rot, t0, t1, n=90):     # points of a turned ellipse, from angle t0 to t1
-        cr, sr = math.cos(rot), math.sin(rot)
-        out = []
-        for k in range(n + 1):
-            t = t0 + (t1 - t0) * k / n
-            x, y = a * math.cos(t), b * math.sin(t)
-            out.append((cx + x * cr - y * sr, cy + x * sr + y * cr))
-        return out
-
-    if name == "GSIN":          # the sine: a disc, cut in two by one cycle of it
-        DISC(6, 6, 5)
-        pts = [(0.5 + 11 * k / 80, 6 - 2.2 * math.sin(2 * math.pi * k / 80)) for k in range(81)]
-        STROKE(pts, SL * 1.4, 0)
-    elif name == "GNOI":        # noise: a solid block, dissolving into tiles
-        R(1, 1.5, 5, 10.5)
-        keep = [[1, 1, 0, 1, 1, 1], [1, 0, 1, 0, 1, 0], [0, 1, 0, 0, 1, 0], [0, 0, 1, 0, 0, 0]]
-        for i in range(4):
-            for j in range(6):
-                if keep[i][j]:
-                    x0, y0 = 5.5 + i * 1.5, 1.5 + j * 1.5
-                    R(x0, y0, x0 + 1.0, y0 + 1.0)
-    elif name == "SID":         # the chip: a body, its notch, thin pins
-        R(3.5, 1.5, 8.5, 10.5)
-        DISC(6, 1.5, 1.0, 0)
+    if name == "GSIN":          # the sine: one cycle cut through the tile
+        TILE()
+        CUT([(0.6 + 10.8 * k / 80, 6 - 2.4 * math.sin(2 * math.pi * k / 80)) for k in range(81)])
+    elif name == "GNOI":        # noise: the tile dissolving into square holes
+        TILE()
+        holes = ["....h", "...hh", "..h.h", ".h.hh", "..hhh"]
+        for j, row in enumerate(holes):
+            for i, c in enumerate(row):
+                if c == "h":                          # on the 64-px grid, so every hole is the same size
+                    x0, y0 = 2.25 + i * 1.6875, 2.25 + j * 1.6875
+                    R(x0, y0, x0 + 0.9375, y0 + 0.9375, 0)
+    elif name == "SID":         # the chip: its notch, its pins along both edges
+        TILE()
+        DISC(6, T0, 1.1, 0)
         for k in range(4):
-            y = 2.9 + k * 2.1
-            R(1.0, y, 3.0, y + LN)
-            R(9.0, y, 11.0, y + LN)
-    elif name == "FMS":       # static FM: a carrier, its phase shifted by the modulator: the disc cut, its halves offset
-        for top, dx in ((True, -0.8), (False, 0.8)):
-            t = Image.new("L", im.size, 0)
-            td = ImageDraw.Draw(t)
-            cx, cy, r = 6 + dx, 6, 4.6
-            td.ellipse([(cx - r) * U, (cy - r) * U, (cx + r) * U - 1, (cy + r) * U - 1], fill=255)
-            if top: td.rectangle([0, (6 - SL / 2) * U, im.size[0], im.size[1]], fill=0)
-            else: td.rectangle([0, 0, im.size[0], (6 + SL / 2) * U], fill=0)
-            im.paste(255, mask=t)
-    elif name == "FMD":         # dynamic FM: the carrier, its sidebands fanning out
-        DISC(3.6, 6, 2.6)
+            y = 3.3 + k * 1.75
+            CUT([(T0 - 0.2, y), (T0 + 1.7, y)])
+            CUT([(T1 - 1.7, y), (T1 + 0.2, y)])
+        DISC(3.4, 3.4, 0.55, 0)
+    elif name == "FMS":         # static FM: the tile cut in two, the carrier's phase moved: the halves offset
+        TILE(T0 - 0.5, T0, T1 - 0.5, 6 - SL / 2 + 1.0)
+        R(0, 6 - SL / 2, 12, 12, 0)
+        t = Image.new("L", im.size, 0)
+        ImageDraw.Draw(t).rounded_rectangle([(T0 + 0.5) * U, (6 + SL / 2 - 1.0) * U, (T1 + 0.5) * U - 1, T1 * U - 1], radius=int(TR * U), fill=255)
+        ImageDraw.Draw(t).rectangle([0, 0, im.size[0], (6 + SL / 2) * U], fill=0)
+        im.paste(255, mask=t)
+    elif name == "FMD":         # dynamic FM: sidebands fanning out of one point
+        TILE()
+        for k in range(4):
+            a = (k - 1.5) * 0.36
+            CUT([(2.4, 6), (2.4 + 12 * math.cos(a), 6 + 12 * math.sin(a))])
+    elif name == "SAW":         # the saw: two teeth cut across
+        TILE()
+        for seg in [((0.6, 8.6), (6.0, 3.4)), ((6.0, 3.1), (6.0, 8.9)), ((6.0, 8.6), (11.4, 3.4))]:
+            CUT(list(seg))
+    elif name == "ENS":         # the ensemble: three voices, arcs stacked from a corner
+        TILE()
+        for r in (3.4, 5.4, 7.4):
+            ARCCUT(T0 + 0.4, T1 - 0.4, r, -math.pi / 2, 0)
+    elif name == "WAV":         # the wavetable: its frames, their ends tracing a cycle
+        TILE()
         for k in range(5):
-            a = (k - 2) * 0.24
-            r0 = 2.6 + SL + 0.2
-            LINE(3.6 + r0 * math.cos(a), 6 + r0 * math.sin(a), 3.6 + 8.2 * math.cos(a), 6 + 8.2 * math.sin(a))
-    elif name == "SAW":         # the supersaw: a tooth, two detuned slivers of it behind
-        P([(5, 10.5), (11, 1.5), (11, 10.5)])
-        for off, w in [(1.4, 0.8), (2.6, 0.55)]:
-            P([(5 - off, 10.5), (11 - off, 1.5), (11 - off + w, 1.5), (5 - off + w, 10.5)])
-    elif name == "ENS":         # the ensemble: three voices of a chord, each cut out of the last
-        DISC(4.4, 7.4, 2.7)
-        DISC(7.6, 7.4, 2.7 + SL, 0)
-        DISC(7.6, 7.4, 2.7)
-        DISC(6.0, 4.6, 2.7 + SL, 0)
-        DISC(6.0, 4.6, 2.7)
-    elif name == "WAV":         # the wavetable: its frames stacked, their ends a cycle
-        for k in range(8):
-            y = 1.6 + k * 1.25
-            L = 6.0 + 4.6 * math.sin(2 * math.pi * (k + 0.5) / 8)
-            R(1, y, 1 + max(1.2, L), y + LN)
-    elif name == "VOX":       # the voice: a speech bubble, its formants cut out of it
-        d.rounded_rectangle([1 * U, 1.5 * U, 11 * U - 1, 9 * U - 1], radius=int(2.6 * U), fill=W)
-        P([(2.6, 8.4), (2.6, 11.2), (5.6, 8.4)])
-        for k, h in enumerate([1.6, 3.6, 5.0, 3.0, 1.4]):
-            x = 3.05 + k * 1.3
-            R(x, 5.25 - h / 2, x + SL * 1.3, 5.25 + h / 2, 0)
+            y = 2.9 + k * 1.55
+            L = 5.6 + 3.6 * math.sin(2 * math.pi * (k + 0.5) / 5)
+            CUT([(T0 - 0.2, y), (T0 + L, y)])
+    elif name == "VOX":         # the voice: a mouth, its lips drawn by the cuts
+        TILE()
+        bow = lambda t: 1.1 * math.exp(-((t - 0.5) / 0.09) ** 2)   # the dip of the upper lip
+        top = [(2.0 + 8.0 * k / 60, 5.7 - 2.3 * math.sin(math.pi * k / 60) ** 0.7 + bow(k / 60)) for k in range(61)]
+        bot = [(2.0 + 8.0 * k / 60, 6.1 + 2.3 * math.sin(math.pi * k / 60) ** 0.9) for k in range(61)]
+        mid = [(2.0 + 8.0 * k / 60, 5.9 + 0.35 * math.sin(math.pi * k / 60)) for k in range(61)]
+        CUT(top)
+        CUT(bot)
+        CUT(mid)
     return im                   # G * SS square, 8 bit
 
 
