@@ -268,6 +268,70 @@ static void wipe(int p, int down)
     }
 }
 
+static inline uint32_t hash32(uint32_t x)
+{
+    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
+    return x;
+}
+
+/* the screen change, cyberpunk in one bit: the old screen tears into thin bands that slide sideways and flash
+ * inverted; the new one is dealt in band by band (at random, or top down) behind a scan bar; broken 8 x 8 blocks
+ * flicker between the two; the last bands slip back into place with a dithered echo. Bands move only sideways
+ * and by whole bytes (8 px), so every line of text stays on its line, sharp. p: 0..255 through the change; the
+ * same seed, the same change. */
+static void cyber(int p, uint32_t seed, int down)
+{
+    static uint8_t row[ROWB];
+    for (int band = 0; band < M2K_H / 4; band++) {
+        /* bands of 8 px, on the screen's byte grid, a few of them split in two */
+        int pair = band >> 1;
+        uint32_t hp = hash32(seed ^ ((uint32_t)pair * 0x9E3779B9u));
+        uint32_t h = ((hp >> 28) & 3u) == 0 ? hash32(hp + (uint32_t)band) : hp;
+        int y0 = band * 4;
+        int at = down ? 36 + y0 * 150 / M2K_H + (int)(h & 15u) : 44 + (int)(h % 156u);   /* when it turns new */
+        int old = p < at, k = old ? at - p : p - at;
+        int off = (int)((h >> 8) % 7u) - 3;                     /* bytes */
+        int sh = old ? (k < 40 ? off * (40 - k) / 40 : 0)       /* torn away as its turn nears */
+                     : (k < 48 ? -off * (48 - k) / 48 : 0);     /* in from the other side, then still */
+        int flip = ((h >> 16) & 7u) == 0 && k < 12;
+        int echo = !old && ((h >> 20) & 3u) == 0 && k < 72;
+        const uint8_t *src = old ? fb_prev : fb;
+        for (int y = y0; y < y0 + 4; y++) {
+            const uint8_t *r = &src[y * ROWB];
+            for (int i = 0; i < ROWB; i++) { int j = i - sh; row[i] = (j >= 0 && j < ROWB) ? r[j] : 0; }
+            if (echo) { uint8_t d = (y & 1) ? 0xAA : 0x55; for (int i = ROWB - 1; i > 0; i--) row[i] |= row[i - 1] & d; }
+            if (flip) for (int i = 0; i < ROWB; i++) row[i] ^= 0xFF;
+            m_cpy(&fb_out[y * ROWB], row, ROWB);
+        }
+    }
+    /* broken blocks, densest mid-change, reshuffled every 16 steps of p */
+    int dens = p < 128 ? p : 255 - p;
+    dens = (dens * dens) >> 10;                                 /* 0..15 */
+    uint32_t q = (uint32_t)p >> 4;
+    for (int cy = 0; cy < M2K_H / 8; cy++)
+        for (int cx = 0; cx < ROWB; cx++) {
+            uint32_t h = hash32(seed + q * 7919u + (uint32_t)(cy * ROWB + cx) * 2654435761u);
+            if ((int)(h & 255u) >= dens) continue;
+            int kind = (int)((h >> 8) & 3u);
+            for (int y = cy * 8; y < cy * 8 + 8; y++) {
+                uint8_t *o = &fb_out[y * ROWB + cx];
+                if (kind == 0) *o = (uint8_t)~fb[y * ROWB + cx];                     /* the new, negative */
+                else if (kind == 1) *o = (y & 1) ? 0xFF : 0x00;                     /* scanlines */
+                else if (kind == 2) *o = (y & 2) ? 0xAA : 0x55;                     /* a checker */
+                else *o = fb_prev[y * ROWB + cx];                                   /* the old, left behind */
+            }
+        }
+    /* the scan bar: a dithered trail, a gap, then three lines of light */
+    int scan = p * (M2K_H + 32) / 210 - 16;
+    for (int y = scan; y < scan + 12; y++) {
+        if (y < 0 || y >= M2K_H) continue;
+        int d = y - scan;
+        uint8_t m = d >= 9 ? 0xFF : d == 8 ? 0x00 : (d & 1) ? 0x00 : d < 4 ? ((d & 2) ? 0x88 : 0x22) : ((d & 2) ? 0xAA : 0x55);
+        uint8_t *o = &fb_out[y * ROWB];
+        for (int i = 0; i < ROWB; i++) o[i] ^= m;
+    }
+}
+
 /* the glitch, only between screens: two beats of 60 ms. A few bands, on the 8-px grid, slip sideways by one
  * step (8 px) and back the other way; nothing moves up or down, so every line of text stays on its line. The
  * same seed gives the same glitch. bands: how many slip in the first beat. */

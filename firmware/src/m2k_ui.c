@@ -273,7 +273,8 @@ static struct {
     int32_t ease[4];                   /* Q8 */
     /* animations */
     uint32_t trans_t, glitch_t, card_t, save_t, toast_t;
-    uint8_t trans_len, glitch_amt, in_trans, trans_down;
+    uint16_t trans_len;                /* ms; the boot's is longer than a byte */
+    uint8_t glitch_amt, in_trans, trans_down, trans_wipe;
     uint32_t glitch_seed;
     char toast[24], toast2[24];
     uint8_t seen_trig[M2K_TRACKS];
@@ -307,10 +308,10 @@ static void start_glitch(int amt);
 static void start_trans_dir(int len, int down)
 {
     ui.trans_down = (uint8_t)down;
-    start_glitch(2);
+    ui.trans_wipe = 0;
     m_cpy(fb_prev, fb_out, sizeof fb_prev);
     ui.trans_t = ui.now;
-    ui.trans_len = (uint8_t)len;
+    ui.trans_len = (uint16_t)len;
     ui.in_trans = 1;
 }
 
@@ -335,7 +336,7 @@ static void go(int page)
     if (page == ui.page) ui.sub = (uint8_t)((ui.sub + 1) % NSUB[page]);
     else { ui.page = (uint8_t)page; ui.sub = 0; }
     ui.focus_t = 0;
-    start_trans(200);
+    start_trans(250);
 }
 
 /* the value a knob shows: a held step's lock, or the kit */
@@ -451,7 +452,7 @@ void m2k_key(int k, int down)
     }
     if (b >= 0) {
         if (!down) return;
-        if (b < M2K_TRACKS) { if (b != ui.trk) { ui.trk = (uint8_t)b; sq.ktrk = ui.trk; start_trans_dir(140, 1); } }
+        if (b < M2K_TRACKS) { if (b != ui.trk) { ui.trk = (uint8_t)b; sq.ktrk = ui.trk; start_trans_dir(190, 1); } }
         else if (b < 10) { ui.spage = (uint8_t)(b - 6); ui.follow = 0; }
         else p->mute ^= (uint8_t)(1u << ui.trk);
         return;
@@ -620,7 +621,7 @@ void m2k_button(int b, int down)
         ui.grid ^= 1;
         ui.nheld = 0;
         toast(ui.grid ? "GRID" : "KEYS", ui.grid ? "STEPS ON THE KEYS" : "PLAY THE TRACK");
-        start_trans(200);
+        start_trans(250);
         break;
     case B_PLAY: seq_play(!sq.playing); break;
     case B_OCTD: case B_OCTU: {
@@ -666,7 +667,7 @@ void m2k_encoder(int e, int d)
         for (int i = 0; i < 8 && sq.nheld; i++) live_off(sq.held[0]);
         ui.trk = (uint8_t)((ui.trk + M2K_TRACKS + (d > 0 ? 1 : -1)) % M2K_TRACKS);
         sq.ktrk = ui.trk;
-        start_trans_dir(140, 1);
+        start_trans_dir(190, 1);
         break;
     case E_ALGO:
         if (ui.grid && ui.nheld) {
@@ -1354,7 +1355,7 @@ const uint8_t *m2k_frame(uint32_t ms)
         m_cpy(fb_out, fb, sizeof fb_out);
         return present();
     }
-    if (bt < 1800 + 40 && !ui.in_trans && ui.trans_t < ui.boot_t0 + 1800) start_trans(360);
+    if (bt < 1800 + 40 && !ui.in_trans && ui.trans_t < ui.boot_t0 + 1800) { start_trans(360); ui.trans_wipe = 1; start_glitch(2); }
 
     cls();
     if (ui.page == PG_HOME) { header(); home(); }
@@ -1364,7 +1365,8 @@ const uint8_t *m2k_frame(uint32_t ms)
     if (ui.in_trans) {
         uint32_t a = ms - ui.trans_t;
         if (a >= ui.trans_len) { ui.in_trans = 0; m_cpy(fb_out, fb, sizeof fb_out); }
-        else wipe((int)(a * 64 / ui.trans_len), ui.trans_down);
+        else if (ui.trans_wipe) wipe((int)(a * 64 / ui.trans_len), ui.trans_down);
+        else cyber((int)(a * 256 / ui.trans_len), ui.glitch_seed ^ ui.trans_t, ui.trans_down);
     } else {
         m_cpy(fb_out, fb, sizeof fb_out);
     }

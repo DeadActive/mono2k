@@ -317,7 +317,7 @@
   const status = (s) => { $("status").textContent = s; };
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=22");
+    const r = await fetch("m2k.wasm?v=23");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();
@@ -344,7 +344,7 @@
     try {
       try { ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }); }
       catch (e) { ctx = new AudioContext({ latencyHint: "interactive" }); }
-      await ctx.audioWorklet.addModule("worklet.js?v=22");
+      await ctx.audioWorklet.addModule("worklet.js?v=23");
       node = new AudioWorkletNode(ctx, "mono2k", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(ctx.destination);
       node.port.onmessage = (ev) => {
@@ -497,6 +497,7 @@
       machineNames.push(name);
       const card = document.createElement("article");
       card.className = "mcard";
+      card.style.setProperty("--i", String(m % 3 + (m / 3 | 0)));   /* dealt out in diagonals when scrolled to */
       const st = ["PNCH", "MTL", "PLST"].map((s, i) => { const v = x.w_stat(m, i); return `${s} <i>${"◆".repeat(v)}${"◇".repeat(5 - v)}</i>`; }).join("<br>");
       const params = Array.from({ length: 8 }, (_, i) => {
         const s4 = cstr(x, x.w_syn(m, i, 0)), ln = cstr(x, x.w_syn(m, i, 1));
@@ -666,5 +667,25 @@
   /* the wordmark is drawn in Orbitron: wait for it, not just for the page's fonts */
   (document.fonts ? Promise.all([document.fonts.load('900 64px "Orbitron"'), document.fonts.ready]) : Promise.resolve())
     .then(() => { wordmark(); requestAnimationFrame(wmTick); });
+  reveal();
   boot().catch((e) => status("Could not load the firmware: " + e.message));
+
+  /* scroll: each part arrives once, as it comes into view, in steps as the screen moves; nothing moves for those
+   * who ask for less motion, and without the observer everything is simply there */
+  function reveal() {
+    if (!("IntersectionObserver" in window) || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    document.documentElement.classList.add("reveal");
+    const io = new IntersectionObserver((es) => {
+      for (const e of es) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+    }, { rootMargin: "0px 0px -10% 0px", threshold: 0 });
+    const watch = (sel, cls) => document.querySelectorAll(sel).forEach((el) => {
+      if (cls) el.classList.add(cls);
+      const sib = el.parentElement ? [...el.parentElement.children].filter((c) => c.matches(sel)) : [];
+      el.style.setProperty("--i", String(Math.max(0, sib.indexOf(el))));
+      io.observe(el);
+    });
+    watch(".sec, .mgrid");
+    watch(".sec__n, .hero__sub > *, .sec__body .lede, .cols2 > p, .keys, .links > *", "rv-up");
+    watch(".sec__body .display", "rv-wipe");
+  }
 })();

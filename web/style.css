@@ -191,6 +191,16 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 }
 .mcard:hover::after { height: 100%; }
 
+/* scroll: parts arrive once, in steps like the screen (app.js adds .reveal only when motion is welcome) */
+.reveal .rv-up { opacity: 0; transform: translateY(var(--s2)); transition: opacity 480ms steps(6), transform 480ms steps(6); transition-delay: calc(var(--i, 0) * 80ms); }
+.reveal .rv-up.in { opacity: 1; transform: none; }
+.reveal .rv-wipe { clip-path: inset(0 100% 0 0); transition: clip-path 560ms steps(14); }
+.reveal .rv-wipe.in { clip-path: inset(0 0 0 0); }
+.reveal .sec::before { transform: scaleX(0); transform-origin: 0 50%; transition: transform 720ms steps(18); }
+.reveal .sec.in::before { transform: none; }
+.reveal .mgrid .mcard { opacity: 0; transform: translateY(var(--s2)); transition: opacity 480ms steps(6), transform 480ms steps(6); transition-delay: calc(var(--i, 0) * 70ms); }
+.reveal .mgrid.in .mcard { opacity: 1; transform: none; }
+
 @media (max-width: 1100px) {
   .play__main { grid-column: 1 / -1; padding-bottom: 0; }
   .play__side { grid-column: 1 / -1; }
