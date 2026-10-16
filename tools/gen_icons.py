@@ -84,13 +84,15 @@ def mark(name):
             y = 2.9 + k * 2.1
             R(1.0, y, 3.0, y + LN)
             R(9.0, y, 11.0, y + LN)
-    elif name == "FMS":         # static FM: a carrier, a modulator's orbit around it, behind and in front
-        ring = lambda t0, t1: ELLIPSE(6, 6, 5.3, 1.7, -0.42, t0, t1)
-        STROKE(ring(math.pi, 2 * math.pi), LN)                     # behind
-        DISC(6, 6, 3.4 + SL, 0)
-        DISC(6, 6, 3.4)
-        STROKE(ring(0, math.pi), LN + 2 * SL, 0)                   # in front, with its slit
-        STROKE(ring(0, math.pi), LN)
+    elif name == "FMS":       # static FM: a carrier, its phase shifted by the modulator: the disc cut, its halves offset
+        for top, dx in ((True, -0.8), (False, 0.8)):
+            t = Image.new("L", im.size, 0)
+            td = ImageDraw.Draw(t)
+            cx, cy, r = 6 + dx, 6, 4.6
+            td.ellipse([(cx - r) * U, (cy - r) * U, (cx + r) * U - 1, (cy + r) * U - 1], fill=255)
+            if top: td.rectangle([0, (6 - SL / 2) * U, im.size[0], im.size[1]], fill=0)
+            else: td.rectangle([0, 0, im.size[0], (6 + SL / 2) * U], fill=0)
+            im.paste(255, mask=t)
     elif name == "FMD":         # dynamic FM: the carrier, its sidebands fanning out
         DISC(3.6, 6, 2.6)
         for k in range(5):
@@ -112,14 +114,12 @@ def mark(name):
             y = 1.6 + k * 1.25
             L = 6.0 + 4.6 * math.sin(2 * math.pi * (k + 0.5) / 8)
             R(1, y, 1 + max(1.2, L), y + LN)
-    elif name == "VOX":         # the voice: lips, parted by a slit, and the sound fading out of them
-        top = [(1 + 6 * k / 40, 6 - 2.6 * math.sin(math.pi * k / 40) ** 0.75) for k in range(41)]
-        bot = [(1 + 6 * k / 40, 6 + 2.6 * math.sin(math.pi * k / 40) ** 0.75) for k in range(41)]
-        P(top + bot[::-1])
-        R(0.5, 6 - SL / 2, 7.5, 6 + SL / 2, 0)
-        for k, h in enumerate([6.0, 4.2, 2.4]):
-            x = 8.3 + k * 1.3
-            R(x, 6 - h / 2, x + LN, 6 + h / 2)
+    elif name == "VOX":       # the voice: a speech bubble, its formants cut out of it
+        d.rounded_rectangle([1 * U, 1.5 * U, 11 * U - 1, 9 * U - 1], radius=int(2.6 * U), fill=W)
+        P([(2.6, 8.4), (2.6, 11.2), (5.6, 8.4)])
+        for k, h in enumerate([1.6, 3.6, 5.0, 3.0, 1.4]):
+            x = 3.05 + k * 1.3
+            R(x, 5.25 - h / 2, x + SL * 1.3, 5.25 + h / 2, 0)
     return im                   # G * SS square, 8 bit
 
 

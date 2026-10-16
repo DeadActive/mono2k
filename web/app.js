@@ -52,7 +52,7 @@
     const off = document.createElement("canvas");
     const g = off.getContext("2d");
     let size = 200;
-    const face = getComputedStyle(document.body).fontFamily;
+    const face = getComputedStyle(document.documentElement).getPropertyValue("--head").trim() || "Orbitron";
     g.font = `900 ${size}px ${face}`;
     const fit = (s) => { g.font = `900 ${s}px ${face}`; return g.measureText("MONO2K").width - s * 0.05 * 5; };
     size = Math.floor(size * (W * 0.995) / fit(size));
@@ -302,7 +302,7 @@
   const status = (s) => { $("status").textContent = s; };
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=17");
+    const r = await fetch("m2k.wasm?v=18");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();
@@ -329,7 +329,7 @@
     try {
       try { ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }); }
       catch (e) { ctx = new AudioContext({ latencyHint: "interactive" }); }
-      await ctx.audioWorklet.addModule("worklet.js?v=17");
+      await ctx.audioWorklet.addModule("worklet.js?v=18");
       node = new AudioWorkletNode(ctx, "mono2k", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(ctx.destination);
       node.port.onmessage = (ev) => {
@@ -648,6 +648,8 @@
   themeLabel();
   let rz = 0;
   window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(wordmark, 120); });
-  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => { wordmark(); requestAnimationFrame(wmTick); });
+  /* the wordmark is drawn in Orbitron: wait for it, not just for the page's fonts */
+  (document.fonts ? Promise.all([document.fonts.load('900 64px "Orbitron"'), document.fonts.ready]) : Promise.resolve())
+    .then(() => { wordmark(); requestAnimationFrame(wmTick); });
   boot().catch((e) => status("Could not load the firmware: " + e.message));
 })();
