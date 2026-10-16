@@ -7,7 +7,7 @@
 #   .venv/bin/python tools/gen_icons.py [--sheet build/icons.png]
 import os, sys, math
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageChops
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 OUT = os.path.join(ROOT, "firmware", "gen", "m2k_icons.h")
@@ -71,17 +71,19 @@ def mark(name):
         STROKE(pts, 2.0)
         slope = 3.2 * 2 * math.pi / 9.6
         SLIT(6.0, 6.0, math.atan2(slope, 1) + math.pi / 2, 4)
-    elif name == "GNOI":        # noise: a field of tiles, some gone, some halved
-        cells = ["X.XX", ".XT.", "Xt.X", ".XX."]
+    elif name == "GNOI":        # noise: tiles forming an N, one gone, some halved
+        cells = ["X..X", "Xb.X", "..cX", "X.Xa"]
         for j, row in enumerate(cells):
             for i, c in enumerate(row):
                 x0, y0 = 1.25 + i * 2.5, 1.25 + j * 2.5
                 if c == "X":
                     R(x0, y0, x0 + 2, y0 + 2)
-                elif c == "T":
-                    P([(x0, y0 + 2), (x0 + 2, y0), (x0 + 2, y0 + 2)])
-                elif c == "t":
+                elif c == "a":                                      # the upper left half
                     P([(x0, y0), (x0 + 2, y0), (x0, y0 + 2)])
+                elif c == "b":                                      # the upper right
+                    P([(x0, y0), (x0 + 2, y0), (x0 + 2, y0 + 2)])
+                elif c == "c":                                      # the lower left
+                    P([(x0, y0), (x0, y0 + 2), (x0 + 2, y0 + 2)])
     elif name == "SID":         # the chip: a body, its notch, three pins a side
         R(3.75, 1.5, 8.25, 10.5)
         DISC(6, 1.5, 1.0, 0)
@@ -98,24 +100,35 @@ def mark(name):
             R(x0, y, 8, y + 1.2)
         DISC(8, 6, 3.6, 0)
         DISC(8, 6, 3.1)
-    elif name == "SAW":         # the supersaw: three teeth in a row
+    elif name == "SAW":         # the supersaw: three teeth, detuned, each in front of the last and cut out of it
+        off, T, B = 2.75, 2.0, 10.0
+        w = 10 - 2 * off
         for k in range(3):
-            x0 = 1.0 + k * 3.5
-            P([(x0, 9), (x0 + 3, 3), (x0 + 3, 9)])
-    elif name == "ENS":         # the ensemble: three voices of a chord, each cut out of the last
-        DISC(4.4, 7.4, 2.7)
-        DISC(7.6, 7.4, 2.7 + SL, 0)
-        DISC(7.6, 7.4, 2.7)
-        DISC(6.0, 4.6, 2.7 + SL, 0)
-        DISC(6.0, 4.6, 2.7)
-    elif name == "WAV":         # the wavetable: a cycle, sampled into six bars
-        for i in range(6):
-            x0 = 1.25 + i * 1.75
-            h = 4.4 * math.sin(2 * math.pi * (i + 0.5) / 6)
-            if h >= 0:
-                R(x0, 5.75 - h, x0 + 1.25, 5.75)
-            else:
-                R(x0, 6.25, x0 + 1.25, 6.25 - h)
+            pts = [(1 + k * off, B), (1 + k * off + w, T), (1 + k * off + w, B)]
+            P(pts, 0)
+            d.line([(x * U, y * U) for x, y in pts + [pts[0]]], fill=0, width=int(2 * SL * U), joint="curve")
+            P(pts)
+        R(0, B, 12, 12, 0)                            # the halo's foot, off the baseline
+    elif name == "ENS":         # the ensemble: one tone, three voices swirled apart
+        cx, cy, r = 6.0, 6.0, 4.9
+        DISC(cx, cy, r)
+        for k in range(3):
+            a0 = math.radians(-90 + 120 * k)
+            pts = [(cx + math.cos(a0 + 1.4 * (q / 40 * (r + 0.4) / r) ** 1.3) * q / 40 * (r + 0.4),
+                    cy + math.sin(a0 + 1.4 * (q / 40 * (r + 0.4) / r) ** 1.3) * q / 40 * (r + 0.4)) for q in range(41)]
+            STROKE(pts, SL, 0)
+    elif name == "WAV":         # the wavetable: its frames stacked into a D, thick to thin
+        st = Image.new("L", im.size, 0)
+        sd = ImageDraw.Draw(st)
+        y = 1.0
+        for h in [2.0, 1.6, 1.3, 1.05, 0.85, 0.7]:                 # six frames and five slits: ten units
+            sd.rectangle([0, y * U, G * SS, (y + h) * U - 1], fill=255)
+            y += h + SL
+        dm = Image.new("L", im.size, 0)
+        dd = ImageDraw.Draw(dm)
+        dd.rectangle([1.5 * U, 1 * U, 5.5 * U, 11 * U - 1], fill=255)  # the D: a flat back, a half disc
+        dd.pieslice([0.5 * U, 1 * U, 10.5 * U - 1, 11 * U - 1], -90, 90, fill=255)
+        im.paste(255, mask=ImageChops.multiply(st, dm))
     elif name == "VOX":         # the voice: a mouth, its lips parted by the slit
         bow = lambda t: 1.0 * math.exp(-((t - 0.5) / 0.1) ** 2)    # the dip of the upper lip
         n = 60

@@ -858,9 +858,11 @@ static void picture(void)
         mark_3d(X + (W - ICON_N) / 2, Y + 2, m);
         if (ui.page == PG_SYN) machine_dots(X + W / 2, Y + 80, m);
         else {
-            char o[16] = {'T', (char)('1' + ui.trk), ' ', 0};
-            s_cpy(o + 3, MI[m].name);
-            text_c(&F_S, X + W / 2, Y + 68, o, 1, 1);
+            /* the track in the corner, the machine's name under its mark: tracked if it fits the column, tight if not */
+            char tn[3] = {'T', (char)('1' + ui.trk), 0};
+            tag(X - 2, Y - 1, tn, 1);
+            const char *nm = MI[m].name;
+            text_c(&F_S, X + W / 2, Y + 68, nm, 1, text_w(&F_S, nm, 1) <= W - 2 ? 1 : 0);
             for (int i = 0; i < M2K_TRACKS; i++) {
                 int h = (ui.meter[i] * 18) >> 15;
                 int x = X + 2 + i * 14;
@@ -1086,7 +1088,10 @@ static void step_cell(int x, int y, int w, int h, int t, int s)
         if (st.flags & ST_SLD) for (int j = 0; j < h; j += 2) px(x + w - 2, y + j, 0);
         for (int i = 1; i < st.rtrg && i < 4; i++) rect(x + 1 + i * 3, y + h - 3, 2, 2, 2);
     } else {
-        px(x + w / 2, y + h / 2, 1);
+        /* an empty step: its cell in dots (on the screen's checker, so neighbours line up): the lanes read as a grid */
+        for (int i = 0; i < w; i++)
+            for (int j = 0; j < h; j++)
+                if ((i == 0 || j == 0 || i == w - 1 || j == h - 1) && !((x + i + y + j) & 1)) px(x + i, y + j, 1);
     }
     if (playing) frame(x - 1, y - 1, w + 2, h + 2, 2);
     if (held && ((ui.now >> 7) & 1)) rect(x, y, w, h, 2);
