@@ -11,7 +11,7 @@
 #define M2K_SUB       16          /* control-rate block: envelopes, LFOs, params, triggers */
 #define M2K_TRACKS    6
 #define M2K_STEPS     64
-#define M2K_PATTERNS  8
+#define M2K_PATTERNS  16
 #define M2K_LOCKS     384         /* parameter locks per pattern (track, step, param, value) */
 #define M2K_W         240
 #define M2K_H         240
@@ -99,5 +99,6 @@ uint8_t *m2k_store(int *len);                       /* the patterns, to save or 
 void m2k_restore(void);
 int m2k_dirty(void);                                /* 1 when SAVE asked for the store to be written */
 void m2k_setting(int i, int v);                     /* e.g. the web page's theme sets S_SCREEN */
+void m2k_pattern(int n);                            /* select a pattern, as PRESETS does */
 
 #endif

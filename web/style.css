@@ -106,6 +106,16 @@ footer.foot { border-top: 1px solid var(--ink); border-bottom: 0; margin-top: 80
 .tracks li b { display: block; font: 800 var(--t2) / 1 var(--face); letter-spacing: -0.04em; }
 .tracks li.on { background: var(--ink); color: var(--paper); }
 .tracks li.mute { background-image: var(--d-sparse); }
+.pats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--ink); border-left: 1px solid var(--ink); }
+.pats button {
+  display: block; text-align: left; padding: 6px 6px 7px; min-width: 0; overflow: hidden; cursor: pointer;
+  font: 600 10px / 1.2 var(--face); text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--ink); background: var(--paper); border: 0; border-right: 1px solid var(--ink); border-bottom: 1px solid var(--ink);
+}
+.pats button b { display: block; font: 800 15px / 1 var(--face); letter-spacing: -0.03em; }
+.pats button:hover { background-image: var(--d-check); background-size: 2px 2px; image-rendering: pixelated; }
+.pats button.on { background: var(--ink); color: var(--paper); }
+.pats button.q { background-image: var(--d-dots); background-size: 2px 2px; image-rendering: pixelated; }
 .tools { display: flex; flex-wrap: wrap; gap: 8px; }
 .tools button, .tools a {
   font: 600 var(--t0) / 1 var(--face); text-transform: uppercase; letter-spacing: 0.08em;

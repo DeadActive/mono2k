@@ -8,7 +8,7 @@
 <title>MONO2K Emulator</title>
 <meta name="description" content="MONO2K: six mono machines, a 64-step sequencer with parameter locks and trig conditions, and a lofi bus, for the M-VAVE FM-1. Running in your browser.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 <div class="rules" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
@@ -46,6 +46,7 @@
       <div><dt>Keys</dt><dd id="r-mode">PLAY</dd></div>
     </div>
     <ol class="tracks" id="tracks"></ol>
+    <div class="pats" id="pats" role="group" aria-label="Patterns"></div>
     <div class="tools">
       <button type="button" id="midi">MIDI in</button>
       <button type="button" id="palette">Screen: Paper</button>
@@ -109,7 +110,7 @@
   <div class="sec__body">
     <h2>Sequencer</h2>
     <div class="cols2">
-      <p>Six tracks of up to 64 steps, on four pages of sixteen. Every step is a trig with its note, accent and slide. Hold a step and turn any knob: that value is locked to the step and comes back to the kit on the next trig. In the lanes, a locked step is checked.</p>
+      <p>Sixteen patterns, each a whole song part with its own six machines, sounds and bus. Six tracks of up to 64 steps, on four pages of sixteen. Every step is a trig with its note, accent and slide. Hold a step and turn any knob: that value is locked to the step and comes back to the kit on the next trig. In the lanes, a locked step is checked.</p>
       <p>Modern trig conditions: a chance (75, 50, 33, 25, 12%), every A of B loops (1:2 … 4:4), the first loop only, after the previous condition (PRE), or only when you hold FILL. A chance is drawn as its own density of dither. Ratchets repeat a step two to four times.</p>
     </div>
   </div>
@@ -141,6 +142,6 @@
   <span>MONO2K</span><span>Six mono machines</span><span>FM-1</span><span class="r">2026</span>
 </footer>
 
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

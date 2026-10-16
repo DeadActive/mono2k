@@ -297,7 +297,7 @@
   const status = (s) => { $("status").textContent = s; };
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=13");
+    const r = await fetch("m2k.wasm?v=14");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();
@@ -305,6 +305,7 @@
     pre.w_setting(0, isDark() ? 127 : 0);
     preT0 = performance.now();
     machines();
+    patterns();
     requestAnimationFrame(preTick);
   }
   function preTick(t) {
@@ -322,7 +323,7 @@
     try {
       try { ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }); }
       catch (e) { ctx = new AudioContext({ latencyHint: "interactive" }); }
-      await ctx.audioWorklet.addModule("worklet.js?v=13");
+      await ctx.audioWorklet.addModule("worklet.js?v=14");
       node = new AudioWorkletNode(ctx, "mono2k", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(ctx.destination);
       node.port.onmessage = (ev) => {
@@ -334,6 +335,7 @@
           if (m.store) saveStore(m.store);
         } else if (m.t === "ready") {
           displayMode();
+          if (startPattern >= 0) { send({ t: "pattern", n: startPattern }); startPattern = -1; }
           status(ctx.sampleRate === 44100 ? "Running at 44.1 kHz, as on the FM-1." : `Running at ${ctx.sampleRate} Hz, resampled from 44.1 kHz.`);
         }
       };
@@ -357,6 +359,22 @@
 
   // ---------------------------------------------------------------------------------------------- readouts
   let machineNames = [];
+  /* the patterns: one button each; while playing, a click queues it for the end of the bar */
+  let startPattern = -1;
+  function patterns() {
+    const box = $("pats"), n = pre.w_patterns();
+    box.innerHTML = "";
+    for (let i = 0; i < n; i++) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.innerHTML = `<b>A${String(i + 1).padStart(2, "0")}</b>${cstr(pre, pre.w_pat_name(i))}`;
+      b.addEventListener("click", () => {
+        if (!running) { startPattern = i; start(); return; }
+        send({ t: "pattern", n: i });
+      });
+      box.appendChild(b);
+    }
+  }
   const PAGES = ["HOME", "SYN", "AMP", "FILT", "FX", "LFO", "ARP", "GLO"];
   let lastInfo = "";
   function info(I) {
@@ -366,7 +384,10 @@
     const trk = I[0], pat = I[3];
     $("r-trk").textContent = "T" + (trk + 1);
     $("r-mach").textContent = machineNames[I[6]] || "";
-    $("r-pat").textContent = "A0" + (pat + 1) + (I[12] !== pat && I[4] ? "›" + (I[12] + 1) : "");
+    const pl = (n) => "A" + String(n + 1).padStart(2, "0");
+    $("r-pat").textContent = pl(pat) + (I[12] !== pat && I[4] ? "›" + String(I[12] + 1).padStart(2, "0") : "");
+    const pb = $("pats").children;
+    for (let i = 0; i < pb.length; i++) pb[i].className = i === pat ? "on" : i === I[12] && I[4] ? "q" : "";
     $("r-bpm").textContent = String(I[5] + 30);
     $("r-step").textContent = I[4] ? String(I[10] + 1).padStart(2, "0") + "/" + I[11] : "—";
     $("r-mode").textContent = (I[7] ? "GRID" : "PLAY") + (I[9] ? " FILL" : I[8] ? " REC" : "");

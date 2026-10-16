@@ -133,6 +133,8 @@ static char *s_int(char *d, int v)
     return d;
 }
 static char *s_dec1(char *d, int v10) { d = s_int(d, v10 / 10); *d++ = '.'; *d++ = (char)('0' + v10 % 10); *d = 0; return d; }
+/* a pattern's name on the panel: A01 .. A16 */
+static char *s_pat(char *d, int n) { d[0] = 'A'; d[1] = (char)('0' + (n + 1) / 10); d[2] = (char)('0' + (n + 1) % 10); d[3] = 0; return d + 3; }
 static char *s_note(char *d, int n) { d = s_cpy(d, NOTE_N[n % 12]); return s_int(d, n / 12 - 1); }
 
 /* the value as the screen shows it, and its unit */
@@ -503,8 +505,8 @@ void m2k_button(int b, int down)
     case B_SAVE: {
         dirty = 1;
         ui.save_t = ui.now | 1u;
-        char a[8] = "A0";
-        s_int(a + 2, cur_pat + 1);
+        char a[8];
+        s_pat(a, cur_pat);
         toast("SAVED", a);
         break;
     }
@@ -525,6 +527,28 @@ void m2k_button(int b, int down)
     default: break;
     }
 }
+
+/* a pattern: at once when stopped, at the end of the bar when playing */
+static void select_pattern(int n)
+{
+    n = (n % M2K_PATTERNS + M2K_PATTERNS) % M2K_PATTERNS;
+    char a[24], *e = s_pat(a, n);
+    if (sq.playing) {
+        sq.queued = (uint8_t)n;
+        *e++ = ' ';
+        s_cpy(e, pat[n].name);
+        toast(a, n == cur_pat ? "" : "QUEUED");
+        return;
+    }
+    cur_pat = n;
+    sq.queued = (uint8_t)n;
+    lockmap_build();
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[n].kit[t], P_COUNT);
+    toast(a, pat[n].name);
+    start_glitch(4);
+}
+
+void m2k_pattern(int n) { select_pattern(n); }
 
 void m2k_encoder(int e, int d)
 {
@@ -552,18 +576,7 @@ void m2k_encoder(int e, int d)
         break;
     case E_PRESET: {
         if (ui.grid && ui.nheld) { held_step_edit(d > 0 ? 1 : -1, 0); break; }
-        int n = ((sq.playing ? sq.queued : cur_pat) + M2K_PATTERNS + (d > 0 ? 1 : -1)) % M2K_PATTERNS;
-        char a[8] = "A0";
-        s_int(a + 2, n + 1);
-        if (sq.playing) { sq.queued = (uint8_t)n; toast(a, "QUEUED"); }
-        else {
-            cur_pat = n;
-            sq.queued = (uint8_t)n;
-            lockmap_build();
-            for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[n].kit[t], P_COUNT);
-            toast(a, pat[n].name);
-            start_glitch(4);
-        }
+        select_pattern(((sq.playing ? sq.queued : cur_pat) + M2K_PATTERNS + (d > 0 ? 1 : -1)) % M2K_PATTERNS);
         break;
     }
     case E_MASTER: {
@@ -612,8 +625,8 @@ static void header(void)
         else frame(xr - 6, 4, 7, 7, 1);
         xr -= 10;
     }
-    char pa[8] = "A0";
-    s_int(pa + 2, cur_pat + 1);
+    char pa[8];
+    s_pat(pa, cur_pat);
     xr -= text_r(&F_S, xr, 2, pa, 1, 1) + 5;
     if (ui.grid) { int w = text_w(&F_S, "GRID", 1) + 6; tag(xr - w, 0, "GRID", 0); xr -= w + 4; }
     if (sq.fill) { int w = text_w(&F_S, "FILL", 1) + 6; tag(xr - w, 0, "FILL", 1); xr -= w + 4; }
@@ -1045,8 +1058,8 @@ static void home(void)
         focus_left(knob_param(PG_HOME, 0, ui.focus));
     } else {
         text(&F_S, 4, FOCUS_Y + 2, "PATTERN", 1, 1);
-        char a[8] = "A0";
-        s_int(a + 2, cur_pat + 1);
+        char a[8];
+        s_pat(a, cur_pat);
         text_grad(FOCUS_Y + 16, F_XL.h - 6, 10, 64);
         text(&F_XL, 2, FOCUS_Y + 16, a, TX_GRAD, 0);
         char o[32], *e = s_int(o, (int)seq_bpm());

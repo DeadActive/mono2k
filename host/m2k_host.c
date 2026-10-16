@@ -70,10 +70,68 @@ static const ev_t TOUR[] = {
     {18500, 'x', 0, 0, 0},
 };
 
+/* render seconds of pattern p with the tracks in mask; peak and rms (dB) */
+static void measure(int p, int mask, double sec, int16_t *keep, double *pk_db, double *rms_db)
+{
+    m2k_init(2000);
+    cur_pat = p;
+    sq.queued = (uint8_t)p;
+    pat[p].mute = (uint8_t)(~mask & 0x3F);
+    lockmap_build();
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[p].kit[t], P_COUNT);
+    seq_play(1);
+    int frames = (int)(M2K_SR * sec) / 128 * 128;
+    static int16_t buf[2 * 128];
+    double ss = 0;
+    int peak = 0;
+    for (int f = 0; f < frames; f += 128) {
+        m2k_render(buf, 128);
+        for (int i = 0; i < 256; i++) {
+            int v = buf[i], a = v < 0 ? -v : v;
+            if (a > peak) peak = a;
+            ss += (double)v * v;
+        }
+        if (keep) m_cpy(keep + 2 * f, buf, sizeof buf);
+    }
+    *pk_db = 20 * log10(peak / 32767.0 + 1e-9);
+    *rms_db = 10 * log10(ss / (frames * 2.0) / (32767.0 * 32767.0) + 1e-12);
+}
+
+static int analyze(const char *out)
+{
+    char path[512];
+    int bad = 0;
+    printf("pattern   mix pk/rms   T1        T2        T3        T4        T5        T6     (rms dB, crest)\n");
+    for (int p = 0; p < M2K_PATTERNS - 1; p++) {
+        double pk, rms;
+        double sec = 10.0;
+        int frames = (int)(M2K_SR * sec) / 128 * 128;
+        int16_t *keep = malloc((size_t)frames * 4);
+        measure(p, 0x3F, sec, keep, &pk, &rms);
+        snprintf(path, sizeof path, "%s/a%02d_%s.wav", out, p + 1, pat[p].name);
+        for (char *c = path + strlen(out) + 1; *c; c++) if (*c == ' ') *c = '_';
+        wav_write(path, keep, frames);
+        free(keep);
+        printf("A%02d %-7s %5.1f/%5.1f", p + 1, pat[p].name, pk, rms);
+        if (pk > -0.3) { printf(" CLIP"); bad++; }
+        for (int t = 0; t < M2K_TRACKS; t++) {
+            double tp, tr;
+            measure(p, 1 << t, 6.0, 0, &tp, &tr);
+            const char *flag = tr < -48 ? "!quiet" : (tp - tr) > 30 ? "!click" : "";
+            if (*flag) bad++;
+            printf("  %5.1f/%2.0f%-6s", tr, tp - tr, flag);
+        }
+        printf("\n");
+    }
+    printf("%d flags\n", bad);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     const char *out = argc > 1 ? argv[1] : "build/host";
     char path[512];
+    if (argc > 2 && !strcmp(argv[2], "--analyze")) return analyze(out);
     /* 1: the three factory patterns, 12 s each */
     for (int p = 0; p < 3; p++) {
         m2k_init(2000);

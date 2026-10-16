@@ -22,6 +22,8 @@ EXPORT int w_store_len(void) { int n; m2k_store(&n); return n; }
 EXPORT void w_restore(void) { m2k_restore(); }
 EXPORT int w_dirty(void) { return m2k_dirty(); }
 EXPORT void w_setting(int i, int v) { m2k_setting(i, v); }
+EXPORT void w_pattern(int n) { m2k_pattern(n); }
+EXPORT int w_patterns(void) { return M2K_PATTERNS; }
 
 /* what the page shows next to the panel */
 EXPORT const uint8_t *w_info(void)

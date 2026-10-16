@@ -22,7 +22,8 @@ python3 -m http.server 8742 --directory web
 
 Then open <http://localhost:8742>, press Start, click the panel and play (Z… for keys, Space PLAY, A GRID, 5 SYN).
 
-Host build (renders the factory patterns to WAV, tours the pages and saves the screens as PBM):
+Host build (renders the factory patterns to WAV, tours the pages and saves the screens as PBM; with `--analyze`, renders
+every pattern and solos every track, flagging what is too quiet, clicky or clipping):
 
 ```bash
 cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2k_host host/m2k_host.c -lm && build/host/m2k_host build/host
@@ -34,6 +35,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 |---|---|
 | Machines | GND-SIN, GND-NOIS, SID-8BIT, FM+STAT, FM+DYN, SWAV-SAW, SWAV-ENS, DIGI-WAV, VOX-6: clean-room designs after the Monomachine's families, integer only |
 | Per track | the Monomachine's chain and pages: SYN A–H · AMP (ATK HOLD DEC REL DIST VOL PAN PORT) · FILT (HP / LP as base and width, resonance, envelope) · FX (EQ, SRR, a delay of its own in 8-bit mu-law) · DSTR (bits, fold, xor, SPU send) · 3 LFOs (any track's parameter) · ARP |
+| Patterns | 16 (A01–A16), each a whole song part with its own machines, sounds, bus and tempo; 15 factory designs: LATEX, PVC, SPU RM, ELECTRO, GLITCH, CHROME, ACID, 2STEP, RUNNER, HYPRPOP, DUBTEC, CHIP, INDSTRL, MINIMAL, TRAP |
 | Sequencer | 6 × 64 steps, note / accent / slide, parameter locks, trig conditions (chance, A:B, 1ST, PRE, FILL), ratchets, swing, live recording, patterns queued at the bar |
 | Bus | SPU-style reverb at 22 kHz, beat repeat (reverse, halving, tape stop), tape wow and flutter, 4-bit ADPCM crunch, hiss and dust, drive |
 | MIDI | channels 1–6 are tracks 1–6, notes and the Monomachine's CC map (SYN 48–55, AMP 56–63, FILT 72–79, FX 80–87, LFO 1/2/3 on 88/104/112, level 7, mute 3), start / stop |

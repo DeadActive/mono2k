@@ -167,8 +167,9 @@ static void mach_block(int ti, int m, int32_t pitch)
         int32_t env = (int32_t)(t->menv[0] >> 15);
         int32_t pq = pitch + ((P7(t, P_SYN + 4) * 24 * env) >> 15);
         t->menv[0] = mulu_hi(t->menv[0], T_ENV_COEF[P7(t, P_SYN + 5)], 31);
-        int32_t colr = PB8(t, P_SYN + 0) >> 8;       /* -64..63 */
-        int32_t a = T_OP[CLAMP(64 + colr * 2, 0, 127)];
+        int32_t colr = PB8(t, P_SYN + 0) >> 8;       /* -64..63: darker (a lowpass falling to ~300 Hz) or thinner
+                                                       * (a highpass rising to ~5 kHz) */
+        int32_t a = colr < 0 ? T_OP[CLAMP(127 + colr * 3 / 2, 20, 127)] : T_OP[CLAMP(colr * 8 / 5, 0, 102)];
         int32_t sh = P7(t, P_SYN + 1);
         uint32_t shinc = sh ? inc_of(pq - 24 * 64 + sh * 32) : 0;
         int32_t meta = T_VOL[P7(t, P_SYN + 2)];
