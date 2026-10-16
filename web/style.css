@@ -122,14 +122,15 @@ p, h2, h3, dl, dd, ol { margin: 0; }
 .read dd { margin-top: var(--s1); font: var(--title); text-transform: uppercase; white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; }
 /* the readout and the tracks are controls too: small square buttons in the label's type, dithered on hover */
 .read > div { position: relative; }
-.read .ctls { position: absolute; top: var(--s1); right: var(--s1); display: flex; gap: 4px; }
+.read .ctls { position: absolute; top: 0; bottom: 0; right: var(--s1); display: flex; align-items: center; gap: var(--s1); }
 .read > div:nth-child(even) .ctls { right: 0; }
 .read .ctls button, .tracks .tmute {
-  min-width: var(--s3); height: var(--s3); padding: 0 6px; cursor: pointer;
+  display: inline-grid; place-items: center; min-width: var(--s4); height: var(--s4); padding: 0 var(--s1); cursor: pointer;
   font: var(--label); letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--ink); background: var(--paper); border: 1px solid var(--ink);
 }
-.read .ctls .ar { padding: 0; font: 700 14px / 1 var(--text); letter-spacing: 0; }
+.read .ctls .ar { width: var(--s4); padding: 0; }
+.read .ctls svg { display: block; width: 12px; height: 12px; fill: currentColor; }
 .read .ctls button:hover, .tracks .tmute:hover, .tracks .tsel:hover { background-image: var(--d-check); background-size: 2px 2px; image-rendering: pixelated; }
 .read .ctls button[aria-pressed="true"], .tracks .tmute[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .read button:focus-visible, .tracks button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
@@ -138,7 +139,7 @@ p, h2, h3, dl, dd, ol { margin: 0; }
   font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: transparent; border: 0;
 }
 .tracks li.on .tsel:hover { background-image: none; }
-.tracks .tmute { position: absolute; top: var(--s1); right: var(--s1); }
+.tracks .tmute { position: absolute; top: var(--s1); right: var(--s1); min-width: var(--s3); height: var(--s3); padding: 0; }
 .tracks li.on .tmute { color: var(--paper); background: var(--ink); border-color: var(--paper); }
 .tracks li.on .tmute[aria-pressed="true"] { color: var(--ink); background: var(--paper); }
 .tracks { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--ink); }

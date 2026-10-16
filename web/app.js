@@ -477,7 +477,7 @@
       for (let k = 0; k < 4; k++) encEl[3 + k].role.textContent = cstr(pre, pre.w_knob(I[1], I[2], I[6], k)) || "—";
     }
     if (readBtn.step) {
-      readBtn.step.textContent = I[4] ? "■" : "▶";
+      readBtn.step.innerHTML = I[4] ? ICON.stop : ICON.play;
       readBtn.step.setAttribute("aria-label", I[4] ? "Stop" : "Play");
       readBtn.grid.setAttribute("aria-pressed", String(!!I[7]));
       readBtn.rec.setAttribute("aria-pressed", String(!!I[8]));
@@ -518,6 +518,13 @@
    * STEP starts and stops; KEYS turns the keys into the grid and arms recording. A track cell selects its track,
    * its M mutes it. Before the sound is on, the first touch turns it on. */
   const readBtn = {};
+  /* the controls' icons, drawn on a 10-unit square so each sits in the middle of its button */
+  const ICON = {
+    left: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M7.5 1.5v7L2 5z"/></svg>',
+    right: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 1.5v7L8 5z"/></svg>',
+    play: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 1v8L9 5z"/></svg>',
+    stop: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2h6v6H2z"/></svg>',
+  };
   const act = (fn) => { if (running) fn(); else start().then(() => { if (running) fn(); }); };
   const tap = (b) => { send({ t: "btn", b, d: 1 }); send({ t: "btn", b, d: 0 }); };
   function ctlButton(txt, label, fn, repeat) {
@@ -540,16 +547,18 @@
   function readControls() {
     const box = (id, ...btns) => { const s = document.createElement("span"); s.className = "ctls"; s.append(...btns); $(id).parentElement.appendChild(s); };
     const arrows = (id, name, fn, repeat) => {
-      const dn = ctlButton("−", name + " down", (ev) => fn(-1, ev), repeat), up = ctlButton("+", name + " up", (ev) => fn(1, ev), repeat);
+      const dn = ctlButton("", "Previous " + name, (ev) => fn(-1, ev), repeat), up = ctlButton("", "Next " + name, (ev) => fn(1, ev), repeat);
       dn.className = up.className = "ar";
+      dn.innerHTML = ICON.left; up.innerHTML = ICON.right;
       box(id, dn, up);
     };
-    arrows("r-trk", "Track", (d) => send({ t: "track", n: (curTrk + 6 + d) % 6 }));
-    arrows("r-mach", "Machine", (d) => turn(1, d));
-    arrows("r-pat", "Pattern", (d) => turn(2, d));
-    arrows("r-bpm", "Tempo", (d, ev) => send({ t: "tempo", d: d * (ev && ev.shiftKey ? 10 : 1) }), true);
-    readBtn.step = ctlButton("▶", "Play", () => tap(10));
+    arrows("r-trk", "track", (d) => send({ t: "track", n: (curTrk + 6 + d) % 6 }));
+    arrows("r-mach", "machine", (d) => turn(1, d));
+    arrows("r-pat", "pattern", (d) => turn(2, d));
+    arrows("r-bpm", "tempo", (d, ev) => send({ t: "tempo", d: d * (ev && ev.shiftKey ? 10 : 1) }), true);
+    readBtn.step = ctlButton("", "Play", () => tap(10));
     readBtn.step.className = "ar";
+    readBtn.step.innerHTML = ICON.play;
     box("r-step", readBtn.step);
     readBtn.grid = ctlButton("Grid", "Keys as steps (GRID)", () => tap(9));
     readBtn.rec = ctlButton("Rec", "Record", () => tap(11));
