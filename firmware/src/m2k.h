@@ -1,0 +1,99 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* MONO2K: six mono machines, a 64-step sequencer with parameter locks, and a lofi bus, for the M-VAVE FM-1.
+ * This core has no platform code: the FM-1 build calls it from the audio ISR and the main loop, the browser
+ * build from an AudioWorklet, the host build from tests. Integer only (the AC791N has no FPU and no libgcc). */
+#ifndef M2K_INCLUDED
+#define M2K_INCLUDED
+
+#include <stdint.h>
+
+#define M2K_SR        44100
+#define M2K_SUB       16          /* control-rate block: envelopes, LFOs, params, triggers */
+#define M2K_TRACKS    6
+#define M2K_STEPS     64
+#define M2K_PATTERNS  8
+#define M2K_LOCKS     384         /* parameter locks per pattern (track, step, param, value) */
+#define M2K_W         240
+#define M2K_H         240
+#define M2K_FB_BYTES  (M2K_W * M2K_H / 8)
+
+/* big buffers go to the FM-1's pool RAM (Felucca's linker script); elsewhere they are plain statics */
+#ifdef M2K_FW
+#define POOL __attribute__((section(".pool")))
+#else
+#define POOL
+#endif
+
+/* the FM-1's controls, in the order of the platform's input layer */
+enum { B_FX, B_SEL, B_ENV, B_LFO, B_EDIT, B_GLO, B_HOME, B_SAVE, B_ARP, B_SEQ, B_PLAY, B_REC, B_OCTD, B_OCTU, B_COUNT };
+enum { E_SELECT, E_ALGO, E_PRESET, E_K1, E_K2, E_K3, E_K4, E_MASTER, E_COUNT };
+#define M2K_KEYS 27               /* F3..G5: 16 lower ("white") and 11 upper ("black") keys */
+
+/* track parameters, 0..127 each (bipolar ones centre on 64) */
+enum {
+    P_SYN = 0,                    /* 0..7: the machine's A..H */
+    P_ATK = 8, P_HOLD, P_DEC, P_REL, P_DIST, P_VOL, P_PAN, P_PORT,
+    P_BASE = 16, P_WDTH, P_HPQ, P_LPQ, P_FATK, P_FDEC, P_BOF, P_WOF,
+    P_EQF = 24, P_EQG, P_SRR, P_DTIM, P_DSND, P_DFB, P_DBAS, P_DWID,
+    P_BITS = 32, P_FOLD, P_XOR, P_SPU,
+    P_PTCH = 36, P_LEVL, P_AMOD, P_ASPD, P_ARNG, P_GATE,
+    P_LFO = 42,                   /* 3 x 8: TRCK DEST WAVE TRIG MULT SPD PHAS DPTH */
+    P_COUNT = 66
+};
+enum { L_TRCK, L_DEST, L_WAVE, L_TRIG, L_MULT, L_SPD, L_PHAS, L_DPTH };
+
+/* global (pattern) parameters */
+enum {
+    G_TMPO, G_SWNG, G_LEN, G_ACNT,          /* tempo is 30 + 2*v .. but see m2k_bpm(); accent amount */
+    G_TAPE, G_ADPC, G_GLCH, G_GSIZ,          /* the lofi bus */
+    G_VERB, G_DAMP, G_HISS, G_DRIV,
+    G_COUNT
+};
+
+/* machines */
+enum { M_GSIN, M_GNOI, M_SID, M_FMS, M_FMD, M_SAW, M_ENS, M_WAV, M_VOX, M_COUNT };
+
+typedef struct {
+    uint8_t note;                 /* MIDI note */
+    uint8_t flags;                /* bit0 trig, bit1 accent, bit2 slide */
+    uint8_t cond;                 /* trig condition: C_* */
+    uint8_t rtrg;                 /* ratchet: hits in the step, 0 or 1 = one */
+} m2k_step_t;
+
+/* trig conditions, after the modern Elektron sequencers: chances, every A of B loops, first, previous, fill */
+enum {
+    C_ALWAYS, C_P75, C_P50, C_P33, C_P25, C_P12,
+    C_1_2, C_2_2, C_1_3, C_2_3, C_3_3, C_1_4, C_2_4, C_3_4, C_4_4,
+    C_1ST, C_N1ST, C_PRE, C_NPRE, C_FILL, C_NFILL, C_COUNT
+};
+#define ST_TRIG 1u
+#define ST_ACC  2u
+#define ST_SLD  4u
+
+typedef struct { uint8_t trk, step, param, val; } m2k_lock_t;   /* trk 0xFF: free */
+
+typedef struct {
+    char name[8];
+    uint8_t machine[M2K_TRACKS];
+    uint8_t kit[M2K_TRACKS][P_COUNT];
+    uint8_t glob[G_COUNT];
+    uint8_t mute;                 /* bit per track */
+    uint8_t pad[3];
+    m2k_step_t step[M2K_TRACKS][M2K_STEPS];
+    m2k_lock_t lock[M2K_LOCKS];
+} m2k_pattern_t;
+
+/* the API */
+void m2k_init(uint32_t seed);
+void m2k_render(int16_t *lr, int frames);           /* interleaved stereo, frames a multiple of M2K_SUB */
+void m2k_key(int k, int down);
+void m2k_button(int b, int down);
+void m2k_encoder(int e, int delta);
+void m2k_midi(int status, int d1, int d2);
+const uint8_t *m2k_frame(uint32_t ms);              /* draws the screen: 240 x 240, 1 bit, MSB first, 1 = ink */
+const uint8_t *m2k_leds(void);                      /* 27 key LEDs then 14 button LEDs, 0..255 */
+uint8_t *m2k_store(int *len);                       /* the patterns, to save or to overwrite before m2k_restore() */
+void m2k_restore(void);
+int m2k_dirty(void);                                /* 1 when SAVE asked for the store to be written */
+
+#endif

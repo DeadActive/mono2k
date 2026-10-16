@@ -1,0 +1,6 @@
+# local tools and output
+.venv/
+build/
+.claude/
+.DS_Store
+__pycache__/

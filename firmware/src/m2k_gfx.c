@@ -1,0 +1,291 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* MONO2K's 1-bit drawing: a 240 x 240 framebuffer (7.2 KB, 1 = ink), dither patterns, text in Inter Tight with
+ * solid, dithered or outlined-and-dithered fills, the machine marks, and the transitions (dissolve, glitch). */
+
+static uint8_t fb[M2K_FB_BYTES];       /* the frame being drawn */
+static uint8_t fb_prev[M2K_FB_BYTES];  /* the last frame shown before a transition */
+static uint8_t fb_out[M2K_FB_BYTES];   /* what the screen gets */
+static int16_t clip_x0 = 0, clip_y0 = 0, clip_x1 = M2K_W, clip_y1 = M2K_H;
+
+#define ROWB (M2K_W / 8)
+
+/* patterns: 0..64 are Bayer levels (64 solid); above are the textures of the references */
+enum { PT_SOLID = 64, PT_LINES = 65, PT_VLINES, PT_CHECK, PT_DOTS, PT_SPARSE, PT_CROSS, PT_DIAG, PT_IDOTS };
+
+static inline int pat_ink(int p, int x, int y)
+{
+    if (p <= 64) return T_BAYER[y & 7][x & 7] < p;
+    switch (p) {
+    case PT_LINES: return !(y & 1);
+    case PT_VLINES: return !(x & 1);
+    case PT_CHECK: return !((x ^ y) & 1);
+    case PT_DOTS: return !(x & 1) && !(y & 1);
+    case PT_SPARSE: return !(x & 3) && !(y & 3);
+    case PT_CROSS: { int a = x & 3, b = y & 3; return (a == b || a == 3 - b) && a != 3 && b != 3; }
+    case PT_DIAG: return ((x + y) & 3) == 0;
+    case PT_IDOTS: return (x & 1) || (y & 1);
+    default: return 1;
+    }
+}
+
+static inline void px(int x, int y, int c)
+{
+    if (x < clip_x0 || y < clip_y0 || x >= clip_x1 || y >= clip_y1) return;
+    uint8_t *b = &fb[y * ROWB + (x >> 3)], m = (uint8_t)(0x80u >> (x & 7));
+    if (c == 1) *b |= m;
+    else if (c == 0) *b &= (uint8_t)~m;
+    else *b ^= m;
+}
+
+static inline int px_get(const uint8_t *buf, int x, int y)
+{
+    if ((unsigned)x >= M2K_W || (unsigned)y >= M2K_H) return 0;
+    return (buf[y * ROWB + (x >> 3)] >> (7 - (x & 7))) & 1;
+}
+
+static void clip(int x, int y, int w, int h) { clip_x0 = (int16_t)x; clip_y0 = (int16_t)y; clip_x1 = (int16_t)(x + w); clip_y1 = (int16_t)(y + h); }
+static void noclip(void) { clip(0, 0, M2K_W, M2K_H); }
+
+static void cls(void) { m_set(fb, 0, sizeof fb); }
+
+/* c: 0 paper, 1 ink, 2 invert */
+static void rect(int x, int y, int w, int h, int c)
+{
+    for (int j = y; j < y + h; j++)
+        for (int i = x; i < x + w; i++) px(i, j, c);
+}
+
+/* a pattern: ink where the pattern is, paper elsewhere (opaque) or untouched (transparent) */
+static void rect_pat(int x, int y, int w, int h, int p, int opaque)
+{
+    for (int j = y; j < y + h; j++)
+        for (int i = x; i < x + w; i++) {
+            int k = pat_ink(p, i, j);
+            if (k || opaque) px(i, j, k);
+        }
+}
+
+/* a dithered gradient: Bayer level l0 at one end, l1 at the other (0..64); vertical or horizontal; ink only */
+static void rect_grad(int x, int y, int w, int h, int l0, int l1, int vertical)
+{
+    int n = vertical ? h : w;
+    if (n < 1) return;
+    for (int j = 0; j < h; j++)
+        for (int i = 0; i < w; i++) {
+            int k = vertical ? j : i;
+            int l = l0 + ((l1 - l0) * k) / (n > 1 ? n - 1 : 1);
+            if (T_BAYER[(y + j) & 7][(x + i) & 7] < l) px(x + i, y + j, 1);
+        }
+}
+
+static void hline(int x, int y, int w, int c) { rect(x, y, w, 1, c); }
+static void vline(int x, int y, int h, int c) { rect(x, y, 1, h, c); }
+static void frame(int x, int y, int w, int h, int c)
+{
+    hline(x, y, w, c); hline(x, y + h - 1, w, c);
+    vline(x, y + 1, h - 2, c); vline(x + w - 1, y + 1, h - 2, c);
+}
+
+static void line(int x0, int y0, int x1, int y1, int c)
+{
+    int dx = x1 > x0 ? x1 - x0 : x0 - x1, sx = x0 < x1 ? 1 : -1;
+    int dy = y1 > y0 ? y0 - y1 : y1 - y0, sy = y0 < y1 ? 1 : -1, e = dx + dy;
+    for (;;) {
+        px(x0, y0, c);
+        if (x0 == x1 && y0 == y1) break;
+        int e2 = 2 * e;
+        if (e2 >= dy) { e += dy; x0 += sx; }
+        if (e2 <= dx) { e += dx; y0 += sy; }
+    }
+}
+
+static void disc(int cx, int cy, int r, int c)
+{
+    for (int j = -r; j <= r; j++)
+        for (int i = -r; i <= r; i++)
+            if (i * i + j * j <= r * r + r) px(cx + i, cy + j, c);
+}
+
+/* a rounded box, Model:Cycles' card */
+static void rbox(int x, int y, int w, int h, int r, int p)
+{
+    for (int j = 0; j < h; j++)
+        for (int i = 0; i < w; i++) {
+            int dx = i < r ? r - i : i >= w - r ? i - (w - r - 1) : 0;
+            int dy = j < r ? r - j : j >= h - r ? j - (h - r - 1) : 0;
+            if (dx * dx + dy * dy > r * r) continue;
+            px(x + i, y + j, p == PT_SOLID ? 1 : pat_ink(p, x + i, y + j));
+        }
+}
+
+/* a diamond, 7 px: the stats */
+static void diamond(int cx, int cy, int full)
+{
+    for (int j = -3; j <= 3; j++) {
+        int w = 3 - (j < 0 ? -j : j);
+        for (int i = -w; i <= w; i++) {
+            int edge = (i == -w || i == w);
+            if (full || edge) px(cx + i, cy + j, 1);
+        }
+    }
+}
+
+/* -------------------------------------------------------------------------------------------------- text */
+
+enum { TX_INK = 1, TX_PAPER = 0, TX_INV = 2, TX_GRAD = 99 };
+/* the gradient a TX_GRAD text is filled with: an outline in ink, inside Bayer from tg_l0 (top) to tg_l1 (bottom) */
+static int tg_y0, tg_h = 1, tg_l0 = 16, tg_l1 = 64;
+static void text_grad(int y0, int h, int l0, int l1) { tg_y0 = y0; tg_h = h > 1 ? h : 1; tg_l0 = l0; tg_l1 = l1; }
+
+static inline int glyph_bit(const m2k_font_t *f, int g, int gx, int gy)
+{
+    int w = f->w[g];
+    if (gx < 0 || gy < 0 || gx >= w || gy >= f->h) return 0;
+    const uint8_t *b = f->bits + f->off[g] + gy * ((w + 7) >> 3);
+    return (b[gx >> 3] >> (7 - (gx & 7))) & 1;
+}
+
+static inline int glyph_of(const m2k_font_t *f, int c)
+{
+    if (c >= 'a' && c <= 'z') c -= 32;
+    if (c < f->first || c > f->last) c = ' ';
+    return c - f->first;
+}
+
+static int text_w(const m2k_font_t *f, const char *s, int track)
+{
+    int w = 0, n = 0;
+    for (; *s; s++, n++) w += f->w[glyph_of(f, (unsigned char)*s)] + f->track + track;
+    return n ? w - f->track - track : 0;
+}
+
+/* fill: 1 ink, 0 paper, 2 invert, or 100 + pattern: an outline in ink, the inside in that pattern */
+static int text(const m2k_font_t *f, int x, int y, const char *s, int fill, int track)
+{
+    int x0 = x;
+    for (; *s; s++) {
+        int g = glyph_of(f, (unsigned char)*s), w = f->w[g];
+        for (int gy = 0; gy < f->h; gy++)
+            for (int gx = 0; gx < w; gx++) {
+                if (!glyph_bit(f, g, gx, gy)) continue;
+                if (fill == TX_GRAD) {
+                    int edge = !glyph_bit(f, g, gx - 1, gy) || !glyph_bit(f, g, gx + 1, gy) ||
+                               !glyph_bit(f, g, gx, gy - 1) || !glyph_bit(f, g, gx, gy + 1);
+                    int yy = y + gy - tg_y0, l = tg_l0 + ((tg_l1 - tg_l0) * CLAMP(yy, 0, tg_h)) / tg_h;
+                    px(x + gx, y + gy, edge || T_BAYER[(y + gy) & 7][(x + gx) & 7] < l);
+                } else if (fill >= 100) {
+                    int edge = !glyph_bit(f, g, gx - 1, gy) || !glyph_bit(f, g, gx + 1, gy) ||
+                               !glyph_bit(f, g, gx, gy - 1) || !glyph_bit(f, g, gx, gy + 1);
+                    if (edge || pat_ink(fill - 100, x + gx, y + gy)) px(x + gx, y + gy, 1);
+                    else px(x + gx, y + gy, 0);
+                } else {
+                    px(x + gx, y + gy, fill);
+                }
+            }
+        x += w + f->track + track;
+    }
+    return x - x0;
+}
+
+static int text_r(const m2k_font_t *f, int xr, int y, const char *s, int fill, int track)
+{
+    int w = text_w(f, s, track);
+    text(f, xr - w, y, s, fill, track);
+    return w;
+}
+
+static int text_c(const m2k_font_t *f, int cx, int y, const char *s, int fill, int track)
+{
+    int w = text_w(f, s, track);
+    text(f, cx - w / 2, y, s, fill, track);
+    return w;
+}
+
+/* a label on an ink box: the Swiss tag */
+static int tag(int x, int y, const char *s, int inv)
+{
+    int w = text_w(&F_S, s, 1) + 6;
+    if (inv) rect(x, y, w, F_S.h + 3, 1);
+    else frame(x, y, w, F_S.h + 3, 1);
+    text(&F_S, x + 3, y + 2, s, inv ? 0 : 1, 1);
+    return w;
+}
+
+/* ------------------------------------------------------------------------------------------------ images */
+
+/* 1-bit image, MSB first, rows of ceil(w/8) bytes; mode 1: ink where set, 2: also paper where clear, 3: xor */
+static void blit(const uint8_t *bits, int w, int h, int x, int y, int mode)
+{
+    int bpr = (w + 7) >> 3;
+    for (int j = 0; j < h; j++)
+        for (int i = 0; i < w; i++) {
+            int on = (bits[j * bpr + (i >> 3)] >> (7 - (i & 7))) & 1;
+            if (on) px(x + i, y + j, mode == 3 ? 2 : 1);
+            else if (mode == 2) px(x + i, y + j, 0);
+        }
+}
+
+/* the same, revealed through a Bayer threshold (0..64) */
+static void blit_dither(const uint8_t *bits, int w, int h, int x, int y, int level)
+{
+    int bpr = (w + 7) >> 3;
+    for (int j = 0; j < h; j++)
+        for (int i = 0; i < w; i++)
+            if (((bits[j * bpr + (i >> 3)] >> (7 - (i & 7))) & 1) && T_BAYER[(y + j) & 7][(x + i) & 7] < level)
+                px(x + i, y + j, 1);
+}
+
+/* ------------------------------------------------------------------------------------------- transitions */
+
+/* out = prev dissolved into fb: level 0 all prev, 64 all new (8 px period: one mask byte per row) */
+static void dissolve(int level)
+{
+    for (int y = 0; y < M2K_H; y++) {
+        uint8_t m = 0;
+        for (int i = 0; i < 8; i++) if (T_BAYER[y & 7][i] < level) m |= (uint8_t)(0x80u >> i);
+        const uint8_t *a = &fb_prev[y * ROWB], *b = &fb[y * ROWB];
+        uint8_t *o = &fb_out[y * ROWB];
+        for (int i = 0; i < ROWB; i++) o[i] = (uint8_t)((b[i] & m) | (a[i] & ~m));
+    }
+}
+
+/* the wipe: the new frame sweeps in behind a dithered edge, 80 px of gradient, left to right (or top down).
+ * p: 0..64 */
+static void wipe(int p, int down)
+{
+    for (int y = 0; y < M2K_H; y++) {
+        const uint8_t *a = &fb_prev[y * ROWB], *b = &fb[y * ROWB];
+        uint8_t *o = &fb_out[y * ROWB];
+        for (int bx = 0; bx < ROWB; bx++) {
+            uint8_t m = 0;
+            for (int i = 0; i < 8; i++) {
+                int x = bx * 8 + i;
+                int t = (down ? y : x) * 48 / 240 + (T_BAYER[y & 7][i] >> 2);
+                if (t < p) m |= (uint8_t)(0x80u >> i);
+            }
+            o[bx] = (uint8_t)((b[bx] & m) | (a[bx] & ~m));
+        }
+    }
+}
+
+/* the glitch, only between screens: two beats of 60 ms. A few bands, on the 8-px grid, slip sideways by one
+ * step (8 px) and back the other way; nothing moves up or down, so every line of text stays on its line. The
+ * same seed gives the same glitch. bands: how many slip in the first beat. */
+static void glitch(uint8_t *buf, uint32_t t, uint32_t seed, int bands)
+{
+    if (t >= 120) return;
+    uint32_t s = seed | 1u;
+    int beat = (int)(t / 60);
+    static uint8_t row[ROWB];
+    int n = beat == 0 ? bands : (bands + 1) / 2;
+    for (int k = 0; k < n; k++) {
+        s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+        int y0 = (int)(s % 27u) * 8 + 16, h = 8 * (1 + (int)((s >> 8) & 1u));
+        int sh = ((k + beat) & 1) ? -1 : 1;           /* one byte: 8 px */
+        for (int y = y0; y < y0 + h && y < M2K_H; y++) {
+            uint8_t *r = &buf[y * ROWB];
+            for (int i = 0; i < ROWB; i++) { int j = i - sh; row[i] = (j >= 0 && j < ROWB) ? r[j] : 0; }
+            m_cpy(r, row, ROWB);
+        }
+    }
+}

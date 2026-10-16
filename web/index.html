@@ -1,0 +1,146 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- MONO2K's emulator page: the firmware's own C core in the browser (m2k.wasm in worklet.js), on a drawn FM-1. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MONO2K Emulator</title>
+<meta name="description" content="MONO2K: six mono machines, a 64-step sequencer with parameter locks and trig conditions, and a lofi bus, for the M-VAVE FM-1. Running in your browser.">
+<script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+<link rel="stylesheet" href="style.css?v=8">
+</head>
+<body>
+<div class="rules" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+<header class="top">
+  <span>MONO2K</span>
+  <span>Firmware for the M-VAVE FM-1</span>
+  <span>V0.1 — Browser emulator</span>
+  <span class="r"><button id="theme" class="themebtn" type="button" aria-label="Colour theme">Auto</button></span>
+</header>
+
+<section class="hero">
+  <canvas id="wordmark" aria-label="MONO2K"></canvas>
+  <div class="hero__sub">
+    <p class="kicker">Six mono machines</p>
+    <p class="lede">A Monomachine-style synthesizer for a palm-sized FM synth. Six tracks, each one machine: sine, noise, chip, two kinds of FM, supersaw, chord, digital waves, a voice. A 64-step sequencer with parameter locks, trig conditions and ratchets. A bus that breaks the sound beautifully.</p>
+  </div>
+</section>
+
+<section class="play" id="play">
+  <div class="play__main">
+    <div class="panel" id="panelwrap">
+      <svg id="panel" viewBox="14 14 876 538" role="application" tabindex="0" aria-label="The FM-1 panel"></svg>
+      <canvas id="lcd" width="240" height="240" aria-label="The screen"></canvas>
+      <button id="start" class="start" type="button"><span>Start</span><small>Sound on. Click the panel, then play the keys.</small></button>
+    </div>
+  </div>
+  <aside class="play__side">
+    <div class="read" id="read">
+      <div><dt>Track</dt><dd id="r-trk">T1</dd></div>
+      <div><dt>Machine</dt><dd id="r-mach">GND-SIN</dd></div>
+      <div><dt>Pattern</dt><dd id="r-pat">A01</dd></div>
+      <div><dt>Tempo</dt><dd id="r-bpm">122</dd></div>
+      <div><dt>Step</dt><dd id="r-step">—</dd></div>
+      <div><dt>Keys</dt><dd id="r-mode">PLAY</dd></div>
+    </div>
+    <ol class="tracks" id="tracks"></ol>
+    <div class="tools">
+      <button type="button" id="midi">MIDI in</button>
+      <button type="button" id="palette">Screen: Paper</button>
+      <button type="button" id="reset" title="Forget the patterns saved in this browser">Factory reset</button>
+    </div>
+    <p class="note" id="status">The real firmware core, compiled to WebAssembly. What you hear is what the FM-1 will play.</p>
+  </aside>
+</section>
+
+<section class="sec" id="controls">
+  <div class="sec__n">01</div>
+  <div class="sec__body">
+    <h2>Controls</h2>
+    <p class="lede">Solid labels are computer keys (the F-keys work too, F1 FX to F10 SEQ). Click the panel first; Esc leaves it. Drag or scroll a knob to turn it.</p>
+    <div class="cols3">
+      <dl class="keys"><h3>Keys</h3>
+        <dt><kbd>Z</kbd>–<kbd>M</kbd> <kbd>Q</kbd>–<kbd>O</kbd></dt><dd>the 16 lower keys: notes, or steps in GRID</dd>
+        <dt><kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>2</kbd>…<kbd>9</kbd></dt><dd>the 11 upper keys: notes, or in GRID tracks 1–6, pages 1–4, mute</dd>
+        <dt>hold a step + knob</dt><dd>a parameter lock</dd>
+        <dt>hold a step + <kbd>[</kbd> <kbd>]</kbd></dt><dd>its condition: chance, 1:2 … 4:4, 1ST, PRE, FILL</dd>
+        <dt>hold a step + <kbd>-</kbd> <kbd>=</kbd></dt><dd>its ratchet, 1–4 hits</dd>
+        <dt>hold a step + <kbd>;</kbd> <kbd>'</kbd></dt><dd>its note</dd>
+        <dt>hold a step + <kbd>,</kbd> <kbd>.</kbd></dt><dd>accent, slide</dd>
+      </dl>
+      <dl class="keys"><h3>Buttons</h3>
+        <dt><kbd>5</kbd> EDIT</dt><dd>SYN: the machine's A–H</dd>
+        <dt><kbd>8</kbd> ENV</dt><dd>AMP: envelope, distortion, pan</dd>
+        <dt><kbd>0</kbd> SEL</dt><dd>FILT: base / width, resonance, envelope</dd>
+        <dt><kbd>P</kbd> FX</dt><dd>EQ and rate · delay · destroy</dd>
+        <dt><kbd>L</kbd> LFO</dt><dd>three LFOs, two pages each</dd>
+        <dt><kbd>K</kbd> ARP</dt><dd>the track's arpeggiator</dd>
+        <dt><kbd>G</kbd> GLO</dt><dd>tempo · lofi bus · SPU reverb; held + key 1–6: mute</dd>
+        <dt><kbd>1</kbd> HOME</dt><dd>the pattern, six lanes</dd>
+        <dt><kbd>A</kbd> SEQ</dt><dd>the keys: play, or the 16 steps (GRID)</dd>
+        <dt><kbd>Space</kbd> PLAY · <kbd>Enter</kbd> REC</dt><dd>REC held: FILL</dd>
+        <dt><kbd>\</kbd> SAVE</dt><dd>saves the patterns in this browser</dd>
+      </dl>
+      <dl class="keys"><h3>Knobs</h3>
+        <dt><kbd>;</kbd> <kbd>'</kbd> SELECT</dt><dd>the track</dd>
+        <dt><kbd>,</kbd> <kbd>.</kbd> ALGORITHM</dt><dd>the track's machine</dd>
+        <dt><kbd>[</kbd> <kbd>]</kbd> PRESETS</dt><dd>the pattern (queued while playing)</dd>
+        <dt><kbd>Tab</kbd></dt><dd>picks KNOB 1–4</dd>
+        <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>turn it (Shift: faster)</dd>
+        <dt><kbd>-</kbd> <kbd>=</kbd></dt><dd>OCT− OCT+ (in GRID: the page)</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="machines">
+  <div class="sec__n">02</div>
+  <div class="sec__body">
+    <h2>Machines</h2>
+    <p class="lede">Nine machines in six families, after what is published about the Monomachine's: written from scratch for MONO2K, integer only, to be tuned against the original by ear and by measurement. Point at a card: its mark turns, as on the screen.</p>
+  </div>
+  <div class="mgrid" id="mgrid"></div>
+</section>
+
+<section class="sec" id="sequencer">
+  <div class="sec__n">03</div>
+  <div class="sec__body">
+    <h2>Sequencer</h2>
+    <div class="cols2">
+      <p>Six tracks of up to 64 steps, on four pages of sixteen. Every step is a trig with its note, accent and slide. Hold a step and turn any knob: that value is locked to the step and comes back to the kit on the next trig. In the lanes, a locked step is checked.</p>
+      <p>Modern trig conditions: a chance (75, 50, 33, 25, 12%), every A of B loops (1:2 … 4:4), the first loop only, after the previous condition (PRE), or only when you hold FILL. A chance is drawn as its own density of dither. Ratchets repeat a step two to four times.</p>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="destroy">
+  <div class="sec__n">04</div>
+  <div class="sec__body">
+    <h2>Destroy</h2>
+    <div class="cols2">
+      <p>Every track: the Monomachine's chain, with HP and LP filters as a base and a width, distortion, a parametric EQ band, sample rate reduction and a delay of its own in 8-bit mu-law at half rate. Then bits, a wavefold and an XOR that mangles the samples.</p>
+      <p>The bus: an SPU-style reverb at 22 kHz, a beat repeat that slices the last sixteenth (reversed, halving, slowing to a tape stop), tape wow and flutter, a 4-bit ADPCM crunch, hiss and dust, and a drive into the soft clip.</p>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="status-sec">
+  <div class="sec__n">05</div>
+  <div class="sec__body">
+    <h2>Status</h2>
+    <div class="cols2">
+      <p>A prototype. This page runs the firmware's C core as it is; the FM-1 build adds Felucca's platform (the hardware layer, USB, storage, the update loader and installer) and has not been flashed yet. Saves may change.</p>
+      <p>Built on the open FM-1 work: Felucca by Leo Kuroshita (Hügelton Instruments), CS-1, X0X, FoMni and the others. Inter Tight under the SIL OFL. MONO2K is not affiliated with Elektron or M-VAVE; Monomachine is Elektron's.</p>
+    </div>
+  </div>
+</section>
+
+<footer class="foot">
+  <span>MONO2K</span><span>Six mono machines</span><span>FM-1</span><span class="r">2026</span>
+</footer>
+
+<script src="app.js?v=12"></script>
+</body>
+</html>
