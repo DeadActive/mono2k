@@ -20,7 +20,7 @@
   --text: "Helvetica Neue", Helvetica, "Inter Tight", Arial, sans-serif;
   --mono: "SF Mono", ui-monospace, Menlo, monospace;
   /* space */
-  --s1: 8px; --s2: 16px; --s3: 24px; --s4: 32px; --s6: 48px; --s8: 64px; --s12: 96px;
+  --s1: 8px; --s2: 16px; --s3: 24px; --s4: 32px; --s6: 48px; --s8: 64px; --s12: 96px; --s16: 128px; --s24: 192px;
   --gut: var(--s2);
   /* type */
   --label: 700 11px / 16px var(--text);
@@ -164,7 +164,7 @@ p, h2, h3, dl, dd, ol { margin: 0; }
 .pats button.q { background-image: var(--d-dots); background-size: 2px 2px; image-rendering: pixelated; }
 
 /* the sections: the number on 4 columns, the text on 8; full-width blocks below them */
-.sec { position: relative; z-index: 1; row-gap: var(--s4); padding-top: var(--s12); padding-bottom: var(--s12); border-bottom: 1px solid var(--ink); }
+.sec { position: relative; z-index: 1; row-gap: var(--s4); padding-top: var(--s24); padding-bottom: var(--s24); border-bottom: 1px solid var(--ink); }
 .sec::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: var(--s4); background: var(--g-down) 0 0 / 4px var(--s4) repeat-x; image-rendering: pixelated; opacity: 0.9; pointer-events: none; }
 .sec__n { grid-column: 1 / span 4; font: 400 clamp(56px, 9vw, 112px) / 0.8 var(--head); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .sec__body { grid-column: 5 / span 8; display: grid; gap: var(--s3); align-content: start; }
@@ -216,7 +216,7 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
   .keys:last-child { grid-column: 1 / -1; }
 }
 @media (max-width: 720px) {
-  .sec { padding-top: var(--s8); padding-bottom: var(--s8); }
+  .sec { padding-top: var(--s16); padding-bottom: var(--s16); }
   .bar > * { grid-column: span 6; }
   .bar { row-gap: var(--s1); padding-top: var(--s2); padding-bottom: var(--s2); }   /* bars that wrap: rows apart */
   header.bar > :nth-child(2), header.bar > :nth-child(3) { display: none; }   /* the name and the switch only */
