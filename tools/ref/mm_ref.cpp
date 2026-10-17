@@ -175,6 +175,14 @@ namespace
 			unsigned machine, note, vel;
 			double gate, tail;
 			require(static_cast<bool>(in >> name >> machine >> note >> vel >> gate >> tail), "bad spec line");
+			// every line starts fresh: the OS keeps a machine running between notes (its oscillator feeding the filter), so
+			// a line would inherit the last one's resonance (chain_order11). Another machine assigned does not reset it;
+			// a note played on it does (chain_order11 measured both)
+			assign(*hw, 0, static_cast<uint8_t>(machine == 2 ? 1 : 2));
+			midi(*hw, 0x90, static_cast<uint8_t>(note), 100);
+			advance(*hw, g_rate / 20);
+			midi(*hw, 0x80, static_cast<uint8_t>(note), 0);
+			advance(*hw, g_rate / 2);
 			assign(*hw, 0, static_cast<uint8_t>(machine));
 			std::string kv;
 			while(in >> kv)

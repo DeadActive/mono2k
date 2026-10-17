@@ -31,7 +31,13 @@ pages and their locks (self-test; a PTCH shift in the v4 path and a note shift i
 
 - **Resonant LP sweeps on the SID basses pull short notes ~20 c flat** (A04 A05 A06 A13 A14 A16; A15 -48 c): as the
   envelope sweeps the resonant cutoff down through the harmonics their phase turns, bending them. Opened (LPQ 0,
-  WDTH 127) the same lines measure +0.1 c (A04, 90 % within 1.2 c). Acoustic, not a fault; on short bass notes, audible.
+  WDTH 127) the same lines measure +0.1 c (A04, 90 % within 1.2 c). The Monomachine bends alike: A04's sweep on
+  SWAVE-SAW (the source both share) at its eight most played notes, median -17.6 c there, -17.4 c on MONO2K, per note
+  within 0 c median, 5.8 c worst; without the resonance -4.4 / -4.5 c; open +0.3 / -0.1 c (`chain_sidbend14`,
+  regress.py `bend`). The instrument's, then; on short bass notes, audible.
+- **SWAV-ENS acceptance**: this bank is kept as `tools/ref/fixtures/bank_a_ea69d53.bin` (16 packed patterns, replayed
+  bit-identically); `tools/demo_pitch.py --accept-ens` fails all eight ENS parts today (in context worst A12 T2
+  -116 c, A09 T5 +97 c) and is the rebuild's acceptance test.
 - **Resonant cutoffs ringing off the key.** The filter follows the note in steps of a tone and a half, so a resonant
   LP rings at a fixed interval over every note: +15 st (A04 A05 A13 A16), +18 st (A06: an octave and a tritone),
   +6 st at Q 46 (A09: a tritone, the strongest), +21 st on A07's pad. Off the key on 18-55 of each line's trigs.

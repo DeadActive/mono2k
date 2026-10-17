@@ -246,6 +246,19 @@ def tune13():
     return out
 
 
+def sidbend14():
+    out = ["# is a resonant sweep's pitch bend the instrument's? A04's SID bass, its chain as written (WDTH 26, LPQ 50, FDEC 34,"
+           " WOFS 84, DIST 72, DEC 34, gate 73 ms at 128 bpm), on SWAVE-SAW (the source both instruments share, calibrated"
+           " within 0.2 c) at its eight most played notes; then without the resonance, then the filter open"]
+    saw = {48: 0, 49: 0, 50: 0, 51: 0, 52: 0, 53: 0, 54: 0, 55: 64}
+    amp = {56: 0, 57: 0, 58: 34, 59: 10, 60: 72, 61: 127}
+    for kind, filt in (("res", {73: 26, 75: 50, 77: 34, 79: 84}), ("nores", {73: 26, 75: 0, 77: 34, 79: 84}),
+                       ("open", {73: 127, 75: 0, 77: 34, 79: 64})):
+        for n in (45, 43, 41, 40, 52, 48, 57, 55):
+            out.append(line(f"s14_{kind}_n{n}", 4, n, {**saw, **amp, **filt}, gate=0.073, tail=0.3))
+    return out
+
+
 def order11():
     out = ["# is a render alone? One run, in this order: a resonant C3 sine fresh, the same again, again with the Q moved,"
            " a long tail after the gate (REL 0), another machine between, fresh again, another note; then a decaying"
@@ -272,7 +285,7 @@ if __name__ == "__main__":
                 fh.write("\n".join(f()) + "\n")
     elif sys.argv[1] == "specs3":
         d = sys.argv[2]
-        for name, f in (("clip3", clip3), ("map3", map3), ("fenv4", fenv4), ("ftime5", ftime5), ("res6", res6), ("hres8", hres8), ("drive10", drive10), ("order11", order11), ("drive12", drive12), ("tune13", tune13)):
+        for name, f in (("clip3", clip3), ("map3", map3), ("fenv4", fenv4), ("ftime5", ftime5), ("res6", res6), ("hres8", hres8), ("drive10", drive10), ("order11", order11), ("drive12", drive12), ("tune13", tune13), ("sidbend14", sidbend14)):
             with open(os.path.join(d, f"chain_{name}.spec"), "w") as fh:
                 fh.write("\n".join(f()) + "\n")
     elif sys.argv[1] == "specs2":

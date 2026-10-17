@@ -1,5 +1,77 @@
 {
 "cases": {
+"bend:s14_nores_n40:bend_c:{\"note\": 40}": [
+-5.1965
+],
+"bend:s14_nores_n41:bend_c:{\"note\": 41}": [
+-7.25
+],
+"bend:s14_nores_n43:bend_c:{\"note\": 43}": [
+-5.9232
+],
+"bend:s14_nores_n45:bend_c:{\"note\": 45}": [
+-5.75
+],
+"bend:s14_nores_n48:bend_c:{\"note\": 48}": [
+-2.7359
+],
+"bend:s14_nores_n52:bend_c:{\"note\": 52}": [
+-3.6652
+],
+"bend:s14_nores_n55:bend_c:{\"note\": 55}": [
+-3.4166
+],
+"bend:s14_nores_n57:bend_c:{\"note\": 57}": [
+-2.4689
+],
+"bend:s14_open_n40:bend_c:{\"note\": 40}": [
+0.25
+],
+"bend:s14_open_n41:bend_c:{\"note\": 41}": [
+0.3961
+],
+"bend:s14_open_n43:bend_c:{\"note\": 43}": [
+-0.0333
+],
+"bend:s14_open_n45:bend_c:{\"note\": 45}": [
+0.75
+],
+"bend:s14_open_n48:bend_c:{\"note\": 48}": [
+0.3567
+],
+"bend:s14_open_n52:bend_c:{\"note\": 52}": [
+0.25
+],
+"bend:s14_open_n55:bend_c:{\"note\": 55}": [
+0.252
+],
+"bend:s14_open_n57:bend_c:{\"note\": 57}": [
+0.5227
+],
+"bend:s14_res_n40:bend_c:{\"note\": 40}": [
+-27.2364
+],
+"bend:s14_res_n41:bend_c:{\"note\": 41}": [
+-26.6144
+],
+"bend:s14_res_n43:bend_c:{\"note\": 43}": [
+-22.25
+],
+"bend:s14_res_n45:bend_c:{\"note\": 45}": [
+-18.2014
+],
+"bend:s14_res_n48:bend_c:{\"note\": 48}": [
+-16.5987
+],
+"bend:s14_res_n52:bend_c:{\"note\": 52}": [
+-17.051
+],
+"bend:s14_res_n55:bend_c:{\"note\": 55}": [
+-11.699
+],
+"bend:s14_res_n57:bend_c:{\"note\": 57}": [
+-8.6608
+],
 "clip:c3_lp24_080:harm:{\"note\": 48}": [
 -17.5777,
 -15.0201,

@@ -24,11 +24,12 @@ from chain_anal import harm, psd
 REF_JSON = os.path.join(HERE, "regress_ref.json")
 GAPS_JSON = os.path.join(HERE, "regress_gaps.json")
 SPECS = ["chain_levels", "chain_dist2", "chain_filt2", "chain_map3", "chain_clip3", "chain_eq2", "chain_srr2",
-         "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13"]
+         "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14"]
 MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2": "mm_cfilt2", "chain_map3": "mm_cmap3",
           "chain_clip3": "mm_cclip3", "chain_eq2": "mm_ceq2", "chain_srr2": "mm_csrr2", "chain_delay": "mm_cdelay",
           "chain_delay2": "mm_cdelay2", "chain_ftime5": "mm_cftime5", "chain_res6": "mm_cres6",
-          "chain_drive12": "mm_cdrive12", "chain_tune13": "mm_ctune13"}
+          "chain_drive12": "mm_cdrive12", "chain_tune13": "mm_ctune13",
+          "chain_sidbend14": "mm_csidbend14"}
 
 
 def db(v):
@@ -79,6 +80,19 @@ def m_pitch_c(x, a, ld):                  # the sine's pitch, cents from the not
     l0, l1, l2 = np.log(sp[k - 1]), np.log(sp[k]), np.log(sp[k + 1])
     fq = (k + 0.5 * (l0 - l2) / (l0 - 2 * l1 + l2)) * SR / (8 * len(s))
     return [float(1200 * np.log2(fq / f0_of(a["note"])))]
+
+
+def m_bend_c(x, a, ld):                  # a short note's pitch over its audible part (harmonic comb), cents from the note
+    sys.path.insert(0, os.path.join(HERE, ".."))
+    import demo_pitch as D
+    y = x[:, 0]
+    e = np.convolve(np.abs(y), np.ones(64) / 64, "same")
+    o = int(np.argmax(e > e.max() * 0.05))
+    seg = y[o + int(0.015 * SR):o + int(0.35 * SR)]
+    sm = np.convolve(np.abs(seg), np.ones(256) / 256, "same")
+    k = np.nonzero(sm > sm.max() * 0.03)[0]
+    sp, df = D.spectrum(seg[k[0]:k[-1]])
+    return [D.comb(sp, df, f0_of(a["note"]))[0]]
 
 
 def m_thd(x, a, ld):
@@ -214,7 +228,7 @@ def _resfit(f, ratio, fc, hp):
 
 METRICS = {"res_fit": m_res_fit, "rms": m_rms, "h1": m_h1, "h1_rel": m_h1_rel, "harm": m_harm, "thd": m_thd, "peak_hz": m_peak_hz,
            "res_db": m_res_db, "resp_at": m_resp_at, "srr_image": m_srr_image, "level_at": m_level_at, "echo_ms": m_echo_ms,
-           "echoes": m_echoes, "echo_bands": m_echo_bands, "fenv_ms": m_fenv_ms, "tone_rel": m_tone_rel, "pitch_c": m_pitch_c}
+           "echoes": m_echoes, "echo_bands": m_echo_bands, "fenv_ms": m_fenv_ms, "tone_rel": m_tone_rel, "pitch_c": m_pitch_c, "bend_c": m_bend_c}
 
 
 # ------------------------------------------------------------------------------------------------------ cases
@@ -313,6 +327,9 @@ def cases():
             add("tune", "chain_tune13", f"t13_{kind}_{t:03d}", "tone_rel", {"ref": f"t13_{kind}_064"}, 1.0)
         for t in (32, 48, 80, 95):
             add("tune", "chain_tune13", f"t13_{kind}_{t:03d}", "pitch_c", {"note": 60}, 1.0)
+    for kind, tol in (("res", 6.0), ("nores", 1.5), ("open", 1.5)):   # a resonant sweep bends a short note flat:
+        for n in (45, 43, 41, 40, 52, 48, 57, 55):                    # the Monomachine's too (chain_sidbend14)
+            add("bend", "chain_sidbend14", f"s14_{kind}_n{n}", "bend_c", {"note": n}, tol)
     hz = [60, 150, 400, 800, 1600, 3200, 6400]
     top = "the EQ's top band: the reference's skirts stay wide toward Nyquist, MONO2K's warp narrow"
     for v in (0, 16, 32, 48, 64, 80, 96, 112, 127):
