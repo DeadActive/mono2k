@@ -58,6 +58,11 @@ out.append(arr("T_AHOLD", "uint32_t", [round(a_hold(v) * SR / SUB) for v in rang
 out.append(arr("T_AATK_MS10", "uint32_t", [round(a_atk(v) * 10000) for v in range(128)], 8))
 out.append(arr("T_ADEC_MS10", "uint32_t", [round(a_dec(v) * 10000) for v in range(128)], 8))
 out.append(arr("T_AHLD_MS10", "uint32_t", [round(a_hold(v) * 10000) for v in range(128)], 8))
+# the modulation effect's sweep: 0.1 Hz .. 10 Hz, as a phase step per sample, and for the screen in 0.1 Hz
+def mod_hz(v):
+    return 0.1 * 100 ** (v / 127.0)
+out.append(arr("T_MOD_INC", "uint32_t", [round(mod_hz(v) / SR * 2 ** 32) for v in range(128)], 8))
+out.append(arr("T_MOD_HZ10", "uint16_t", [max(1, round(mod_hz(v) * 10)) for v in range(128)]))
 # patterns saved before (version 1) timed ATK HOLD DEC REL on etime(): each value to the one nearest its time
 def nearest(t, f, lo=0, hi=126):
     return min(range(lo, hi + 1), key=lambda v: abs(math.log(max(f(v), 1e-6)) - math.log(max(t, 1e-6))))

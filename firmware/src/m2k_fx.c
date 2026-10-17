@@ -150,7 +150,7 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
                 sum += y;
                 off += CB_LEN[c];
             }
-            int32_t ch[2] = {sum >> 2, sum >> 2};
+            int32_t ch[2] = {sum, sum};                   /* the input came in at a quarter, for the combs' headroom */
             off = 0;
             for (int a = 0; a < 4; a++) {
                 int16_t *b = &ap_buf[off];

@@ -40,7 +40,8 @@ enum {
     P_BITS = 32, P_FOLD, P_XOR, P_SPU,
     P_PTCH = 36, P_LEVL, P_AMOD, P_ASPD, P_ARNG, P_GATE,
     P_LFO = 42,                   /* 3 x 8: TRCK DEST WAVE TRIG MULT SPD PHAS DPTH */
-    P_COUNT = 66
+    P_MODT = 66, P_MODR, P_MODD, P_MODM,   /* the modulation effect: CHOR FLNG PHAS, rate, depth, mix */
+    P_COUNT = 70
 };
 enum { L_TRCK, L_DEST, L_WAVE, L_TRIG, L_MULT, L_SPD, L_PHAS, L_DPTH };
 

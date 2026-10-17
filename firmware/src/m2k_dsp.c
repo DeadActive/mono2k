@@ -65,10 +65,16 @@ typedef struct {
     uint8_t eff[P_COUNT];
     int32_t mod[P_COUNT], mod_acc[P_COUNT];
     int32_t peak;
+    /* the modulation effect */
+    uint32_t mph;
+    uint16_t mw;
+    int32_t map[4], mfb;
 } trk_t;
 
 static trk_t trk[M2K_TRACKS];
 static uint8_t dl_mem[M2K_TRACKS][DL_LEN] POOL;
+#define MOD_LEN 1024u                  /* 23 ms: room for the chorus' sweep */
+static int16_t mod_mem[M2K_TRACKS][MOD_LEN] POOL;
 static int16_t blk[M2K_TRACKS][M2K_SUB];      /* machine output of this block */
 
 /* a parameter with its modulation, 0..127*256 */
@@ -584,6 +590,38 @@ static void voice_off(int ti)
     t->let_go = 1;
 }
 
+/* the modulation effect, one sample: a chorus (7..17 ms, swept), a flanger (0.5..5 ms, fed back) or a phaser (four
+ * allpasses swept from 0.1 to 0.9, fed back), all on one triangle LFO; mix 0..254 of the wet */
+static inline int32_t mod_tick(trk_t *t, int16_t *buf, int32_t x, int type, uint32_t inc, int32_t dep, int32_t mix)
+{
+    t->mph += inc;
+    int32_t tri = (int32_t)(t->mph >> 16);
+    tri = tri < 32768 ? tri : 65535 - tri;                       /* 0..32767 */
+    int32_t y;
+    if (type == 2) {
+        int32_t a = 3277 + (int32_t)(((int64_t)tri * (dep * 206)) >> 15);
+        int32_t v = x + (t->mfb >> 1);
+        for (int k = 0; k < 4; k++) {
+            int32_t u = v - ((a * t->map[k]) >> 15);
+            v = ((a * u) >> 15) + t->map[k];
+            t->map[k] = CLAMP(u, -65536, 65536);
+        }
+        y = v;
+        t->mfb = CLAMP(y, -65536, 65536);
+    } else {
+        int32_t d8 = type == 0 ? (309 << 8) + (int32_t)(((int64_t)tri * dep * 441) >> 14)    /* Q8 samples */
+                               : (20 << 8) + (int32_t)(((int64_t)tri * dep * 200) >> 14);
+        int32_t pos = ((int32_t)t->mw << 8) - d8;
+        uint32_t j = (uint32_t)(pos >> 8);
+        int32_t f = pos & 255;
+        y = (buf[j & (MOD_LEN - 1)] * (256 - f) + buf[(j + 1) & (MOD_LEN - 1)] * f) >> 8;
+        int32_t w = type == 1 ? x + ((y * 18000) >> 15) : x;
+        buf[t->mw & (MOD_LEN - 1)] = (int16_t)sat16(w);
+        t->mw++;
+    }
+    return x + (((y - x) * mix) >> 8);
+}
+
 /* one control block of one track: modulation, envelopes, the machine, then the chain, summed into lr */
 static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t *rsend)
 {
@@ -637,6 +675,8 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     int pan = P7(t, P_PAN);
     int32_t gl = T_PAN[pan], gr = T_PAN[127 - pan];
     int32_t ds = T_VOL[P7(t, P_DSND)], rs = T_VOL[P7(t, P_SPU)];
+    int mtype = PN(t, P_MODT, 3), mmix = P7(t, P_MODM) * 2, mdep = P7(t, P_MODD);
+    uint32_t minc = T_MOD_INC[P7(t, P_MODR)];
     int32_t pk = 0;
     for (int i = 0; i < M2K_SUB; i++) {
         int32_t s = blk[ti][i];
@@ -655,6 +695,7 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
             s = t->srr_hold;
         }
         if (bits < 16) s = (sat16(s) >> (16 - bits)) << (16 - bits);
+        if (mmix) s = mod_tick(t, mod_mem[ti], s, mtype, minc, mdep, mmix);
         int32_t as = s < 0 ? -s : s;
         if (as > pk) pk = as;
         L[i] += (s * gl) >> 15;

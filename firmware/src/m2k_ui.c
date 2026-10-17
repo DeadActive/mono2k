@@ -11,7 +11,7 @@
 /* ------------------------------------------------------------------------------------------- parameters */
 
 enum {
-    K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
+    K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOWL, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
     K_BPM, K_SWNG, K_LEN, K_PCT, K_GSIZ, K_FINE, K_SCRN, K_PROJ, K_LOAD
 };
@@ -24,7 +24,7 @@ static const pi_t PI_COMMON[P_LFO - 8] = {
     {"ATCK", "FILTER ATTACK", K_TIME}, {"DEC", "FILTER DECAY", K_DECT}, {"B-OF", "BASE BY ENV", K_BI}, {"W-OF", "WIDTH BY ENV", K_BI},
     {"EQF", "EQ FREQUENCY", K_HZ}, {"EQG", "EQ GAIN", K_BI}, {"SRR", "RATE REDUCTION", K_NUM}, {"DTIM", "DELAY TIME", K_DTIM},
     {"DSND", "DELAY SEND", K_NUM}, {"DFB", "DELAY FEEDBACK", K_NUM}, {"DBAS", "DELAY BASE", K_HZ}, {"DWID", "DELAY WIDTH", K_NUM},
-    {"BITS", "BIT DEPTH", K_BITS}, {"FOLD", "WAVEFOLD", K_NUM}, {"XOR", "XOR MANGLE", K_NUM}, {"SPU", "SPU SEND", K_NUM},
+    {"BITS", "BIT DEPTH", K_BITS}, {"FOLD", "WAVEFOLD", K_NUM}, {"XOR", "XOR MANGLE", K_NUM}, {"VERB", "REVERB SEND", K_NUM},
     {"PTCH", "TRACK PITCH", K_SEMI}, {"LEVL", "TRACK LEVEL", K_NUM}, {"MODE", "ARP MODE", K_AMOD}, {"SPD", "ARP SPEED", K_ASPD},
     {"RNG", "ARP RANGE", K_ARNG}, {"GATE", "GATE LENGTH", K_GATE},
 };
@@ -32,10 +32,14 @@ static const pi_t PI_LFO[8] = {
     {"TRCK", "LFO TRACK", K_TRK}, {"DEST", "LFO DESTINATION", K_DEST}, {"WAVE", "LFO WAVE", K_LWAV}, {"TRIG", "LFO TRIG MODE", K_LTRG},
     {"MULT", "LFO MULTIPLIER", K_MULT}, {"SPD", "LFO SPEED", K_NUM}, {"PHAS", "START PHASE", K_NUM}, {"DPTH", "LFO DEPTH", K_BI},
 };
+static const pi_t PI_MOD[4] = {
+    {"TYPE", "MOD TYPE", K_MODT}, {"RATE", "MOD RATE", K_MHZ}, {"DPTH", "MOD DEPTH", K_NUM}, {"MIX", "MOD MIX", K_NUM},
+};
+
 static const pi_t PI_GLOB[G_COUNT] = {
     {"BPM", "TEMPO", K_BPM}, {"SWNG", "SWING", K_SWNG}, {"LEN", "PATTERN LENGTH", K_LEN}, {"ACNT", "ACCENT", K_NUM},
     {"TAPE", "TAPE WOW", K_NUM}, {"ADPC", "ADPCM CRUNCH", K_NUM}, {"GLCH", "GLITCH CHANCE", K_PCT}, {"SIZE", "REPEAT SIZE", K_GSIZ},
-    {"VERB", "SPU DECAY", K_NUM}, {"DAMP", "SPU DAMPING", K_NUM}, {"HISS", "HISS AND DUST", K_NUM}, {"DRIV", "BUS DRIVE", K_NUM},
+    {"DCAY", "REVERB DECAY", K_NUM}, {"DAMP", "REVERB DAMPING", K_NUM}, {"HISS", "HISS AND DUST", K_NUM}, {"DRIV", "BUS DRIVE", K_NUM},
 };
 
 static const pi_t PI_SET[3] = {
@@ -99,6 +103,7 @@ static const pi_t *pinfo(int t, int id)
     if (id >= 0x80) return &PI_GLOB[id & 0x7F];
     if (id < 8) return &MI[pat[cur_pat].machine[t]].syn[id];
     if (id < P_LFO) return &PI_COMMON[id - 8];
+    if (id >= P_MODT) return &PI_MOD[(id - P_MODT) & 3];
     return &PI_LFO[(id - P_LFO) & 7];
 }
 
@@ -109,6 +114,7 @@ static int kind_choices(int k)
     case K_SIDW: return 8;
     case K_SIDM: case K_ALGO: case K_ASPD: case K_ARNG: return 4;
     case K_SCRN: return 2;
+    case K_MODT: return 3;
     case K_PROJ: return M2K_PROJECTS;
     case K_VOIC: case K_LWAV: return 7;
     case K_TRK: case K_AMOD: return 6;
@@ -164,6 +170,8 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
         else { s_int(out, (int)(ms10 / 10000)); *unit = "S"; }
         break;
     }
+    case K_MODT: { static const char *const N[3] = {"CHOR", "FLNG", "PHAS"}; s_cpy(out, N[c < 3 ? c : 2]); break; }
+    case K_MHZ: s_dec1(out, T_MOD_HZ10[v]); *unit = "HZ"; break;
     case K_HZ: {
         int hz = T_HZ[v];
         if (hz < 1000) { s_int(out, hz); *unit = "HZ"; }
@@ -222,7 +230,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
 /* -------------------------------------------------------------------------------------------- the pages */
 
 enum { PG_HOME, PG_SYN, PG_AMP, PG_FILT, PG_FX, PG_LFO, PG_ARP, PG_GLO, PG_COUNT };
-static const uint8_t NSUB[PG_COUNT] = {1, 2, 2, 2, 3, 6, 1, 4};
+static const uint8_t NSUB[PG_COUNT] = {1, 2, 2, 2, 4, 6, 1, 4};
 #define SETTING(i) (0xC0 | (i))
 #define GL(g) (0x80 | (g))
 #define NONE 0xFF
@@ -234,7 +242,7 @@ static int knob_param(int page, int sub, int k)
     case PG_SYN: return P_SYN + sub * 4 + k;
     case PG_AMP: return P_ATK + sub * 4 + k;
     case PG_FILT: return P_BASE + sub * 4 + k;
-    case PG_FX: return P_EQF + sub * 4 + k;
+    case PG_FX: return sub < 3 ? P_EQF + sub * 4 + k : P_MODT + k;
     case PG_LFO: return P_LFO + (sub >> 1) * 8 + (sub & 1) * 4 + k;
     case PG_ARP: return P_AMOD + k;
     case PG_GLO: return sub < 3 ? GL(sub * 4 + k) : k == 0 ? SETTING(S_SCREEN) : k == 1 ? SETTING(16) : k == 2 ? SETTING(17) : NONE;
@@ -246,10 +254,9 @@ static void page_label(int page, int sub, char *o)
 {
     static const char *const N[PG_COUNT] = {"HOME", "SYN", "AMP", "FILT", "FX", "LFO", "ARP", "GLO"};
     switch (page) {
-    case PG_FX: s_cpy(o, sub == 0 ? "FX" : sub == 1 ? "DELAY" : "DSTR"); break;
+    case PG_FX: s_cpy(o, sub == 0 ? "FX" : sub == 1 ? "DELAY" : sub == 2 ? "DSTR" : "MOD"); break;
     case PG_LFO: { char *e = s_cpy(o, "LFO"); e = s_int(e, (sub >> 1) + 1); s_cpy(e, (sub & 1) ? "B" : "A"); break; }
-    case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "BUS" : sub == 2 ? "SPU" : "SET"); break;
-    case PG_SYN: case PG_AMP: case PG_FILT: { char *e = s_cpy(o, N[page]); *e++ = ' '; e = s_int(e, sub + 1); s_cpy(e, "/2"); break; }
+    case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "GLITCH" : sub == 2 ? "VERB" : "SET"); break;
     default: s_cpy(o, N[page]); break;
     }
 }
@@ -769,6 +776,14 @@ static void header(void)
     char o[24];
     page_label(ui.page, ui.sub, o);
     int x = tag(0, 0, o, 1) + 4;
+    /* where in the section: a square a page, this one solid, on the type's middle line */
+    if (NSUB[ui.page] > 1) {
+        for (int i = 0; i < NSUB[ui.page]; i++) {
+            if (i == ui.sub) rect(x + i * 6, 4, 4, 6, 1);
+            else frame(x + i * 6, 4, 4, 6, 1);
+        }
+        x += NSUB[ui.page] * 6 + 4;
+    }
     m2k_pattern_t *p = &pat[cur_pat];
     const mi_t *mi = &MI[p->machine[ui.trk]];
     clip(0, 0, xr - 2, 15);
@@ -1109,6 +1124,23 @@ static void picture(void)
                 prev = y;
             }
             dotted_h(X, Y + 46, W);
+        } else if (ui.sub == 3) {      /* the modulation: its sweep at its rate, as deep as DPTH, and how much of it */
+            int type = (k[P_MODT] * 3) >> 7, dep = k[P_MODD], mix = k[P_MODM];
+            uint32_t ph = (uint32_t)ui.now * (T_MOD_INC[k[P_MODR]] * 44u);
+            int mid = Y + 34, amp = 3 + dep * 28 / 127, prev = mid;
+            for (int i = 0; i < W; i++) {
+                int32_t tri = (int32_t)((ph + (uint32_t)i * (0xFFFFFFFFu / W)) >> 16);
+                tri = tri < 32768 ? tri : 65535 - tri;
+                int y = mid + amp - (tri * amp * 2 >> 15);
+                for (int j = y; j <= mid + amp; j++) if (pat_ink(type == 2 ? PT_DIAG : type == 1 ? PT_LINES : PT_DOTS, X + i, j)) px(X + i, j, 1);
+                if (i) line(X + i - 1, prev, X + i, y, 1);
+                prev = y;
+            }
+            hline(X, mid + amp + 1, W, 1);
+            static const char *const N[3] = {"CHOR", "FLNG", "PHAS"};
+            int bx = X + tag(X, Y + 74, N[type], 1) + 4, bw = X + W - bx;
+            frame(bx, Y + 76, bw, 9, 1);
+            rect_grad(bx + 1, Y + 77, (bw - 2) * mix / 127, 7, 20, 64, 1);
         } else {                       /* EQ: the band and its gain */
             int f = k[P_EQF] * (W - 1) / 127, g = k[P_EQG] - 64, prev = 0;
             for (int i = 0; i < W; i++) {

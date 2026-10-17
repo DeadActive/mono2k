@@ -29,7 +29,7 @@ static int pat_pack(const m2k_pattern_t *p, uint8_t *o)
 {
     int n = 0;
     o[n++] = 'P';
-    o[n++] = 2;                        /* 2: the amp envelope on the Monomachine's times */
+    o[n++] = 3;                        /* 2: the amp envelope on the Monomachine's times; 3: the MOD effect */
     m_cpy(o + n, p->name, 8); n += 8;
     m_cpy(o + n, p->machine, M2K_TRACKS); n += M2K_TRACKS;
     m_cpy(o + n, p->glob, G_COUNT); n += G_COUNT;
@@ -62,9 +62,10 @@ static int pat_pack(const m2k_pattern_t *p, uint8_t *o)
 static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
-    const int head = 2 + 8 + M2K_TRACKS + G_COUNT + 1 + (int)sizeof p->kit + M2K_TRACKS * M2K_STEPS / 8 + 2;
-    if (len < head || o[0] != 'P' || (o[1] != 1 && o[1] != 2)) return 0;
-    int v1 = o[1] == 1;
+    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 3) return 0;
+    int ver = o[1], stride = ver >= 3 ? P_COUNT : P_MODT;          /* before 3 a kit ended before the MOD effect */
+    const int head = 2 + 8 + M2K_TRACKS + G_COUNT + 1 + M2K_TRACKS * stride + M2K_TRACKS * M2K_STEPS / 8 + 2;
+    if (len < head) return 0;
     m_set(p, 0, sizeof *p);
     n = 2;
     m_cpy(p->name, o + n, 8); n += 8;
@@ -72,7 +73,10 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
     m_cpy(p->machine, o + n, M2K_TRACKS); n += M2K_TRACKS;
     m_cpy(p->glob, o + n, G_COUNT); n += G_COUNT;
     p->mute = o[n++];
-    m_cpy(p->kit, o + n, sizeof p->kit); n += (int)sizeof p->kit;
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        m_cpy(p->kit[t], o + n, stride); n += stride;
+        if (stride < P_COUNT) { p->kit[t][P_MODT] = 0; p->kit[t][P_MODR] = 40; p->kit[t][P_MODD] = 64; p->kit[t][P_MODM] = 0; }
+    }
     const uint8_t *mask = o + n;
     n += M2K_TRACKS * M2K_STEPS / 8;
     for (int t = 0; t < M2K_TRACKS; t++) {
@@ -97,7 +101,11 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
         if (p->lock[i].trk >= M2K_TRACKS || p->lock[i].step >= M2K_STEPS || p->lock[i].param >= P_COUNT) p->lock[i].trk = 0xFF;
         n += 4;
     }
-    if (v1) amp_v1(p);
+    if (ver == 1) amp_v1(p);
+    if (ver < 3) {                     /* the reverb's return came up 12 dB: half the sends keep the same space */
+        for (int t = 0; t < M2K_TRACKS; t++) p->kit[t][P_SPU] >>= 1;
+        for (int i = 0; i < M2K_LOCKS; i++) if (p->lock[i].trk != 0xFF && p->lock[i].param == P_SPU) p->lock[i].val >>= 1;
+    }
     return 1;
 }
 

@@ -338,6 +338,8 @@ static void kit_default(m2k_pattern_t *p, int t, int m)
         64, 110, 0, 64, 0, 14,                 /* PTCH LEVL AMOD ASPD ARNG GATE */
     };
     m_cpy(k, D, P_COUNT);
+    k[P_MODR] = 40;                    /* the modulation: a slow chorus, off until its MIX is up */
+    k[P_MODD] = 64;
     for (int l = 0; l < 3; l++) {
         uint8_t *b = &k[P_LFO + 8 * l];
         b[L_TRCK] = enc(t, M2K_TRACKS);
