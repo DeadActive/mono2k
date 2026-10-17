@@ -566,16 +566,17 @@ static int selftest(void)
         /* the bank on the screen: a DIGI-WAV track's SYN has a third page, BANK; the wave knob names the bank's waves */
         {
             m2k_init(7);
-            cur_pat = 4;                                              /* A05: T4 plays DIGI-WAV */
+            cur_pat = 16;                                             /* B01, the blank kit: T1 GND-SIN, T4 DIGI-WAV */
+            kit_default(&pat[16], 3, M_WAV);
             int wt = -1;
-            for (int t = 0; t < M2K_TRACKS; t++) if (pat[4].machine[t] == M_WAV) { wt = t; break; }
+            for (int t = 0; t < M2K_TRACKS; t++) if (pat[16].machine[t] == M_WAV) { wt = t; break; }
             ui.trk = (uint8_t)(wt < 0 ? 0 : wt);
             char v1[16], v2[16], n1[16], n2[16];
             const char *u;
-            pat[4].kit[ui.trk][P_WBNK] = 0;
+            pat[16].kit[ui.trk][P_WBNK] = 0;
             fmt(pinfo(ui.trk, P_WBNK), ui.trk, 0, v1, &u);
             fmt(pinfo(ui.trk, P_SYN), ui.trk, 10, n1, &u);
-            pat[4].kit[ui.trk][P_WBNK] = 127;
+            pat[16].kit[ui.trk][P_WBNK] = 127;
             fmt(pinfo(ui.trk, P_WBNK), ui.trk, 127, v2, &u);
             fmt(pinfo(ui.trk, P_SYN), ui.trk, 10, n2, &u);
             int three = nsub(PG_SYN) == 3 && knob_param(PG_SYN, 2, 0) == P_WBNK;
@@ -840,11 +841,13 @@ static int selftest(void)
     CHECK(project_save(2) == 0, "a project too big for an image is refused, not corrupted");
     CHECK(!strcmp(m2k_project_name(2), "P3"), "the refused slot is untouched");
     /* a store saved before today's demos: the slots still holding the ones its revision shipped take today's, the
-     * owner's stay. Revision 0 (before the store kept one: A16 was INIT, the owner's once written in) and 1 */
-    for (int rev = 0; rev < 2; rev++) {
+     * owner's stay. Revision 0 (before the store kept one: A16 was INIT, the owner's once written in), 1 and 2 */
+    for (int rev = 0; rev < 3; rev++) {
+        static const char *const OLDN[3] = {"SPU RM", "DAYDRM", "GLITCH"};
+        int sl = rev == 2 ? 4 : 2;                           /* a slot the next revision replaced */
         m2k_init(11);
-        m2k_pattern_t keep2 = pat[2], keep15 = pat[15];
-        s_cpy(pat[2].name, rev ? "DAYDRM" : "SPU RM");      /* an old demo, as shipped */
+        m2k_pattern_t keep2 = pat[sl], keep15 = pat[15];
+        s_cpy(pat[sl].name, OLDN[rev]);                      /* an old demo, as shipped */
         s_cpy(pat[3].name, "MYSONG");                        /* the owner's */
         if (rev) {
             s_cpy(pat[15].name, "SHARDS");                   /* revision 1's A16: a demo */
@@ -855,19 +858,19 @@ static int selftest(void)
         project_save(0);
         int n = m2k_store_pack();
         if (rev) {
-            store_buf[7] = 1;                                /* the factory's revision it was saved at */
+            store_buf[7] = (uint8_t)rev;                     /* the factory's revision it was saved at */
         } else {
             memmove(store_buf + 7, store_buf + 8, (size_t)n - 8);  /* as a store before the factory's revision was kept */
             store_buf[4] = 1;
             n--;
         }
         m2k_init(12);
-        CHECK(m2k_store_unpack(n) == 1, rev ? "store: one saved at the factory's revision 1 loads" : "store: one saved before today's demos loads");
-        CHECK(!strcmp(pat[2].name, keep2.name) && !memcmp(pat[2].kit, keep2.kit, sizeof keep2.kit),
+        CHECK(m2k_store_unpack(n) == 1, rev ? "store: one saved at an earlier factory revision loads" : "store: one saved before today's demos loads");
+        CHECK(!strcmp(pat[sl].name, keep2.name) && !memcmp(pat[sl].kit, keep2.kit, sizeof keep2.kit),
               "store: an old demo left in its slot becomes today's");
         int a16 = rev ? !strcmp(pat[15].name, keep15.name) && !memcmp(pat[15].kit, keep15.kit, sizeof keep15.kit)
                       : !strcmp(pat[15].name, "INIT") && (pat[15].step[0][0].flags & ST_TRIG);
-        CHECK(!strcmp(pat[3].name, "MYSONG") && a16, rev ? "store: the owner's kept, revision 1's A16 today's"
+        CHECK(!strcmp(pat[3].name, "MYSONG") && a16, rev ? "store: the owner's kept, an earlier revision's A16 today's"
                                                          : "store: the owner's patterns are kept");
     }
     printf("%s (%d failed)\n", fails ? "SELFTEST FAILED" : "selftest passed", fails);
