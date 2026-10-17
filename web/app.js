@@ -24,11 +24,11 @@
 
   // ------------------------------------------------------------------------------------- dither textures (CSS)
   function textures() {
-    const make = (w, h, f) => {
+    const make = (w, h, f, col = ink()) => {
       const c = document.createElement("canvas");
       c.width = w; c.height = h;
       const g = c.getContext("2d");
-      g.fillStyle = ink();
+      g.fillStyle = col;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (f(x, y)) g.fillRect(x, y, 1, 1);
       return `url(${c.toDataURL()})`;
     };
@@ -39,6 +39,7 @@
     /* dithered gradients, ink to nothing: across (256 x 8) and down (8 x 64), drawn big and pixelated */
     r.setProperty("--g-across", make(256, 8, (x, y) => BAYER[y & 7][x & 7] < 64 - x / 4));
     r.setProperty("--g-down", make(8, 64, (x, y) => BAYER[y & 7][x & 7] < 64 - y));
+    r.setProperty("--g-down-inv", make(8, 64, (x, y) => BAYER[y & 7][x & 7] < 64 - y, paper()));   /* for a block in the other theme */
     r.setProperty("--g-up", make(8, 64, (x, y) => BAYER[y & 7][x & 7] < y));
   }
 
