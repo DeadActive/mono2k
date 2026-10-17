@@ -28,6 +28,12 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   Monomachine's (DIST/DSND/EQG bipolar, the filter follows the note); older ones are converted on load, and the factory
   demos are written on the version-4 chain and converted the same way (`chain_v4`). The reference renderer writes
   32-bit float WAVs; `tools/ref/sweep.py`'s `load` reads both.
+- Fidelity regressions: `.venv/bin/python tools/ref/regress.py check [GROUP ...]` renders MONO2K with the chain specs
+  and compares against `tools/ref/regress_ref.json` (numbers measured from the Monomachine's output; `capture` rebuilds
+  it from `build/ref/mm_c*`). PASS / FAIL, XFAIL for a known gap (with its reason), INFO not asserted. Every DSP fix
+  gets a case that failed before it. `m2k_host --selftest` covers the pattern formats.
+- `reference/candidate_waves/` holds third-party waves of unverified provenance: git-ignored, never committed, never in
+  web/ or the firmware.
 
 ## Style
 

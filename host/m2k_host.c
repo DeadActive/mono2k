@@ -136,6 +136,50 @@ static int selftest(void)
     CHECK(!strcmp(pat[0].name, "LATEX") && !strcmp(pat[16].name, "INIT"), "factory: A01 LATEX, B01 INIT");
     CHECK(!strcmp(m2k_project_name(0), "DEMO") && !strcmp(m2k_project_name(1), "P2"), "projects: DEMO, P2");
     printf("     DEMO packed: %u bytes for 64 patterns (A01 %d bytes, B01 %d)\n", proj[0].used, proj[0].len[0], proj[0].len[16]);
+    /* the pattern formats: older ones convert once, on their path; today's loads unchanged */
+    {
+        /* A01 LATEX's T1 is written DIST 34, VOL 112 on the version-4 chain: the factory converts it once */
+        CHECK(pat[0].kit[0][P_DIST] == T_V5_DIST[34] && pat[0].kit[0][P_VOL] == T_V5_VOL[112],
+              "format: a factory demo is converted once (A01 T1 DIST, VOL)");
+        static m2k_pattern_t a, b, c;
+        static uint8_t bl[BLOB_MAX], bl2[BLOB_MAX];
+        /* a version-4 pattern: the old blank kit on two tracks, a few old settings, locks, trigs on one note */
+        m_set(&a, 0, sizeof a);
+        pat_init(&a, "OLD");
+        kit_v4(&a, 0, M_GSIN);
+        kit_v4(&a, 1, M_SAW);
+        a.kit[0][P_DIST] = 34; a.kit[0][P_DTIM] = 8; a.kit[0][P_DFB] = 64; a.kit[0][P_BASE] = 40; a.kit[0][P_WDTH] = 30;
+        a.kit[0][P_SYN + 2] = 77; a.kit[0][P_LFO + L_SPD] = 21; a.kit[0][P_BITS] = 9;
+        for (int st = 0; st < 16; st += 4) { a.step[0][st].flags = ST_TRIG; a.step[0][st].note = 36; }
+        lk(&a, 0, 4, P_DTIM, 16);
+        lk(&a, 0, 8, P_SYN + 1, 99);
+        int n = pat_pack(&a, bl);
+        CHECK(bl[1] == 5, "format: patterns are written as version 5");
+        bl[1] = 4;
+        CHECK(pat_unpack(&b, bl, n), "format: a version-4 pattern loads");
+        CHECK(b.kit[0][P_DIST] == T_V5_DIST[34] && b.kit[0][P_DTIM] == 32 && b.kit[0][P_DSND] == 64 &&
+              b.kit[0][P_DFB] == (64 * 270 * 64 + 16384) >> 15 && b.kit[0][P_VOL] == T_V5_VOL[100],
+              "format: version 4 -> 5 converts the chain (DIST, DTIM, DSND, DFB, VOL)");
+        CHECK(b.kit[0][P_BASE] == v5_base(T_V5_FPOS[40], 36), "format: the filter is placed against the track's note");
+        CHECK(b.kit[0][P_SYN + 2] == 77 && b.kit[0][P_LFO + L_SPD] == 21 && b.kit[0][P_BITS] == 9 &&
+              !memcmp(b.kit[1], a.kit[1], 8) && b.step[0][4].note == 36 && b.step[0][4].flags == ST_TRIG,
+              "format: machine, LFO and MONO2K's own settings, trigs untouched");
+        int lock_ok = 0;
+        for (int i = 0; i < M2K_LOCKS; i++) {
+            if (b.lock[i].trk == 0 && b.lock[i].param == P_DTIM && b.lock[i].val == 64) lock_ok |= 1;
+            if (b.lock[i].trk == 0 && b.lock[i].param == P_SYN + 1 && b.lock[i].val == 99) lock_ok |= 2;
+        }
+        CHECK(lock_ok == 3, "format: a chain lock converts, a machine lock does not");
+        CHECK(pat_unpack(&c, bl, n) && !memcmp(&b, &c, sizeof b), "format: the conversion is deterministic");
+        int n2 = pat_pack(&b, bl2);
+        CHECK(pat_unpack(&c, bl2, n2) && !memcmp(b.kit, c.kit, sizeof b.kit) && !memcmp(b.lock, c.lock, sizeof b.lock),
+              "format: version 5 loads unchanged (no second conversion)");
+        bl[1] = 3;
+        CHECK(pat_unpack(&c, bl, n) && c.kit[1][0] == 0 && c.kit[1][7] == 64 && c.kit[0][P_DTIM] == 32,
+              "format: version 3 takes SWAV-SAW's page and the chain");
+        n = pat_pack(&pat[0], bl);
+        CHECK(pat_unpack(&c, bl, n) && !memcmp(pat[0].kit, c.kit, sizeof c.kit), "format: a saved demo reloads as it was");
+    }
     /* edit, reload */
     int v0 = pat[0].kit[0][P_DEC];
     pat[0].kit[0][P_DEC] = 3;
