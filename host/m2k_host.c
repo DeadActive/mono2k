@@ -127,6 +127,27 @@ static int analyze(const char *out)
     return 0;
 }
 
+/* bank A's patterns for listening: each from its start, every track, for some seconds (the batch's slots, or all) */
+static int demo_render(const char *out, int argc, char **argv)
+{
+    double sec = argc > 3 ? atof(argv[3]) : 30.0;
+    char path[512];
+    for (int p = 0; p < 16; p++) {
+        int want = argc <= 4;
+        for (int i = 4; i < argc; i++) want |= atoi(argv[i]) == p + 1;
+        if (!want) continue;
+        int frames = (int)(M2K_SR * sec) / 128 * 128;
+        int16_t *keep = malloc((size_t)frames * 4);
+        double pk, rms;
+        measure(p, 0x3F, sec, keep, &pk, &rms);
+        snprintf(path, sizeof path, "%s/a%02d_%s.wav", out, p + 1, pat[p].name);
+        wav_write(path, keep, frames);
+        free(keep);
+        printf("A%02d %-7s %.0f s: peak %.1f dBFS, rms %.1f dBFS -> %s\n", p + 1, pat[p].name, sec, pk, rms, path);
+    }
+    return 0;
+}
+
 /* each track of bank A alone, two loops, and every trig it plays: the frame, the note the engine was given, the
  * track's parameters as they stood; then its most played note held on its kit (tools/demo_pitch.py measures each
  * against its note). The factory is rebuilt between tracks, so the held note's kit change does not stay */
@@ -418,13 +439,13 @@ static int selftest(void)
     CHECK(wow_c > 25 && wow_c < 55 && flut_c < wow_c / 3,
           "tape: the wow drifts (25..55 c at TAPE 127), the flutter stays under a third of it");
     m2k_init(7);
-    CHECK(!strcmp(pat[0].name, "DEEP") && !strcmp(pat[16].name, "INIT"), "factory: A01 DEEP, B01 INIT");
+    CHECK(!strcmp(pat[0].name, "HAZE") && !strcmp(pat[16].name, "INIT"), "factory: A01 HAZE, B01 INIT");
     CHECK(!strcmp(m2k_project_name(0), "DEMO") && !strcmp(m2k_project_name(1), "P2"), "projects: DEMO, P2");
     printf("     DEMO packed: %u bytes for 64 patterns (A01 %d bytes, B01 %d)\n", proj[0].used, proj[0].len[0], proj[0].len[16]);
     /* the pattern formats: older ones convert once, on their path; today's loads unchanged */
     {
-        /* the demos are written on today's chain: none is converted (A01 T4's DTIM 48 would become 127) */
-        CHECK(pat[0].kit[3][P_DTIM] == 48 && pat[0].kit[0][P_DSND] == 64 && pat[0].kit[0][P_DIST] == 64,
+        /* the demos are written on today's chain: none is converted (A01 T6's DTIM 64 would become 127) */
+        CHECK(pat[0].kit[5][P_DTIM] == 64 && pat[0].kit[0][P_DSND] == 64 && pat[0].kit[0][P_DIST] == 66,
               "format: the factory is written on today's chain, not converted");
         static m2k_pattern_t a, b, c;
         static uint8_t bl[BLOB_MAX], bl2[BLOB_MAX];
@@ -797,7 +818,7 @@ static int selftest(void)
     project_load(1);
     CHECK(pat[5].kit[2][P_VOL] != 1, "load project discards unsaved work");
     project_load(0);
-    CHECK(!strcmp(pat[1].name, "JUNGLE"), "load DEMO again");
+    CHECK(!strcmp(pat[1].name, "SPLICE"), "load DEMO again");
     /* the store, out and back */
     pat[3].kit[1][P_PAN] = 17;
     int n = m2k_store_pack();
@@ -818,24 +839,36 @@ static int selftest(void)
     }
     CHECK(project_save(2) == 0, "a project too big for an image is refused, not corrupted");
     CHECK(!strcmp(m2k_project_name(2), "P3"), "the refused slot is untouched");
-    /* a store saved before today's demos: the slots still holding the old ones take the new, the owner's stay */
-    {
+    /* a store saved before today's demos: the slots still holding the ones its revision shipped take today's, the
+     * owner's stay. Revision 0 (before the store kept one: A16 was INIT, the owner's once written in) and 1 */
+    for (int rev = 0; rev < 2; rev++) {
         m2k_init(11);
-        m2k_pattern_t keep2 = pat[2];
-        s_cpy(pat[2].name, "SPU RM");                        /* an old demo, as shipped */
+        m2k_pattern_t keep2 = pat[2], keep15 = pat[15];
+        s_cpy(pat[2].name, rev ? "DAYDRM" : "SPU RM");      /* an old demo, as shipped */
         s_cpy(pat[3].name, "MYSONG");                        /* the owner's */
-        pattern_init_blank(&pat[15]);
-        pat[15].step[0][0].flags = ST_TRIG;                  /* A16 INIT, but written in: the owner's */
+        if (rev) {
+            s_cpy(pat[15].name, "SHARDS");                   /* revision 1's A16: a demo */
+        } else {
+            pattern_init_blank(&pat[15]);
+            pat[15].step[0][0].flags = ST_TRIG;              /* A16 INIT, but written in: the owner's */
+        }
         project_save(0);
         int n = m2k_store_pack();
-        memmove(store_buf + 7, store_buf + 8, (size_t)n - 8);  /* as a store before the factory's revision was kept */
-        store_buf[4] = 1;
+        if (rev) {
+            store_buf[7] = 1;                                /* the factory's revision it was saved at */
+        } else {
+            memmove(store_buf + 7, store_buf + 8, (size_t)n - 8);  /* as a store before the factory's revision was kept */
+            store_buf[4] = 1;
+            n--;
+        }
         m2k_init(12);
-        CHECK(m2k_store_unpack(n - 1) == 1, "store: one saved before today's demos loads");
+        CHECK(m2k_store_unpack(n) == 1, rev ? "store: one saved at the factory's revision 1 loads" : "store: one saved before today's demos loads");
         CHECK(!strcmp(pat[2].name, keep2.name) && !memcmp(pat[2].kit, keep2.kit, sizeof keep2.kit),
               "store: an old demo left in its slot becomes today's");
-        CHECK(!strcmp(pat[3].name, "MYSONG") && !strcmp(pat[15].name, "INIT") && (pat[15].step[0][0].flags & ST_TRIG),
-              "store: the owner's patterns are kept");
+        int a16 = rev ? !strcmp(pat[15].name, keep15.name) && !memcmp(pat[15].kit, keep15.kit, sizeof keep15.kit)
+                      : !strcmp(pat[15].name, "INIT") && (pat[15].step[0][0].flags & ST_TRIG);
+        CHECK(!strcmp(pat[3].name, "MYSONG") && a16, rev ? "store: the owner's kept, revision 1's A16 today's"
+                                                         : "store: the owner's patterns are kept");
     }
     printf("%s (%d failed)\n", fails ? "SELFTEST FAILED" : "selftest passed", fails);
     return fails != 0;
@@ -858,6 +891,7 @@ int main(int argc, char **argv)
     }
     if (argc > 2 && !strcmp(argv[2], "--export-bank")) return bank_export(out);
     if (argc > 2 && !strcmp(argv[2], "--bus")) return bus_measure(out);
+    if (argc > 2 && !strcmp(argv[2], "--demo")) return demo_render(out, argc, argv);     /* [SECONDS] [SLOT ...] */
     /* 1: the three factory patterns, 12 s each */
     for (int p = 0; p < 3; p++) {
         m2k_init(2000);

@@ -23,7 +23,10 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   `build/host/m2k_host build/patterns --analyze` solos every track of bank A and writes each pattern's WAV.
   `build/host/m2k_host build/pitch --pitch` then `.venv/bin/python tools/demo_pitch.py build/pitch [--steps]`:
   each trig's pitch against its note, held notes, resonant rings against the key, semitone clashes; run it on
-  every new demo (docs/bank-a-diagnosis.md).
+  every new demo (docs/bank-a-diagnosis.md; keys from docs/bank-a.md's table, `--ea69d53` for the old bank's fixture).
+  `.venv/bin/python tools/demo_levels.py [ROUNDS] [--slots A01,...]` balances the table's parts by measurement and
+  edits the factory; `build/host/m2k_host DIR --demo [SECONDS] [SLOT ...]` renders patterns for listening. New
+  demos go to the owner in batches of four as ~30 s WAVs with their notes rows, and are committed once approved.
 - Web: `sh web/build.sh`, serve `web/` (`.claude/launch.json`: mono2k-web on port 8742).
 - Checks: `sh tools/check.sh` (~6 min): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core
   built for armv7m soft float calls no float helper and no 64-bit division (flash / RAM printed); the self-test,
@@ -36,8 +39,10 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   Monomachine's (DIST/DSND/EQG bipolar, the filter follows the note); 6 GND-SIN's TUNE +-2 semitones (3.125 c a
   step); 7 SWAV-ENS on SWAVE-ENS's page (`ens_v6`); 8 the wave bank's choice (`P_WBNK`, kits 71 wide; the self-test
   packs the older layouts with `pat_pack_v`); 9 the bus's controls on new laws (`bus_v9`, tables `T_V9_*`). Older ones
-  are converted on load; bank A is written on SWAV-ENS's old page and the bus's old laws and converted once at build
-  (`ens_v6`, `bus_v9` in `factory()`), until the new bank replaces it. The reference renderer
+  are converted on load; bank A's slots still holding the bank before (A05..A16 so far) are written on SWAV-ENS's
+  old page and the bus's old laws and converted once at build (`ens_v6`, `bus_v9` in `factory()`), until the new
+  bank's parts replace them. A batch that replaces demos bumps `FACTORY_REV` and adds the names it replaced to
+  `OLD_DEMO` (m2k_proj.c), so a saved store takes the new parts where the old still stand. The reference renderer
   writes 32-bit float WAVs; `tools/ref/sweep.py`'s `load` reads both.
 - Fidelity regressions: `.venv/bin/python tools/ref/regress.py check [GROUP ...]` renders MONO2K with the chain specs
   and compares against `tools/ref/regress_ref.json` (numbers measured from the Monomachine's output; `capture` rebuilds

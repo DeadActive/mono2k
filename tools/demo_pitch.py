@@ -9,7 +9,7 @@
 #            rings a quarter tone off the scale
 #   notes    each melodic track's pitch classes against the pattern's declared key; voices sounding together a
 #            semitone or a tritone apart, on different tracks
-#   .venv/bin/python tools/demo_pitch.py build/pitch [--steps]
+#   .venv/bin/python tools/demo_pitch.py build/pitch [--steps] [--ea69d53]
 # SWAV-ENS's acceptance is regress.py's ens_accept: bank A's parts as they stood (tools/ref/fixtures), converted,
 # each voice against the Monomachine's (tools/ref/chain_ensacc.spec, ens_voices.py)
 import math, os, sys
@@ -22,12 +22,33 @@ M_GSIN, M_GNOI, M_SID, M_FMS, M_FMD, M_SAW, M_ENS, M_WAV, M_VOX = range(9)
 MNAME = ["GND-SIN", "GND-NOIS", "SID-8BIT", "FM+STAT", "FM+DYN", "SWAV-SAW", "SWAV-ENS", "DIGI-WAV", "VOX-6"]
 P_SYN, P_DEC, P_PORT, P_BASE, P_WDTH, P_HPQ, P_LPQ, P_PTCH, P_LFO = 0, 10, 15, 16, 17, 18, 19, 36, 42
 NAMES = "C C# D D# E F F# G G# A A# B".split()
-# the keys the patterns' notes declare (m2k_factory.c)
-KEYS = {1: ("D", "minor"), 2: ("F", "minor"), 3: ("F", "major"), 4: ("A", "minor"), 5: ("C", "minor"),
-        6: ("E", "dorian"), 7: ("F", "minor"), 8: ("C#", "major"), 9: ("E", "minor"), 10: ("G", "minor"),
-        11: ("A", "major"), 12: ("C", "major"), 13: ("G", "minor"), 14: ("C", "minor"), 15: ("D", "dorian"),
-        16: ("F#", "minor")}
-MODES = {"major": [0, 2, 4, 5, 7, 9, 11], "minor": [0, 2, 3, 5, 7, 8, 10], "dorian": [0, 2, 3, 5, 7, 9, 10]}
+# the keys and the tracks' roles each part declares: docs/bank-a.md's table; the old bank's (ea69d53, kept as a
+# fixture) for the slots not in it, or for every slot with --ea69d53
+KEYS_EA69D53 = {1: ("D", "minor"), 2: ("F", "minor"), 3: ("F", "major"), 4: ("A", "minor"), 5: ("C", "minor"),
+                6: ("E", "dorian"), 7: ("F", "minor"), 8: ("C#", "major"), 9: ("E", "minor"), 10: ("G", "minor"),
+                11: ("A", "major"), 12: ("C", "major"), 13: ("G", "minor"), 14: ("C", "minor"), 15: ("D", "dorian"),
+                16: ("F#", "minor")}
+MODES = {"major": [0, 2, 4, 5, 7, 9, 11], "minor": [0, 2, 3, 5, 7, 8, 10], "dorian": [0, 2, 3, 5, 7, 9, 10],
+         "phrygian": [0, 1, 3, 5, 7, 8, 10], "lydian": [0, 2, 4, 6, 7, 9, 11]}
+FLAT = {"Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#"}
+DRUMS = {"kick", "snare", "hat", "perc"}
+
+
+def bank_table(path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "bank-a.md")):
+    """{part: dict(name, key, mode, bpm, roles)} from the notes' table, by its header (Slot Name ... Key ... Tracks)"""
+    out, head = {}, None
+    if not os.path.exists(path):
+        return out
+    for l in open(path, encoding="utf-8"):
+        c = [x.strip() for x in l.strip().strip("|").split("|")]
+        if c and c[0] == "Slot":
+            head = [h.lower() for h in c]
+        elif head and len(c) == len(head) and c[0][:1] == "A" and c[0][1:].isdigit():
+            r = dict(zip(head, c))
+            key, mode = r["key"].split()[:2]
+            out[int(c[0][1:])] = dict(name=r["name"], key=FLAT.get(key, key), mode=mode, bpm=int(r["bpm"]),
+                                      roles=r["tracks"].split())
+    return out
 def _table(name):
     import re
     h = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "firmware", "gen", "m2k_tables.h")).read()
@@ -167,8 +188,10 @@ def ring(m, e):
 def main():
     d = sys.argv[1]
     show_steps = "--steps" in sys.argv
-    for p in range(1, 17):
-        key, mode = KEYS[p]
+    table = bank_table() if "--ea69d53" not in sys.argv else {}
+    for p in range(1, 17):                         # a slot not yet in the notes keeps the old bank's key
+        key, mode = (table[p]["key"], table[p]["mode"]) if p in table else KEYS_EA69D53[p]
+        roles = table[p]["roles"] if p in table else [None] * 6
         scale = {(NAMES.index(key) + s) % 12 for s in MODES[mode]}
         sounding = []                                  # (t0, t1, midi, track) for the clash check
         lines = []
@@ -178,7 +201,7 @@ def main():
             if m == M_GNOI or not ev:
                 continue
             x = load(os.path.join(d, f"p{p:02d}_t{t}.wav"))[:, 0]
-            drum = m == M_GSIN and ev[0]["eff"][P_SYN + 4] > 0 and ev[0]["eff"][P_DEC] < 40
+            drum = roles[t - 1] in DRUMS if roles[t - 1] else m == M_GSIN and ev[0]["eff"][P_SYN + 4] > 0 and ev[0]["eff"][P_DEC] < 40
             res = [measure(x, ev, i, len(x), m) for i in range(len(ev))]
             res = [r for r in res if r]
             if not res:
@@ -206,18 +229,18 @@ def main():
             for (kind, semi, q), pl in sorted(ring_pcs.items()):
                 bad = sum(1 for c in pl if c is None or c not in scale)
                 rtxt.append(f"{kind} +{semi:g} st Q{q}" + (f" ({bad}/{len(pl)} trigs ring off the key)" if bad else ""))
-            kick = t == 1 and m == M_GSIN and len(pcs) == 1
+            kick = roles[t - 1] == "kick" if roles[t - 1] else t == 1 and m == M_GSIN and len(pcs) == 1
             lines.append(f"  T{t} {MNAME[m]:9s}{' kick ' if kick else ' (drum)' if drum else '       '} {len(res):3d} trigs"
                          f"  in context {np.median(cents):+6.1f} c (worst {cents[np.argmax(np.abs(cents))]:+6.1f}){vtxt}{htxt}"
                          f"{'  PORT ' + str(port) if port else ''}{'  ' + ' '.join(lfo) if lfo else ''}")
             lines.append(f"     notes {' '.join(NAMES[c] for c in pcs)}" +
-                         (f"  OUT OF KEY: {' '.join(out_key)}" if out_key and not drum else "") +
+                         (f"  OUT OF KEY: {' '.join(out_key)}" if out_key and (kick or not drum) else "") +
                          (f"  rings {'; '.join(rtxt)}" if rtxt else ""))
             if show_steps:
                 for r in res:
                     lines.append(f"       f{r['step']['frame']:7d} n{r['step']['note']:3d} {r['cents']:+6.1f} c " +
                                  (" ".join(f"{v:+.0f}" for v in r["voices"]) if r["voices"] else ""))
-            if not drum and not (t == 1 and m == M_GSIN and len(pcs) == 1):
+            if not drum and not kick:
                 for i, r in enumerate(res):
                     t0 = r["step"]["frame"] / SR
                     for v in voices(m, r["step"]):

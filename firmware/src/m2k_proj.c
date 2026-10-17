@@ -320,11 +320,16 @@ uint8_t *m2k_store_buf(int *max)
     return store_buf;
 }
 
-/* the factory's revision: a store saved before it carries the demos it replaced. 1: the bank rewritten on the
- * Monomachine's chain (version 5) */
-#define FACTORY_REV 1
-static const char *const OLD_DEMO[16] = {"LATEX", "PVC", "SPU RM", "ELECTRO", "GLITCH", "CHROME", "ACID", "2STEP", "GROOVE",
-                                         "HYPRPOP", "DUB", "CHIP", "HARDGRV", "IDM", "DUBSTEP", "INIT"};
+/* the factory's revision: a store saved before it carries the demos it replaced, by revision. 1: the bank rewritten
+ * on the Monomachine's chain (version 5); 2: bank A's first four parts after the brief (docs/bank-a.md: HAZE,
+ * SPLICE, RIBBON, FACETS) */
+#define FACTORY_REV 2
+static const char *const OLD_DEMO[FACTORY_REV][16] = {
+    {"LATEX", "PVC", "SPU RM", "ELECTRO", "GLITCH", "CHROME", "ACID", "2STEP", "GROOVE", "HYPRPOP", "DUB", "CHIP",
+     "HARDGRV", "IDM", "DUBSTEP", "INIT"},
+    {"DEEP", "JUNGLE", "DAYDRM", "ELECTRO", "GLITCH", "PRISM", "FOG", "LIQUID", "DREXC", "STUTTR", "SYRUP", "SPU",
+     "GROOVE", "ROBOT", "BRAIN", "SHARDS"},
+};
 
 static int name_is(const char *a, const char *b)
 {
@@ -332,14 +337,14 @@ static int name_is(const char *a, const char *b)
     return 1;
 }
 
-/* a saved image of the DEMO project: a bank-A slot still holding the demo it shipped with (by its name; A16 only
- * while it is the blank INIT) takes today's demo, built in pat[] by the caller. Anything else is the owner's: kept */
-static void refresh_demos(m2k_img_t *im)
+/* a saved image of the DEMO project: a bank-A slot still holding the demo the store's revision shipped (by its name;
+ * an INIT only while it is blank) takes today's demo, built in pat[] by the caller. Anything else is the owner's: kept */
+static void refresh_demos(m2k_img_t *im, int rev)
 {
     static m2k_pattern_t old POOL;
     for (int i = 0; i < 16; i++) {
-        if (!im->len[i] || !pat_unpack(&old, im->data + img_off(im, i), im->len[i]) || !name_is(old.name, OLD_DEMO[i])) continue;
-        if (i == 15) {
+        if (!im->len[i] || !pat_unpack(&old, im->data + img_off(im, i), im->len[i]) || !name_is(old.name, OLD_DEMO[rev][i])) continue;
+        if (name_is(OLD_DEMO[rev][i], "INIT")) {
             int trigs = 0;
             for (int t = 0; t < M2K_TRACKS; t++) for (int s = 0; s < M2K_STEPS; s++) trigs += old.step[t][s].flags & ST_TRIG;
             if (trigs) continue;
@@ -383,8 +388,8 @@ int m2k_store_unpack(int len)
     }
     if (rev < FACTORY_REV && name_is(proj[0].name, "DEMO")) {      /* today's demos, where the old ones still are */
         factory();
-        refresh_demos(&proj[0]);
-        if (o[5] == 0) refresh_demos(&w);
+        refresh_demos(&proj[0], rev);
+        if (o[5] == 0) refresh_demos(&w, rev);
     }
     img_unpack_all(&w);
     m_cpy(store_.set, set, S_COUNT);
