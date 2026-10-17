@@ -69,8 +69,13 @@ def srr():
     return out
 
 
+# the track controls CLEAN leaves out, at MONO2K's INIT values: the Monomachine keeps a control from the line before,
+# so every delay line sends them all (EQF, DTIM, DFB, DBAS, DWID)
+DELAY_INIT = {80: 64, 83: 64, 85: 32, 86: 0, 87: 127}
+
+
 def delay():
-    blip = {56: 0, 57: 0, 58: 20, 59: 0}               # a 20 ms-ish blip: hold off, a short decay
+    blip = {**DELAY_INIT, 56: 0, 57: 0, 58: 20, 59: 0}  # a 20 ms-ish blip: hold off, a short decay
     out = ["# the delay on a short C4 blip: the send law, the time, the feedback, the loop's filter"]
     out += [line(f"d_snd_{v:03d}", SIN, 60, {**blip, 83: 32, 85: 0, 84: v}, gate=0.1, tail=1.2) for v in (0, 16, 32, 48, 63, 64, 65, 80, 96, 112, 127)]
     out += [line(f"d_tim_{v:03d}", SIN, 60, {**blip, 84: 127, 85: 0, 83: v}, gate=0.1, tail=2.4) for v in (1, 2, 4, 8, 16, 32, 48, 64, 96, 127)]
@@ -124,7 +129,7 @@ def srr2():
 
 
 def delay2():
-    blip = {56: 0, 57: 0, 58: 20, 59: 0}
+    blip = {**DELAY_INIT, 56: 0, 57: 0, 58: 20, 59: 0}
     out = ["# the delay: which side the echoes land on (the source hard left), their polarity, feedback above unity, the loop filter"]
     for snd in (0, 32, 96, 127):
         for fb in (0, 48):
@@ -134,7 +139,7 @@ def delay2():
     out += [line(f"d2_bas_{v:03d}", NOIS, 60, {**blip, 58: 30, 84: 127, 83: 48, 85: 0, 86: v, 87: 127}, gate=0.1, tail=0.8) for v in range(0, 128, 16)] + [line("d2_bas_127", NOIS, 60, {**blip, 58: 30, 84: 127, 83: 48, 85: 0, 86: 127, 87: 127}, gate=0.1, tail=0.8)]
     out += [line(f"d2_wid_{v:03d}", NOIS, 60, {**blip, 58: 30, 84: 127, 83: 48, 85: 0, 86: 0, 87: v}, gate=0.1, tail=0.8) for v in range(0, 128, 16)] + [line("d2_wid_127", NOIS, 60, {**blip, 58: 30, 84: 127, 83: 48, 85: 0, 86: 0, 87: 127}, gate=0.1, tail=0.8)]
     out += [line(f"d2_bw_{b:03d}_{w:03d}", NOIS, 60, {**blip, 58: 30, 84: 127, 83: 48, 85: 0, 86: b, 87: w}, gate=0.1, tail=0.8) for b, w in ((32, 32), (64, 16), (48, 48))]
-    out.append(line("d2_default", NOIS, 60, {**blip, 58: 30, 84: 127, 83: 48, 85: 0}, gate=0.1, tail=0.8))
+    out.append(line("d2_default", NOIS, 60, {**blip, 58: 30, 84: 127, 83: 48, 85: 0}, gate=0.1, tail=0.8))   # INIT's DBAS / DWID
     return out
 
 
@@ -305,6 +310,36 @@ def ens17():
     return out
 
 
+def ens18():
+    out = ["# SWAVE-ENS, round four: the voices' level as they are added (one to four, PW 64), the page's defaults (each"
+           " control left out in turn, against the same set explicitly), the chorus over 8 s at CHRL 127 (one voice,"
+           " PW 64) for its movement, CHRW 0 and 127; a note played twice for the oscillators' phase at the trig"]
+    ens = 14
+    clean = {60: 48, 51: 0, 52: 64, 53: 0, 54: 0}
+    for name, pch in (("v1", {}), ("v2", {48: 100}), ("v3", {48: 100, 49: 72}), ("v4", {48: 100, 49: 72, 50: 124}),
+                      ("v2u", {48: 62}), ("v4u", {48: 62, 49: 62, 50: 62})):
+        out.append(line(f"e18_{name}", ens, 60, {**clean, **pch}, gate=1.2, tail=0.05))
+    for cc, nm in ((51, "wave"), (52, "pw"), (53, "chrl"), (54, "chrw"), (55, "tune")):
+        rest = {k: v for k, v in {51: 0, 52: 64, 53: 0, 54: 0, 55: 64}.items() if k != cc}
+        out.append(line(f"e18_def_{nm}", ens, 60, {60: 48, **rest}, gate=1.2, tail=0.05))
+    for w in (0, 127):
+        out.append(line(f"e18_chorus_w{w:03d}", ens, 60, {60: 48, 51: 0, 52: 64, 53: 127, 54: w}, gate=8.0, tail=0.05))
+    out.append(line("e18_twice_a", ens, 60, clean, gate=0.6, tail=0.05))
+    out.append(line("e18_twice_b", ens, 60, clean, gate=0.6, tail=0.05))
+    return out
+
+
+def ens19():
+    out = ["# SWAVE-ENS's defaults, each line alone in its own run (render one line a process: a control carries over"
+           " from the line before): nothing sent; WAVE alone sent; PW alone sent; then the chorus line with every control"]
+    ens = 14
+    out.append(line("e19_defaults", ens, 60, {60: 48}, gate=1.2, tail=0.05))
+    out.append(line("e19_pw_default", ens, 60, {60: 48, 51: 0, 53: 0, 54: 0}, gate=1.2, tail=0.05))
+    out.append(line("e19_wave_default", ens, 60, {60: 48, 52: 64, 53: 0, 54: 0}, gate=1.2, tail=0.05))
+    out.append(line("e19_chorus", ens, 60, {60: 48, 48: 0, 49: 0, 50: 0, 51: 0, 52: 64, 53: 127, 54: 64, 55: 64}, gate=8.0, tail=0.05))
+    return out
+
+
 def order11():
     out = ["# is a render alone? One run, in this order: a resonant C3 sine fresh, the same again, again with the Q moved,"
            " a long tail after the gate (REL 0), another machine between, fresh again, another note; then a decaying"
@@ -331,7 +366,7 @@ if __name__ == "__main__":
                 fh.write("\n".join(f()) + "\n")
     elif sys.argv[1] == "specs3":
         d = sys.argv[2]
-        for name, f in (("clip3", clip3), ("map3", map3), ("fenv4", fenv4), ("ftime5", ftime5), ("res6", res6), ("hres8", hres8), ("drive10", drive10), ("order11", order11), ("drive12", drive12), ("tune13", tune13), ("sidbend14", sidbend14), ("ens15", ens15), ("ens16", ens16), ("ens17", ens17)):
+        for name, f in (("clip3", clip3), ("map3", map3), ("fenv4", fenv4), ("ftime5", ftime5), ("res6", res6), ("hres8", hres8), ("drive10", drive10), ("order11", order11), ("drive12", drive12), ("tune13", tune13), ("sidbend14", sidbend14), ("ens15", ens15), ("ens16", ens16), ("ens17", ens17), ("ens18", ens18), ("ens19", ens19)):
             with open(os.path.join(d, f"chain_{name}.spec"), "w") as fh:
                 fh.write("\n".join(f()) + "\n")
     elif sys.argv[1] == "specs2":

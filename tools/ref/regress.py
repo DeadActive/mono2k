@@ -349,8 +349,8 @@ def cases():
         add("delay_send", "chain_delay", f"d_snd_{v:03d}", "echoes", {"at": [258]}, 0.5)
     for v in (56, 64):
         add("delay_fb", "chain_delay2", f"d2_fb_{v:03d}", "echoes", {"at": [132, 257]}, 0.5)
-    add("delay_fb", "chain_delay2", "d2_fb_068", "echoes", {"at": [132, 257]}, 0.5,
-        xfail="above unity the reference's first echo grows with DFB (+0.5 dB at 68); MONO2K's does not")
+    add("delay_fb", "chain_delay2", "d2_fb_068", "echoes", {"at": [132, 257]}, 0.5)   # the "growth" was a control
+                                                                                     # carried from the line before
     for s in (0, 32):
         add("delay_pan", "chain_delay2", f"d2_pan_s{s:03d}_f048", "echoes", {"at": [258, 515]}, 1.0)
     for s in (96, 127):                                 # ping-pong: the sum and difference lines leak at -32 dB
@@ -358,7 +358,7 @@ def cases():
             xfail="ping-pong leaks ~-32 dB to the wrong side (the mu-law sum / difference lines)")
     for n in ("d2_bas_032", "d2_bas_064", "d2_bas_096", "d2_wid_032", "d2_wid_064", "d2_wid_096", "d2_bw_032_032", "d2_default"):
         add("delay_filter", "chain_delay2", n, "echo_bands", {"at": 0.379, "hz": [125, 250, 500, 1000, 2000, 4000]}, 3.0,
-            xfail="375 ms ping-pong runs past MONO2K's half line: the slowed clock darkens 2-4 kHz" if n in ("d2_bas_064", "d2_bas_096") else None)
+            xfail="375 ms ping-pong runs past MONO2K's half line: the slowed clock darkens 2-4 kHz" if n == "d2_bas_096" else None)
         add("delay_filter", "chain_delay2", n, "echo_bands", {"at": 0.379, "hz": [8000, 16000]}, 3.0, info=True)
     for d in (32, 48, 64, 80, 96):
         add("fenv", "chain_ftime5", f"ft_dec_{d:03d}", "fenv_ms", {"kind": "dec"}, 0.05, rel=True)

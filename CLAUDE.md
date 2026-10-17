@@ -45,6 +45,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   machine assigned does not reset it, a note played on it does (`chain_order11`). `mm_ref` now plays a short GND-NOIS
   note (GND-SIN for a noise line) before every line, always. References captured before (`regress_ref.json`, up to
   `chain_tune13`) were rendered without it: steady measurements are unaffected, slow build-ups are (`hp_drive`: INFO).
+  It keeps every control from the line before too (assigning a machine restores none): a spec line sends every
+  control it depends on, the machine's page included (`chain.py` DELAY_INIT; the delay references were re-rendered
+  so, and two known gaps were that).
 - `reference/candidate_waves/` holds third-party waves of unverified provenance: git-ignored, never committed, never in
   web/ or the firmware.
 
