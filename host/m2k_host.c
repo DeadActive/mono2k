@@ -360,6 +360,46 @@ static int selftest(void)
                 (old_i >= 1 && old_i <= 12 && semi != old_i) || ((old_i == 0 || old_i == 24) && semi != 12)) fold_ok = 0;
         }
         CHECK(fold_ok, "format: an old SWAV-ENS interval keeps its pitch class (exact 1..12, 0 and 24 to +12), never OFF");
+        /* LEV's silence step by step, and LFOs off an ENS page: an old pattern made for it */
+        {
+            static m2k_pattern_t e, g;
+            static uint8_t eb[BLOB_MAX];
+            m_set(&e, 0, sizeof e);
+            pat_init(&e, "ENSOLD");
+            const uint8_t oldk[8] = {21, 36, 61, 30, 0, 64, 0, 0};             /* +4 +7 +11, LEV 0 */
+            for (int t = 1; t <= 3; t++) { e.machine[t] = M_ENS; m_cpy(e.kit[t], oldk, 8); }
+            e.kit[2][P_SYN + 6] = 100;                                          /* T3: LEV up, one trig locked to 0 */
+            e.machine[4] = M_GSIN;
+            for (int t = 1; t <= 3; t++) for (int st = 0; st < 16; st += 4) { e.step[t][st].flags = ST_TRIG; e.step[t][st].note = 48; }
+            lk(&e, 1, 4, P_SYN + 6, 100); lk(&e, 1, 12, P_SYN + 6, 100);       /* T2: raised on 4 and 12 */
+            lk(&e, 1, 12, P_SYN + 0, 26);                                      /* and an interval locked there (+5) */
+            lk(&e, 2, 8, P_SYN + 6, 0);
+            uint8_t *lf = &e.kit[0][P_LFO];                                     /* T1's LFOs: onto T2's PCH2, T5's A */
+            lf[L_TRCK] = enc(1, M2K_TRACKS); lf[L_DEST] = P_SYN + 0 + 1; lf[L_DPTH] = 90;
+            lf[8 + L_TRCK] = enc(4, M2K_TRACKS); lf[8 + L_DEST] = P_SYN + 0 + 1; lf[8 + L_DPTH] = 90;
+            lf[16 + L_TRCK] = enc(1, M2K_TRACKS); lf[16 + L_DEST] = P_ATK + 1;
+            lk(&e, 0, 4, P_LFO + 16 + L_DEST, P_SYN + 2 + 1);                 /* LFO 3 locked onto T2's PCH3 at step 4 */
+            int en = pat_pack(&e, eb);
+            eb[1] = 6;
+            int ok_load = pat_unpack(&g, eb, en);
+            int off2[16] = {0}, off3[16] = {0}, up12 = -1, lev_left = 0, lfo_dest_lock = -1;
+            for (int i = 0; i < M2K_LOCKS; i++) {
+                const m2k_lock_t *l = &g.lock[i];
+                if (l->trk == 0xFF) continue;
+                if (l->trk == 1 && l->param <= P_SYN + 2 && l->val == 62) off2[l->step]++;
+                if (l->trk == 2 && l->param <= P_SYN + 2 && l->val == 62) off3[l->step]++;
+                if (l->trk == 1 && l->step == 12 && l->param == P_SYN) up12 = l->val;
+                if (l->trk >= 1 && l->trk <= 3 && l->param == P_SYN + 6) lev_left++;
+                if (l->trk == 0 && l->param == P_LFO + 16 + L_DEST) lfo_dest_lock = l->val;
+            }
+            CHECK(ok_load && g.kit[1][P_SYN] == T_ENS_ET[4 + 10] && off2[0] == 3 && off2[8] == 3 && !off2[4] && !off2[12] &&
+                  up12 == T_ENS_ET[5 + 10] && lev_left == 0,
+                  "format: a chord LEV 0 silenced but locks raise keeps its voices there, OFF on the other trigs");
+            CHECK(off3[8] == 3 && !off3[0] && !off3[4] && g.kit[3][P_SYN] == 62 && g.kit[3][P_SYN + 1] == 62,
+                  "format: a LEV lock to 0 is an OFF trig; a chord never raised is OFF");
+            CHECK(g.kit[0][P_LFO + L_DEST] == 0 && g.kit[0][P_LFO + 8 + L_DEST] == P_SYN + 1 && g.kit[0][P_LFO + 16 + L_DEST] == P_ATK + 1 &&
+                  lfo_dest_lock == 0, "format: an LFO aimed at an ENS interval is cleared (also a step's lock onto one); others kept");
+        }
         /* and every chord of bank A as it stood at ea69d53 (the fixture, version 6) keeps its notes at every trig */
         {
             FILE *f = fopen("tools/ref/fixtures/bank_a_ea69d53.bin", "rb");

@@ -135,7 +135,9 @@ Patterns saved before are moved onto each new scale as they load (version 1: the
 setting to the one giving the same Hz, dB or time, the filter placed against the note each track plays most; 6:
 GND-SIN's TUNE, which moved a semitone a step, kept to the semitone within the new ±2; 7: SWAV-ENS's page, each
 old interval folded into −11..+12 by octaves, one folding to 0 to +12, keeping every chord's notes; its DTUN (a fixed
-spread, not the chorus's moving copy), shape, level and sub have no counterpart and reset). The
+spread, not the chorus's moving copy), shape, level and sub have no counterpart and reset; a trig the old level
+silenced has its intervals locked OFF; an LFO aimed at the old page is cleared, intervals included, since the new axis
+has OFF and an octave down in it). The
 DigiPro waves and BeatBox samples are the OS's data and are not copied: DIGI-WAV plays MONO2K's own waves.
 
 ## Credits and licence

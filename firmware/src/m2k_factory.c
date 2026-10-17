@@ -116,9 +116,13 @@ static void chain_v4(m2k_pattern_t *p)
 
 /* SWAV-ENS took the Monomachine's page (version 7): an old interval (0..24 semitones over the root) folds into the
  * table's -11..+12 by octaves, and one that would fold to 0 is +12 (the voice stays and keeps its note); always the
- * equal-tempered value in the middle of its group, so never OFF (61-63) nor the octave down (0-1). DTUN's fixed spread is not the chorus's
- * moving copy: CHRL 0. SHPE, PW, LEV and SUB have no counterpart: one saw at the note; a chord LEV 0 had silenced
- * is OFF (62). Locks on the intervals convert, the rest go; an LFO aimed at an ENS track's DTUN..SUB is cleared */
+ * equal-tempered value in the middle of its group, so never OFF (61-63) nor the octave down (0-1). DTUN's fixed spread
+ * is not the chorus's moving copy: CHRL 0. SHPE, PW, LEV and SUB have no counterpart: one saw at the note, the voices
+ * at full level. LEV's silence is kept step by step: a trig where the old level was 0 (the kit's, or a lock's) gets
+ * PCH2..4 locked OFF, the chord keeping its intervals where a lock raised it (a pattern without room for those locks
+ * keeps the voices). Interval locks convert, the rest go. An LFO aimed at an ENS track's page is cleared, its
+ * intervals too: the new axis has OFF at 61-63 and the octave down at 0-1, so a sweep would drop voices or jump an
+ * octave (no factory pattern had one); so is a step's lock of an LFO's destination onto it */
 static uint8_t ens_fold(int v)
 {
     int i = (v * 25) >> 7;
@@ -127,26 +131,61 @@ static uint8_t ens_fold(int v)
     return T_ENS_ET[i + 10];
 }
 
+static int ens_lock(m2k_pattern_t *p, int t, int st, int prm, int v)
+{
+    int free = -1;
+    for (int i = 0; i < M2K_LOCKS; i++) {
+        if (p->lock[i].trk == t && p->lock[i].step == st && p->lock[i].param == prm) { p->lock[i].val = (uint8_t)v; return 1; }
+        if (free < 0 && p->lock[i].trk == 0xFF) free = i;
+    }
+    if (free < 0) return 0;
+    p->lock[free] = (m2k_lock_t){(uint8_t)t, (uint8_t)st, (uint8_t)prm, (uint8_t)v};
+    return 1;
+}
+
+static int ens_target(int trck) { return (trck * M2K_TRACKS) >> 7; }        /* the track an LFO reaches */
+
 static void ens_v6(m2k_pattern_t *p)
 {
     for (int t = 0; t < M2K_TRACKS; t++) {
         if (p->machine[t] != M_ENS) continue;
         uint8_t *k = p->kit[t];
-        int silent = k[P_SYN + 6] == 0;
+        /* which trigs the old level silenced, before its locks go */
+        uint8_t mute[M2K_STEPS];
+        int any_up = k[P_SYN + 6] > 0;
+        for (int st = 0; st < M2K_STEPS; st++) mute[st] = k[P_SYN + 6] == 0;
+        for (int i = 0; i < M2K_LOCKS; i++)
+            if (p->lock[i].trk == t && p->lock[i].param == P_SYN + 6) {
+                mute[p->lock[i].step] = p->lock[i].val == 0;
+                any_up |= p->lock[i].val > 0;
+            }
         for (int i = 0; i < M2K_LOCKS; i++) {
             m2k_lock_t *l = &p->lock[i];
             if (l->trk != t || l->param >= 8) continue;
             if (l->param < 3) l->val = ens_fold(l->val);
             else l->trk = 0xFF;
         }
-        for (int i = 0; i < 3; i++) k[P_SYN + i] = silent ? 62 : ens_fold(k[P_SYN + i]);
+        for (int i = 0; i < 3; i++) k[P_SYN + i] = any_up ? ens_fold(k[P_SYN + i]) : 62;
         k[P_SYN + 3] = 0; k[P_SYN + 4] = 64; k[P_SYN + 5] = 0; k[P_SYN + 6] = 64; k[P_SYN + 7] = 64;
+        if (any_up)
+            for (int st = 0; st < M2K_STEPS; st++)
+                if (mute[st] && (p->step[t][st].flags & ST_TRIG))
+                    for (int i = 0; i < 3; i++) ens_lock(p, t, st, P_SYN + i, 62);
     }
     for (int t = 0; t < M2K_TRACKS; t++)
         for (int l = 0; l < 3; l++) {
             uint8_t *b = &p->kit[t][P_LFO + 8 * l];
-            int to = (b[L_TRCK] * M2K_TRACKS) >> 7, dest = b[L_DEST] - 1;
-            if (p->machine[to] == M_ENS && dest >= P_SYN + 3 && dest < P_SYN + 8) b[L_DEST] = 0;
+            int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1;
+            if (p->machine[to] == M_ENS && dest >= P_SYN && dest < P_SYN + 8) b[L_DEST] = 0;
+            for (int i = 0; i < M2K_LOCKS; i++) {          /* a step's lock of this LFO's destination */
+                m2k_lock_t *lk2 = &p->lock[i];
+                if (lk2->trk != t || lk2->param != P_LFO + 8 * l + L_DEST) continue;
+                int to2 = to, d2 = lk2->val - 1;
+                for (int j = 0; j < M2K_LOCKS; j++)
+                    if (p->lock[j].trk == t && p->lock[j].step == lk2->step && p->lock[j].param == P_LFO + 8 * l + L_TRCK)
+                        to2 = ens_target(p->lock[j].val);
+                if (p->machine[to2] == M_ENS && d2 >= P_SYN && d2 < P_SYN + 8) lk2->val = 0;
+            }
         }
 }
 
