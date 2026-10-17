@@ -147,3 +147,6 @@ and the others. Orbitron by The League of Moveable Type: SIL OFL 1.1 (`assets/fo
 carries 1-bit renderings of it. The FM-1's panel geometry as measured for
 CoralFlower's emulator. MONO2K is not affiliated with Elektron or M-VAVE; Monomachine and Machinedrum are Elektron's,
 FM-1 is M-VAVE's.
+
+The 64-wave bank (`assets/waves/mono2k64/`) is the project owner's own waveforms, licensed with the project
+(GPL-3.0-only) unless the owner says otherwise.

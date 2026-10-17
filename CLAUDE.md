@@ -49,8 +49,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   It keeps every control from the line before too (assigning a machine restores none): a spec line sends every
   control it depends on, the machine's page included (`chain.py` DELAY_INIT; the delay references were re-rendered
   so, and two known gaps were that).
-- `reference/candidate_waves/` holds third-party waves of unverified provenance: git-ignored, never committed, never in
-  web/ or the firmware.
+- `assets/waves/mono2k64/` holds the owner's own 64 waves (GPL-3.0 with the project), the originals untouched;
+  `tools/gen_waves.py` makes the device's bank from them (`firmware/gen/m2k_waves64.h`), never edited by hand; audit
+  and processing beside them. The Monomachine's DigiPro waves are never copied.
 
 ## Style
 
