@@ -255,7 +255,9 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             tp_buf[bus.tw & 2047][1] = (int16_t)sat16(r);
             bus.wow += wow_inc;
             bus.flut += flut_inc;
-            int32_t m = (sinp(bus.wow) * 3 + sinp(bus.flut)) >> 2;            /* +-32767 */
+            /* the pitch a swing of the line makes grows with its rate: the flutter (6.3 Hz, 11x the wow's) takes 1/48
+             * of the wow's swing, so it wobbles about a quarter as far in pitch (at TAPE 127: wow ~+-40 c, flutter ~+-10 c) */
+            int32_t m = (sinp(bus.wow) * 48 + sinp(bus.flut)) >> 6;           /* +-24600 */
             int32_t d = (420 << 8) + ((m * tape * 3) >> 7);                    /* Q8 samples */
             int32_t pos = (int32_t)(bus.tw << 8) - d;
             uint32_t j = (uint32_t)(pos >> 8);

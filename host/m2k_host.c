@@ -129,9 +129,56 @@ static int analyze(const char *out)
 
 #define CHECK(c, m) do { if (!(c)) { printf("FAIL: %s\n", m); fails++; } else printf("ok   %s\n", m); } while (0)
 
+/* the bus's tape at TAPE 127 on a held 1047 Hz sine: the pitch per cycle (between interpolated rising zero
+ * crossings), its slow part (a 159 ms average: one flutter period) and the rest; peak deviation in cents of each */
+static void tape_pitch(double *wow_c, double *flut_c)
+{
+    m2k_init(7);
+    cur_pat = 16;                                  /* B01, the blank kit */
+    pat[16].machine[0] = M_GSIN;
+    pat[16].kit[0][P_SYN + 4] = 0;                 /* no pitch envelope */
+    pat[16].kit[0][P_HOLD] = 127;
+    pat[16].kit[0][P_DEC] = 127;
+    pat[16].glob[G_TAPE] = 127;
+    m2k_midi(0x90, 84, 100);
+    const int frames = 5 * M2K_SR;
+    int16_t *b = malloc((size_t)frames * 4);
+    for (int f = 0; f < frames; f += 16) m2k_render(b + 2 * f, 16);
+    static double hz[8000];
+    int n = 0;
+    double last = -1;
+    for (int i = M2K_SR; i < frames - 1 && n < 8000; i++) {
+        double a = b[2 * i], c = b[2 * i + 2];
+        if (a < 0 && c >= 0) {
+            double x = i + a / (a - c);
+            if (last > 0) hz[n++] = M2K_SR / (x - last);
+            last = x;
+        }
+    }
+    free(b);
+    int w = (int)(0.159 * 1047);
+    double mean = 0;
+    for (int i = 0; i < n; i++) mean += hz[i];
+    mean /= n;
+    *wow_c = *flut_c = 0;
+    for (int i = w; i < n - w; i++) {
+        double s = 0;
+        for (int k = -w / 2; k < w / 2; k++) s += hz[i + k];
+        s /= 2 * (w / 2);
+        double cw = fabs(1200 * log2(s / mean)), cf = fabs(1200 * log2(hz[i] / s));
+        if (cw > *wow_c) *wow_c = cw;
+        if (cf > *flut_c) *flut_c = cf;
+    }
+}
+
 static int selftest(void)
 {
     int fails = 0;
+    double wow_c, flut_c;
+    tape_pitch(&wow_c, &flut_c);
+    printf("     tape at 127: wow +-%.1f c, flutter +-%.1f c\n", wow_c, flut_c);
+    CHECK(wow_c > 25 && wow_c < 55 && flut_c < wow_c / 3,
+          "tape: the wow drifts (25..55 c at TAPE 127), the flutter stays under a third of it");
     m2k_init(7);
     CHECK(!strcmp(pat[0].name, "DEEP") && !strcmp(pat[16].name, "INIT"), "factory: A01 DEEP, B01 INIT");
     CHECK(!strcmp(m2k_project_name(0), "DEMO") && !strcmp(m2k_project_name(1), "P2"), "projects: DEMO, P2");
