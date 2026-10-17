@@ -27,12 +27,13 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
 - Web: `sh web/build.sh`, serve `web/` (`.claude/launch.json`: mono2k-web on port 8742).
 - Checks: `sh tools/check.sh` (~4 min): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core
   built for armv7m soft float calls no float helper and no 64-bit division (flash / RAM printed); the self-test,
-  every screen, bank A and every reference spec under ASan + UBSan, clean.
+  every screen, bank A and every reference spec under ASan + UBSan, clean; the wave banks (`tools/wave_check.py`).
 - Calibration (README, Calibration): `tools/ref/mm_ref` (gearmulator, the user's OS image at a path, never in the repo;
   it logs to stdout, so send stdout to /dev/null) against `host/m2k_ref.c`, same specs in `tools/ref/*.spec`.
   Pattern format: 2 amp ATK/HOLD/DEC/REL on the measured curve; 4 SWAV-SAW's page; 5 the track chain on the
   Monomachine's (DIST/DSND/EQG bipolar, the filter follows the note); 6 GND-SIN's TUNE +-2 semitones (3.125 c a
-  step); 7 SWAV-ENS on SWAVE-ENS's page (`ens_v6`). Older ones are converted on load; bank A is written on SWAV-ENS's
+  step); 7 SWAV-ENS on SWAVE-ENS's page (`ens_v6`); 8 the wave bank's choice (`P_WBNK`, kits 71 wide; the self-test
+  packs the older layouts with `pat_pack_v`). Older ones are converted on load; bank A is written on SWAV-ENS's
   old page and converted once at build (`ens_v6` in `factory()`), until the new bank replaces it. The reference renderer
   writes 32-bit float WAVs; `tools/ref/sweep.py`'s `load` reads both.
 - Fidelity regressions: `.venv/bin/python tools/ref/regress.py check [GROUP ...]` renders MONO2K with the chain specs

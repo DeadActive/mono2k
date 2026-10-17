@@ -299,8 +299,8 @@ static int selftest(void)
         lk(&a, 0, 8, P_SYN + 1, 99);
         lk(&a, 0, 12, P_SYN, 65);
         int n = pat_pack(&a, bl);
-        CHECK(bl[1] == 7, "format: patterns are written as version 7");
-        bl[1] = 4;
+        CHECK(bl[1] == 8, "format: patterns are written as version 8");
+        n = pat_pack_v(&a, bl, 4);
         CHECK(pat_unpack(&b, bl, n), "format: a version-4 pattern loads");
         CHECK(b.kit[0][P_DIST] == T_V5_DIST[34] && b.kit[0][P_DTIM] == 32 && b.kit[0][P_DSND] == 64 &&
               b.kit[0][P_DFB] == (64 * 270 * 64 + 16384) >> 15 && b.kit[0][P_VOL] == T_V5_VOL[100],
@@ -323,10 +323,10 @@ static int selftest(void)
         int n2 = pat_pack(&b, bl2);
         CHECK(pat_unpack(&c, bl2, n2) && !memcmp(b.kit, c.kit, sizeof b.kit) && !memcmp(b.lock, c.lock, sizeof b.lock),
               "format: version 6 loads unchanged (no second conversion)");
-        bl[1] = 5;
+        n = pat_pack_v(&a, bl, 5);
         CHECK(pat_unpack(&c, bl, n) && c.kit[0][P_SYN] == 32 && c.kit[0][P_DTIM] == 8,
               "format: version 5 takes only the TUNE");
-        bl[1] = 3;
+        n = pat_pack_v(&a, bl, 3);
         CHECK(pat_unpack(&c, bl, n) && c.kit[1][0] == 0 && c.kit[1][7] == 64 && c.kit[0][P_DTIM] == 32,
               "format: version 3 takes SWAV-SAW's page and the chain");
         n = pat_pack(&pat[0], bl);
@@ -336,8 +336,7 @@ static int selftest(void)
         int moved = 0;
         for (int d = 0; d < 16; d++)
             for (int ver = 4; ver <= 5; ver++) {
-                n = pat_pack(&pat[d], bl);
-                bl[1] = (uint8_t)ver;
+                n = pat_pack_v(&pat[d], bl, ver);
                 if (!pat_unpack(&c, bl, n)) { moved++; continue; }
                 for (int t = 0; t < M2K_TRACKS; t++) {               /* SWAV-ENS's page converts at 7, by design */
                     moved += c.kit[t][P_PTCH] != pat[d].kit[t][P_PTCH] ||
@@ -360,6 +359,43 @@ static int selftest(void)
                 (old_i >= 1 && old_i <= 12 && semi != old_i) || ((old_i == 0 || old_i == 24) && semi != 12)) fold_ok = 0;
         }
         CHECK(fold_ok, "format: an old SWAV-ENS interval keeps its pitch class (exact 1..12, 0 and 24 to +12), never OFF");
+        /* the bank (8): a version-7 kit (70 wide) loads with MONO2K's 32 and every value where it was; today's keeps it */
+        {
+            static m2k_pattern_t w, w2;
+            static uint8_t wb[BLOB_MAX];
+            m_cpy(&w, &pat[4], sizeof w);                             /* A05: a DIGI-WAV track among others */
+            for (int t = 0; t < M2K_TRACKS; t++) for (int k = 0; k < P_WBNK; k++) w.kit[t][k] = (uint8_t)((t * 31 + k * 7) & 127);
+            int wn = pat_pack_v(&w, wb, 7);
+            int same = pat_unpack(&w2, wb, wn);
+            for (int t = 0; t < M2K_TRACKS; t++) same = same && !memcmp(w2.kit[t], w.kit[t], P_WBNK) && w2.kit[t][P_WBNK] == 0;
+            CHECK(same, "format: version 7 -> 8 keeps every kit value, the bank MONO2K's 32");
+            w.kit[3][P_WBNK] = 127;
+            wn = pat_pack(&w, wb);
+            CHECK(pat_unpack(&w2, wb, wn) && w2.kit[3][P_WBNK] == 127 && !memcmp(w2.kit, w.kit, sizeof w.kit),
+                  "format: version 8 keeps the bank");
+        }
+        /* the bank on the screen: a DIGI-WAV track's SYN has a third page, BANK; the wave knob names the bank's waves */
+        {
+            m2k_init(7);
+            cur_pat = 4;                                              /* A05: T4 plays DIGI-WAV */
+            int wt = -1;
+            for (int t = 0; t < M2K_TRACKS; t++) if (pat[4].machine[t] == M_WAV) { wt = t; break; }
+            ui.trk = (uint8_t)(wt < 0 ? 0 : wt);
+            char v1[16], v2[16], n1[16], n2[16];
+            const char *u;
+            pat[4].kit[ui.trk][P_WBNK] = 0;
+            fmt(pinfo(ui.trk, P_WBNK), ui.trk, 0, v1, &u);
+            fmt(pinfo(ui.trk, P_SYN), ui.trk, 10, n1, &u);
+            pat[4].kit[ui.trk][P_WBNK] = 127;
+            fmt(pinfo(ui.trk, P_WBNK), ui.trk, 127, v2, &u);
+            fmt(pinfo(ui.trk, P_SYN), ui.trk, 10, n2, &u);
+            int three = nsub(PG_SYN) == 3 && knob_param(PG_SYN, 2, 0) == P_WBNK;
+            ui.trk = 0;                                               /* T1: GND-SIN */
+            int two = nsub(PG_SYN) == 2;
+            CHECK(wt >= 0 && three && two && !strcmp(v1, "M2K") && !strcmp(v2, "M64") && !strcmp(n2, "OS06") && strcmp(n1, n2),
+                  "ui: a wave machine's SYN has a BANK page (M2K / M64), its WAVE named from the bank");
+            m2k_init(7);
+        }
         /* LEV's silence step by step, and LFOs off an ENS page: an old pattern made for it */
         {
             static m2k_pattern_t e, g;
@@ -379,8 +415,7 @@ static int selftest(void)
             lf[8 + L_TRCK] = enc(4, M2K_TRACKS); lf[8 + L_DEST] = P_SYN + 0 + 1; lf[8 + L_DPTH] = 90;
             lf[16 + L_TRCK] = enc(1, M2K_TRACKS); lf[16 + L_DEST] = P_ATK + 1;
             lk(&e, 0, 4, P_LFO + 16 + L_DEST, P_SYN + 2 + 1);                 /* LFO 3 locked onto T2's PCH3 at step 4 */
-            int en = pat_pack(&e, eb);
-            eb[1] = 6;
+            int en = pat_pack_v(&e, eb, 6);
             int ok_load = pat_unpack(&g, eb, en);
             int off2[16] = {0}, off3[16] = {0}, up12 = -1, lev_left = 0, lfo_dest_lock = -1;
             for (int i = 0; i < M2K_LOCKS; i++) {

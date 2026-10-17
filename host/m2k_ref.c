@@ -75,6 +75,14 @@ int main(int argc, char **argv)
             /* "mm:cc=v" is the Monomachine's alone (a control MONO2K keeps elsewhere); "m2k:cc=v" is MONO2K's alone */
             if (!strncmp(c, "mm:", 3)) { c += 3; skip = 1; }
             else if (!strncmp(c, "m2k:", 4)) c += 4;
+            if (*c == 'p') {               /* "m2k:pN=v": MONO2K's kit parameter N as it is (one no controller reaches) */
+                if (sscanf(c, "p%d=%d%n", &cc, &v, &used) != 2 || cc < 0 || cc >= P_COUNT) break;
+                p->kit[0][cc] = (uint8_t)v;
+                trk[0].eff[cc] = (uint8_t)v;
+                c += used;
+                while (*c == ' ' || *c == '\t') c++;
+                continue;
+            }
             if (sscanf(c, "%d=%d%n", &cc, &v, &used) != 2) break;
             if (skip) { c += used; while (*c == ' ' || *c == '\t') c++; continue; }
             m2k_midi(0xB0, cc, v);

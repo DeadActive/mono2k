@@ -464,9 +464,15 @@ static void mach_block(int ti, int m, int32_t pitch)
     case M_WAV: {                      /* WAVE SCAN STIM SYNC BITS DTUN MIX2 STEP */
         int32_t env = (int32_t)(t->menv[0] >> 15);
         if (P7(t, P_SYN + 2) < 127) t->menv[0] = mulu_hi(t->menv[0], T_ENV_COEF[P7(t, P_SYN + 2)], 31);
-        int32_t pos = (P8(t, P_SYN + 0) * 31) / 127 + ((PB8(t, P_SYN + 1) * 2 * env) >> 15) * 31 / 128;  /* Q8 wave index */
-        pos = CLAMP(pos, 0, 31 * 256 - 1);
-        const int16_t *wa = &T_WAVES[(pos >> 8) * 256], *wb = &T_WAVES[CLAMP((pos >> 8) + 1, 0, 31) * 256];
+        /* the bank: MONO2K's 32 across WAVE's range (as it always was), or the owner's 64 two values a wave (an even
+         * WAVE is one exactly, an odd one between two) */
+        int big = PN(t, P_WBNK, 2), last = big ? 63 : 31;
+        const int16_t *bank = big ? T_WAVES64 : T_WAVES;
+        int32_t scan = (PB8(t, P_SYN + 1) * 2 * env) >> 15;
+        int32_t pos = big ? (P8(t, P_SYN + 0) >> 1) + scan * 63 / 128
+                          : (P8(t, P_SYN + 0) * 31) / 127 + scan * 31 / 128;      /* Q8 wave index */
+        pos = CLAMP(pos, 0, last * 256);
+        const int16_t *wa = &bank[(pos >> 8) * 256], *wb = &bank[CLAMP((pos >> 8) + 1, 0, last) * 256];
         int32_t wf = pos & 255;
         uint32_t inc = inc_of(pitch);
         uint32_t sinc = mulu_hi(inc, 256 + (uint32_t)P7(t, P_SYN + 3) * 14, 8);

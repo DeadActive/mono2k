@@ -2,6 +2,7 @@
 /* MONO2K: the unity build of the core. Every unit is included here, so everything can stay static. */
 #include "m2k.h"
 #include "m2k_tables.h"
+#include "m2k_waves64.h"
 #include "m2k_fonts.h"
 #include "m2k_icons.h"
 

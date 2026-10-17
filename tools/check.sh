@@ -55,5 +55,8 @@ mkdir -p "$B/screens" "$B/pitch" "$B/ref"
 rep=$(grep -E "runtime error|ERROR: AddressSanitizer|SELFTEST FAILED" "$B/san.log" | sort | uniq -c)
 if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  self-test, screens, bank A, $(ls tools/ref/*.spec | wc -l | tr -d ' ') specs: clean"; fi
 
+echo "== the wave banks"
+.venv/bin/python tools/wave_check.py > "$B/waves.log" 2>&1 && tail -1 "$B/waves.log" | sed 's/^/  /' || { cat "$B/waves.log"; FAIL=1; }
+
 [ "$FAIL" -eq 0 ] && echo "check: passed" || echo "check: FAILED"
 exit "$FAIL"

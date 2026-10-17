@@ -137,7 +137,12 @@ GND-SIN's TUNE, which moved a semitone a step, kept to the semitone within the n
 old interval folded into −11..+12 by octaves, one folding to 0 to +12, keeping every chord's notes; its DTUN (a fixed
 spread, not the chorus's moving copy), shape, level and sub have no counterpart and reset; a trig the old level
 silenced has its intervals locked OFF; an LFO aimed at the old page is cleared, intervals included, since the new axis
-has OFF and an octave down in it). The
+has OFF and an octave down in it; 8: the wave bank's choice, MONO2K's 32 for every older pattern).
+
+DIGI-WAV plays either bank, set on SYN's third page (BANK: M2K, MONO2K's 32 waves across WAVE's range as before; M64,
+the owner's 64, two WAVE values a wave: an even one is that wave exactly, an odd one between two). Every wave of both
+at C2, C4 and C6 (`tools/wave_check.py`): the owner's in tune within 0.2 c, their levels and aliasing within the range
+of MONO2K's own (the aliasing of a 256-point table read without a band limit, both banks alike). The
 DigiPro waves and BeatBox samples are the OS's data and are not copied: DIGI-WAV plays MONO2K's own waves.
 
 ## Credits and licence

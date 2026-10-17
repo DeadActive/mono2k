@@ -14,7 +14,7 @@ enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOWL, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
     K_BPM, K_SWNG, K_LEN, K_PCT, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD,
-    K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH
+    K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -33,6 +33,7 @@ static const pi_t PI_LFO[8] = {
     {"TRCK", "LFO TRACK", K_TRK}, {"DEST", "LFO DESTINATION", K_DEST}, {"WAVE", "LFO WAVE", K_LWAV}, {"TRIG", "LFO TRIG MODE", K_LTRG},
     {"MULT", "LFO MULTIPLIER", K_MULT}, {"SPD", "LFO SPEED", K_NUM}, {"PHAS", "START PHASE", K_NUM}, {"DPTH", "LFO DEPTH", K_BI},
 };
+static const pi_t PI_WBNK = {"BANK", "WAVE BANK", K_WBNK};
 static const pi_t PI_MOD[4] = {
     {"TYPE", "MOD TYPE", K_MODT}, {"RATE", "MOD RATE", K_MHZ}, {"DPTH", "MOD DEPTH", K_NUM}, {"MIX", "MOD MIX", K_NUM},
 };
@@ -104,6 +105,7 @@ static const pi_t *pinfo(int t, int id)
     if (id >= 0x80) return &PI_GLOB[id & 0x7F];
     if (id < 8) return &MI[pat[cur_pat].machine[t]].syn[id];
     if (id < P_LFO) return &PI_COMMON[id - 8];
+    if (id == P_WBNK) return &PI_WBNK;
     if (id >= P_MODT) return &PI_MOD[(id - P_MODT) & 3];
     return &PI_LFO[(id - P_LFO) & 7];
 }
@@ -178,6 +180,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_FINE: s_int(out, ((v - 64) * 100) / 64); *unit = "CENT"; break;
     case K_TUN2: s_int(out, ((v - 64) * 25) / 8); *unit = "CENT"; break;     /* +-2 semitones, 3.125 c a step */
     case K_PCH: s_cpy(out, T_ENS_PNAME[T_ENS_PIDX[v & 127]]); break;            /* SWAV-ENS's intervals, the just as 5:4 */
+    case K_WBNK: s_cpy(out, (v * 2) >> 7 ? "M64" : "M2K"); break;             /* MONO2K's 32, the owner's 64 */
     case K_TIME: case K_HOLD: case K_DECT: case K_ATIM: case K_AHLD: case K_ADEC: case K_AREL: {
         int k = pi->kind;
         if ((k == K_HOLD || k == K_DECT || k == K_AHLD || k == K_ADEC) && v == 127) { s_cpy(out, "INF"); break; }
@@ -227,7 +230,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_SIDM: s_cpy(out, SIDM_N[c]); break;
     case K_ALGO: s_cpy(out, ALGO_N[c]); break;
     case K_VOIC: s_int(out, c + 1); *unit = "VOICES"; break;
-    case K_WAVE: s_cpy(out, T_WAVE_NAME[c]); break;
+    case K_WAVE: s_cpy(out, (pat[cur_pat].kit[t][P_WBNK] * 2) >> 7 ? T_WAVE64_NAME[v >> 1 > 63 ? 63 : v >> 1] : T_WAVE_NAME[c]); break;
     case K_VOWL: s_cpy(out, T_VOWEL_NAME[(v * 7 + 63) / 127]); *unit = "VOWEL"; break;
     case K_TRK: { char *e = s_cpy(out, "T"); s_int(e, c + 1); break; }
     case K_DEST:
@@ -257,6 +260,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
 
 enum { PG_HOME, PG_SYN, PG_AMP, PG_FILT, PG_FX, PG_LFO, PG_ARP, PG_GLO, PG_COUNT };
 static const uint8_t NSUB[PG_COUNT] = {1, 2, 2, 2, 4, 6, 1, 4};
+static int nsub(int page);                     /* SYN has a third page, the bank, where the machine plays waves */
 #define SETTING(i) (0xC0 | (i))
 #define GL(g) (0x80 | (g))
 #define NONE 0xFF
@@ -265,7 +269,7 @@ static int knob_param(int page, int sub, int k)
 {
     switch (page) {
     case PG_HOME: { static const uint8_t m[4] = {P_LEVL, P_PTCH, GL(G_TMPO), GL(G_SWNG)}; return m[k]; }
-    case PG_SYN: return P_SYN + sub * 4 + k;
+    case PG_SYN: return sub < 2 ? P_SYN + sub * 4 + k : k == 0 ? P_WBNK : NONE;
     case PG_AMP: return P_ATK + sub * 4 + k;
     case PG_FILT: return P_BASE + sub * 4 + k;
     case PG_FX: return sub < 3 ? P_EQF + sub * 4 + k : P_MODT + k;
@@ -283,6 +287,7 @@ static void page_label(int page, int sub, char *o)
     case PG_FX: s_cpy(o, sub == 0 ? "FX" : sub == 1 ? "DELAY" : sub == 2 ? "DSTR" : "MOD"); break;
     case PG_LFO: { char *e = s_cpy(o, "LFO"); e = s_int(e, (sub >> 1) + 1); s_cpy(e, (sub & 1) ? "B" : "A"); break; }
     case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "GLITCH" : sub == 2 ? "VERB" : "SET"); break;
+    case PG_SYN: s_cpy(o, sub == 2 ? "BANK" : "SYN"); break;
     default: s_cpy(o, N[page]); break;
     }
 }
@@ -360,6 +365,8 @@ static void start_glitch(int amt)
     ui.glitch_seed = rnd32();
 }
 
+static int nsub(int page) { return page == PG_SYN && pat[cur_pat].machine[ui.trk] == M_WAV ? 3 : NSUB[page]; }
+
 static void toast(const char *a, const char *b)
 {
     s_cpy(ui.toast, a);
@@ -369,7 +376,7 @@ static void toast(const char *a, const char *b)
 
 static void go(int page)
 {
-    if (page == ui.page) ui.sub = (uint8_t)((ui.sub + 1) % NSUB[page]);
+    if (page == ui.page) ui.sub = (uint8_t)((ui.sub + 1) % nsub(page));
     else { ui.page = (uint8_t)page; ui.sub = 0; }
     ui.focus_t = 0;
     start_trans(250);
@@ -905,12 +912,12 @@ static void header(void)
     page_label(ui.page, ui.sub, o);
     int x = tag(0, 0, o, 1) + 4;
     /* where in the section: a square a page, this one solid, on the type's middle line */
-    if (NSUB[ui.page] > 1) {
-        for (int i = 0; i < NSUB[ui.page]; i++) {
+    if (nsub(ui.page) > 1) {
+        for (int i = 0; i < nsub(ui.page); i++) {
             if (i == ui.sub) rect(x + i * 6, 4, 4, 6, 1);
             else frame(x + i * 6, 4, 4, 6, 1);
         }
-        x += NSUB[ui.page] * 6 + 4;
+        x += nsub(ui.page) * 6 + 4;
     }
     m2k_pattern_t *p = &pat[cur_pat];
     const mi_t *mi = &MI[p->machine[ui.trk]];
