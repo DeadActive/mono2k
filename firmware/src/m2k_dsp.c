@@ -473,6 +473,13 @@ static void mach_block(int ti, int m, int32_t pitch)
                           : (P8(t, P_SYN + 0) * 31) / 127 + scan * 31 / 128;      /* Q8 wave index */
         pos = CLAMP(pos, 0, last * 256);
         const int16_t *wa = &bank[(pos >> 8) * 256], *wb = &bank[CLAMP((pos >> 8) + 1, 0, last) * 256];
+        /* a cycle's mean, out at playback for the owner's 64 (up to -29 % of the peak: a step at every trig, 13-17 dB
+         * more under 60 Hz there, measured), and the gain that keeps a cycle so in 16 bits (four waves, to 32000); the
+         * waves keep theirs, MONO2K's 32 play as they always have */
+        int ia = pos >> 8, ib = CLAMP(ia + 1, 0, last);
+        int32_t dca = big ? T_WAVES64_DC[ia] : 0, dcb = big ? T_WAVES64_DC[ib] : 0;
+        int32_t ga = big ? T_WAVES64_G[ia] : 16384, gb = big ? T_WAVES64_G[ib] : 16384;
+        int32_t dc = dca + (((dcb - dca) * (pos & 255)) >> 8), g = ga + (((gb - ga) * (pos & 255)) >> 8);
         int32_t wf = pos & 255;
         uint32_t inc = inc_of(pitch);
         uint32_t sinc = mulu_hi(inc, 256 + (uint32_t)P7(t, P_SYN + 3) * 14, 8);
@@ -490,10 +497,11 @@ static void mach_block(int ti, int m, int32_t pitch)
             int32_t a = wa[j] + (((wa[(j + 1) & 255] - wa[j]) * f) >> 8);
             int32_t b = wb[j] + (((wb[(j + 1) & 255] - wb[j]) * f) >> 8);
             int32_t s = a + (((b - a) * wf) >> 8);
+            s = ((s - dc) * g) >> 14;  /* the owner's waves play without their DC: no thump at a trig (wave_check) */
             if (mix2) {
                 uint32_t q = t->ph[1] & qmask;
                 int32_t j2 = (int32_t)(q >> 24);
-                s += (wa[j2] * mix2) >> 15;
+                s += ((((wa[j2] - dca) * ga) >> 14) * mix2) >> 15;
                 s = (s * 3) >> 2;
             }
             t->ph[0] += sinc;

@@ -140,9 +140,13 @@ silenced has its intervals locked OFF; an LFO aimed at the old page is cleared, 
 has OFF and an octave down in it; 8: the wave bank's choice, MONO2K's 32 for every older pattern).
 
 DIGI-WAV plays either bank, set on SYN's third page (BANK: M2K, MONO2K's 32 waves across WAVE's range as before; M64,
-the owner's 64, two WAVE values a wave: an even one is that wave exactly, an odd one between two). Every wave of both
+the owner's 64, two WAVE values a wave: an even one is that wave exactly, an odd one between two). The owner's play
+without their DC (each cycle's mean, up to -29 % of the peak, taken out at playback, the files and the table kept as
+they are): with it a trig stepped, 13-17 dB more under 60 Hz at the onset on OS13, OS36 and OS48; four that would
+pass 16 bits so (OS29, OS37, OS48, OS58) play 0.4-1.4 dB down. MONO2K's 32 play as before. Every wave of both
 at C2, C4 and C6 (`tools/wave_check.py`): the owner's in tune within 0.2 c, their levels and aliasing within the range
-of MONO2K's own (the aliasing of a 256-point table read without a band limit, both banks alike). The
+of MONO2K's own (the aliasing of a 256-point table read without a band limit, both banks alike), their thump at a
+trig within MONO2K's worst (one of its own, 9.1 dB, kept: saved patterns play it). The
 DigiPro waves and BeatBox samples are the OS's data and are not copied: DIGI-WAV plays MONO2K's own waves.
 
 ## Credits and licence

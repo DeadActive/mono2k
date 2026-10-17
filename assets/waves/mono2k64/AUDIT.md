@@ -82,5 +82,7 @@ a quarter of the file).
   two octaves and a major third high, so the device's copy takes one cycle of the five (`PROCESSING.md`), the file
   kept as it is. OSC-21 (repeats at 128 of 280), OSC-24 (at 21 of 256) and OSC-26 (at 95 of 254) loop as whole
   files: a weak sub under alternating humps, a buzz, a damped ringing inside one period; kept as they are.
-- DC offsets reach -28.6 % (OSC-36) and +17.8 % (OSC-64): the waves' own asymmetry, kept (the track's HP takes it).
+- DC offsets reach -28.6 % (OSC-36) and +17.8 % (OSC-64): the waves' own asymmetry, kept in the files and the table.
+  DIGI-WAV plays them without it (`PROCESSING.md`): a DC stepping in at every trig measured 13-17 dB more under 60 Hz
+  at the onset on OSC-13, OSC-36 and OSC-48 (`tools/wave_check.py`, thump), not the track's HP's to take.
 - Loop jumps up to 0.87 of full scale (OSC-28): resets, kept; the band limit draws them.

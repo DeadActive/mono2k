@@ -396,6 +396,44 @@ static int selftest(void)
                   "ui: a wave machine's SYN has a BANK page (M2K / M64), its WAVE named from the bank");
             m2k_init(7);
         }
+        /* the owner's 64 as DIGI-WAV plays them, C4 held a second: the machine's own output (before the chain) stays in
+         * 16 bits, no wave reaching the rail, and carries no DC (a mean over 261 cycles: a part cycle's worth at most) */
+        {
+            int over = 0, dcw = 0;
+            long worst = 0;
+            for (int k = 0; k < 64; k++) {
+                m2k_init(7);
+                cur_pat = 16;                                         /* B01, the blank kit */
+                pat[16].machine[0] = M_WAV;
+                static const uint8_t syn[8] = {0, 64, 127, 0, 0, 64, 0, 0};
+                for (int j = 0; j < 8; j++) pat[16].kit[0][P_SYN + j] = syn[j];
+                pat[16].kit[0][P_SYN] = (uint8_t)(2 * k);
+                pat[16].kit[0][P_WBNK] = 127;
+                pat[16].kit[0][P_HOLD] = 127;
+                pat[16].kit[0][P_DEC] = 127;
+                m2k_midi(0x90, 60, 100);
+                int16_t lr[32];
+                int pk = 0;
+                long sum = 0, n = 0;
+                for (int f = 0; f < M2K_SR; f += 16) {
+                    m2k_render(lr, 16);
+                    if (f < M2K_SR / 10) continue;                    /* past the onset */
+                    for (int i = 0; i < M2K_SUB; i++) {
+                        int v = blk[0][i];
+                        pk = v > pk ? v : -v > pk ? -v : pk;
+                        sum += v;
+                        n++;
+                    }
+                }
+                long mean = sum / n;
+                over += pk >= 32767;
+                dcw += mean > 300 || mean < -300;
+                if (labs(mean) > worst) worst = labs(mean);
+            }
+            m2k_init(7);
+            printf("     the owner's 64 played: %d at the rail, %d with DC left, the worst mean %ld\n", over, dcw, worst);
+            CHECK(!over && !dcw, "digi-wav: the owner's 64 play in 16 bits, their DC out");
+        }
         /* LEV's silence step by step, and LFOs off an ENS page: an old pattern made for it */
         {
             static m2k_pattern_t e, g;

@@ -2,9 +2,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # The wave banks as DIGI-WAV plays them: every wave of MONO2K's 32 and the owner's 64 at C2, C4 and C6 (host/m2k_ref:
 # SCAN centred, no sync, bits, osc 2 or steps; DIST 48, the filter open), each render's pitch (a harmonic comb on its
-# steady part, cents from the note), level (rms, dBFS) and aliasing (the energy off the note's harmonics, dB under the
-# whole, 20 Hz..20 kHz). The owner's 64 are held to the bank MONO2K already plays: in tune within 1 c; their level
-# within MONO2K's 32's range +-3 dB; their aliasing, note by note, under MONO2K's worst +3 dB, or reported. The
+# steady part, cents from the note), level (rms, dBFS), aliasing (the energy off the note's harmonics, dB under the
+# whole, 20 Hz..20 kHz) and thump (at C4: the share of energy under 60 Hz in the trig's first 40 ms over its share in
+# a steady 40 ms, dB: a wave's DC stepping in at a trig). The owner's 64 are held to the bank MONO2K already plays: in
+# tune within 1 c; their level within MONO2K's 32's range +-3 dB; their aliasing and thump, note by note, under
+# MONO2K's worst +3 dB, or reported. The
 # numbers are kept (tools/ref/waves_m2k.json) and a later run must keep them (0.5 c, 0.3 dB, 2 dB): a regression of
 # MONO2K's own, with no instrument to hold it to (the Monomachine's waves are not these).
 #   .venv/bin/python tools/wave_check.py [--record]
@@ -49,7 +51,15 @@ def measure(path, note):
         harm[lo:hi] = True
     tot = p[band].sum()
     alias = 10 * np.log10(max(p[band & ~harm].sum(), 1e-30) / tot) if tot > 0 else -300.0
-    return dict(cents=float(c), rms=float(20 * np.log10(np.sqrt(np.mean(seg ** 2)) + 1e-12)), alias=float(alias))
+    def lf(a, b):
+        w = x[int(a * SR):int(b * SR)]
+        q = np.abs(np.fft.rfft(w * np.hanning(len(w)), 1 << 15)) ** 2
+        fq = np.fft.rfftfreq(1 << 15, 1 / SR)
+        return q[(fq > 5) & (fq < 60)].sum() / max(q[fq > 5].sum(), 1e-30)
+    e = np.convolve(np.abs(x), np.ones(64) / 64, "same")
+    on = int(np.argmax(e > e.max() * 0.02)) / SR
+    thump = 10 * np.log10(max(lf(max(0, on - 0.0015), on + 0.04), 1e-30) / max(lf(0.5, 0.54), 1e-30))
+    return dict(cents=float(c), rms=float(20 * np.log10(np.sqrt(np.mean(seg ** 2)) + 1e-12)), alias=float(alias), thump=float(thump))
 
 
 def main():
@@ -73,6 +83,12 @@ def main():
               f"{max(abs(m['cents']) for m in mine):.2f} c")
         print(f"     the owner's 64: level {min(m['rms'] for m in own):.1f}..{max(m['rms'] for m in own):.1f} dBFS, aliasing worst "
               f"{max(m['alias'] for m in own):.1f} dB, pitch worst {max(abs(m['cents']) for m in own):.2f} c")
+        if note == 60:
+            tw = max(m["thump"] for m in mine)
+            print(f"     thump at C4: MONO2K's worst {tw:.1f} dB, the owner's worst {max(m['thump'] for m in own):.1f} dB")
+            for k, m in enumerate(own):
+                if m["thump"] > tw + 3:
+                    bad.append(f"OS{k + 1:02d} at C4: thump {m['thump']:.1f} dB, over MONO2K's worst {tw:.1f} + 3")
         for k, m in enumerate(own):
             if abs(m["cents"]) > 1.0:
                 bad.append(f"OS{k + 1:02d} at C{note // 12 - 1}: pitch {m['cents']:+.2f} c")
@@ -87,7 +103,8 @@ def main():
         ref = json.load(open(REF))
         for k, m in res.items():
             r = ref.get(k)
-            if r is None or abs(m["cents"] - r["cents"]) > 0.5 or abs(m["rms"] - r["rms"]) > 0.3 or abs(m["alias"] - r["alias"]) > 2:
+            if r is None or abs(m["cents"] - r["cents"]) > 0.5 or abs(m["rms"] - r["rms"]) > 0.3 or abs(m["alias"] - r["alias"]) > 2 \
+                    or abs(m["thump"] - r.get("thump", m["thump"])) > 3:
                 bad.append(f"{k}: moved from the record ({r} -> {m})")
     print("\n".join(bad) if bad else "every wave: in tune, its level and aliasing as the bank's")
     return 1 if bad else 0

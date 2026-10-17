@@ -12,7 +12,8 @@
 #   4. scaled to MONO2K's bank's peak, 32000 (the files peak at -0.1 dBFS; band-limiting a jump overshoots, so each
 #      is scaled from its own peak after resampling; the scale recorded)
 #   5. rounded to 16 bits
-# Nothing is hand-edited. Writes the header and the processing table (assets/waves/mono2k64/PROCESSING.md).
+# Nothing is hand-edited. For playback, beside the cycles: each one's mean (DC), which DIGI-WAV takes out, and the gain
+# (Q14) that keeps a cycle so within 16 bits. Writes the header and the processing table (assets/waves/mono2k64/PROCESSING.md).
 #   .venv/bin/python tools/gen_waves.py
 import os, sys
 import numpy as np
@@ -66,20 +67,31 @@ def main():
             f.write("    " + ", ".join(str(v) for v in flat[j:j + 16]) + ",\n")
         f.write("};\n")
         f.write("static const char *const T_WAVE64_NAME[64] = {%s};\n" % ", ".join('"OS%02d"' % i for i in range(1, 65)))
+        dcs = [int(round(np.mean(w))) for w in waves]
+        # without its DC a cycle can pass 16 bits (a wave pushed to one side, its other peak at 32000): such a wave is
+        # scaled back to 32000 at playback (Q14), every other one plays at 1
+        gs = [16384 if np.abs(w - d).max() <= 32767 else int(16384 * PEAK // np.abs(w - d).max()) for w, d in zip(waves, dcs)]
+        f.write("/* each cycle's mean (its DC), for playback that takes it out: the waves keep theirs */\n")
+        f.write("static const int16_t T_WAVES64_DC[64] = {%s};\n" % ", ".join(str(d) for d in dcs))
+        f.write("/* the gain (Q14) that keeps a cycle without its DC in 16 bits */\n")
+        f.write("static const int16_t T_WAVES64_G[64] = {%s};\n" % ", ".join(str(g) for g in gs))
     lines = ["# The 64-wave bank: processing", "",
              "From each original (`OSC-N.wav`, kept as it is) to the device's cycle of 256 16-bit samples, by",
              "`tools/gen_waves.py` (its header lists the steps). Per wave: the file's length; its whole cycles (one,",
              "or m: the spectrum read at multiples of m, a correction); the harmonics kept (up to 127); the energy of",
              "those dropped above them; the band limit's overshoot of the original peak; the level the bank's 32000",
-             "peak gives against the file's (dB).", "",
-             "| Wave | Length | Cycles | Harmonics kept | Dropped energy | Overshoot | Level | Note |", "|---|---|---|---|---|---|---|---|"]
+             "peak gives against the file's (dB); at playback, the cycle's DC taken out (of the peak) and the gain that keeps",
+             "it so in 16 bits.", "",
+             "| Wave | Length | Cycles | Harmonics kept | Dropped energy | Overshoot | Level | Playback | Note |", "|---|---|---|---|---|---|---|---|---|"]
     for i, d in notes:
         note = f"**corrected**: {d['m']} whole cycles in the file, one taken" if d["m"] > 1 else ""
         lines.append(f"| OS{i:02d} (OSC-{i}) | {d['n']} | {d['m']} | {d['kept']} | "
-                     f"{'none' if d['dropped_db'] < -120 else '%.1f dB' % d['dropped_db']} | {d['over_db']:+.2f} dB | {d['scale_db']:+.2f} dB | {note} |")
+                     f"{'none' if d['dropped_db'] < -120 else '%.1f dB' % d['dropped_db']} | {d['over_db']:+.2f} dB | {d['scale_db']:+.2f} dB | "
+                     f"DC {dcs[i - 1] / PEAK * 100:+.1f} %{'' if gs[i - 1] == 16384 else ', %+.2f dB' % (20 * np.log10(gs[i - 1] / 16384))} | {note} |")
     with open(os.path.join(SRC, "PROCESSING.md"), "w") as f:
         f.write("\n".join(lines) + "\n")
-    print(f"64 waves into {os.path.relpath(OUT, ROOT)}; corrected: {[i for i, d in notes if d['m'] > 1]}")
+    print(f"64 waves into {os.path.relpath(OUT, ROOT)}; corrected: {[i for i, d in notes if d['m'] > 1]}; scaled without their DC: "
+          f"{[i + 1 for i, g in enumerate(gs) if g != 16384]}")
 
 
 if __name__ == "__main__":
