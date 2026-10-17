@@ -115,8 +115,7 @@ p, h2, h3, dl, dd, ol { margin: 0; }
 .start.gone { display: none; }
 
 /* the side: readouts, the tracks, the patterns, the project, the tools */
-.read { display: grid; grid-template-columns: 1fr 1fr; border-top: 3px solid var(--ink); position: relative; }
-.read::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: var(--s2); background: var(--g-down) 0 0 / 4px var(--s2) repeat-x; image-rendering: pixelated; pointer-events: none; }
+.read { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--ink); position: relative; }
 .read > div { padding: var(--s1) 0; border-bottom: 1px solid var(--ink); min-width: 0; }
 .read > div:nth-child(odd) { border-right: 1px dotted var(--ink); padding-right: var(--s1); }
 .read > div:nth-child(even) { padding-left: var(--s1); }
