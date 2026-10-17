@@ -20,7 +20,7 @@
   --text: "Helvetica Neue", Helvetica, "Inter Tight", Arial, sans-serif;
   --mono: "SF Mono", ui-monospace, Menlo, monospace;
   /* space */
-  --s1: 8px; --s2: 16px; --s3: 24px; --s4: 32px; --s6: 48px; --s8: 64px;
+  --s1: 8px; --s2: 16px; --s3: 24px; --s4: 32px; --s6: 48px; --s8: 64px; --s12: 96px;
   --gut: var(--s2);
   /* type */
   --label: 700 11px / 16px var(--text);
@@ -115,27 +115,31 @@ p, h2, h3, dl, dd, ol { margin: 0; }
 .start.gone { display: none; }
 
 /* the side: readouts, the tracks, the patterns, the project, the tools */
-.read { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--ink); position: relative; }
-.read > div { padding: var(--s1) 0; border-bottom: 1px solid var(--ink); min-width: 0; }
-.read > div:nth-child(odd) { border-right: 1px dotted var(--ink); padding-right: var(--s1); }
-.read > div:nth-child(even) { padding-left: var(--s1); }
-.read dd { margin-top: 4px; font: var(--title); text-transform: uppercase; white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; }
+/* the readout: boxed and padded as the tracks and patterns under it; in each cell the buttons share the name's row,
+ * on the right, and the value has the whole width under them */
+.read { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--ink); }
+.read > div {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "dt ctls" "dd dd";
+  column-gap: var(--s1); align-items: center; padding: var(--s1); border-bottom: 1px solid var(--ink); min-width: 0;
+}
+.read > div:nth-child(odd) { border-right: 1px solid var(--ink); }
+.read > div:nth-last-child(-n+2) { border-bottom: 0; }
+.read dt { grid-area: dt; }
+.read dd { grid-area: dd; margin-top: 4px; font: var(--title); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: clip; font-variant-numeric: tabular-nums; }
 /* the readout and the tracks are controls too: small square buttons in the label's type, dithered on hover */
-.read > div { position: relative; }
-.read .ctls { position: absolute; top: 0; bottom: 0; right: var(--s1); display: flex; align-items: center; gap: var(--s1); }
-.read > div:nth-child(even) .ctls { right: 0; }
+.read .ctls { grid-area: ctls; display: flex; align-items: center; gap: 4px; }
 .read .ctls button, .tracks .tmute {
-  display: inline-grid; place-items: center; min-width: var(--s4); height: var(--s4); padding: 0 var(--s1); cursor: pointer;
+  display: inline-grid; place-items: center; min-width: var(--s3); height: var(--s3); padding: 0 6px; cursor: pointer;
   font: var(--label); letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--ink); background: var(--paper); border: 1px solid var(--ink);
 }
-.read .ctls .ar { width: var(--s4); padding: 0; }
-.read .ctls svg { display: block; width: 12px; height: 12px; fill: currentColor; }
+.read .ctls .ar { width: var(--s3); padding: 0; }
+.read .ctls svg { display: block; width: 10px; height: 10px; fill: currentColor; }
 .read .ctls button:hover, .tracks .tmute:hover, .tracks .tsel:hover { background-image: var(--d-check); background-size: 2px 2px; image-rendering: pixelated; }
 .read .ctls button[aria-pressed="true"], .tracks .tmute[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .read button:focus-visible, .tracks button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .tracks .tsel {
-  display: block; width: 100%; min-height: 56px; padding: var(--s1); text-align: left; cursor: pointer;
+  display: block; width: 100%; min-height: 48px; padding: var(--s1); text-align: left; cursor: pointer;
   font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: transparent; border: 0;
 }
 .tracks li.on .tsel:hover { background-image: none; }
@@ -151,7 +155,7 @@ p, h2, h3, dl, dd, ol { margin: 0; }
 .tracks li.mute { background-image: var(--d-sparse); }
 .pats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 1fr; border-top: 1px solid var(--ink); border-left: 1px solid var(--ink); }
 .pats button {
-  display: block; text-align: left; padding: var(--s1); min-width: 0; overflow: hidden; cursor: pointer;
+  display: block; text-align: left; padding: 4px var(--s1); min-width: 0; overflow: hidden; cursor: pointer;
   color: var(--ink); background: var(--paper); border: 0; border-right: 1px solid var(--ink); border-bottom: 1px solid var(--ink);
 }
 .pats button b { display: block; font: 900 14px / 20px var(--head); letter-spacing: 0; }
@@ -160,7 +164,7 @@ p, h2, h3, dl, dd, ol { margin: 0; }
 .pats button.q { background-image: var(--d-dots); background-size: 2px 2px; image-rendering: pixelated; }
 
 /* the sections: the number on 4 columns, the text on 8; full-width blocks below them */
-.sec { position: relative; z-index: 1; row-gap: var(--s4); padding-top: var(--s6); padding-bottom: var(--s8); border-bottom: 1px solid var(--ink); }
+.sec { position: relative; z-index: 1; row-gap: var(--s4); padding-top: var(--s12); padding-bottom: var(--s12); border-bottom: 1px solid var(--ink); }
 .sec::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: var(--s4); background: var(--g-down) 0 0 / 4px var(--s4) repeat-x; image-rendering: pixelated; opacity: 0.9; pointer-events: none; }
 .sec__n { grid-column: 1 / span 4; font: 400 clamp(56px, 9vw, 112px) / 0.8 var(--head); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .sec__body { grid-column: 5 / span 8; display: grid; gap: var(--s3); align-content: start; }
@@ -201,18 +205,18 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 .reveal .mgrid .mcard { opacity: 0; transform: translateY(var(--s2)); transition: opacity 480ms steps(6), transform 480ms steps(6); transition-delay: calc(var(--i, 0) * 70ms); }
 .reveal .mgrid.in .mcard { opacity: 1; transform: none; }
 
-@media (max-width: 1100px) {
+/* below 1400 the readout cannot stand as tall as the instrument beside it: it goes under it */
+@media (max-width: 1400px) {
   .play__main { grid-column: 1 / -1; padding-bottom: 0; }
   .play__side { grid-column: 1 / -1; }
+}
+@media (max-width: 1100px) {
   .mgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .keys { grid-column: span 6; }
   .keys:last-child { grid-column: 1 / -1; }
 }
 @media (max-width: 720px) {
-  /* the readout's buttons step up to the label's row, smaller, so the values keep the whole width */
-  .read .ctls { top: 4px; bottom: auto; gap: 4px; }
-  .read .ctls button { min-width: var(--s3); height: var(--s3); padding: 0 6px; }
-  .read .ctls .ar { width: var(--s3); padding: 0; }
+  .sec { padding-top: var(--s8); padding-bottom: var(--s8); }
   .bar > * { grid-column: span 6; }
   .bar { row-gap: var(--s1); padding-top: var(--s2); padding-bottom: var(--s2); }   /* bars that wrap: rows apart */
   header.bar > :nth-child(2), header.bar > :nth-child(3) { display: none; }   /* the name and the switch only */
