@@ -29,7 +29,7 @@ static int pat_pack(const m2k_pattern_t *p, uint8_t *o)
 {
     int n = 0;
     o[n++] = 'P';
-    o[n++] = 3;                        /* 2: the amp envelope on the Monomachine's times; 3: the MOD effect */
+    o[n++] = 4;                        /* 2: amp envelope on the Monomachine's times; 3: MOD; 4: SWAV-SAW's new page */
     m_cpy(o + n, p->name, 8); n += 8;
     m_cpy(o + n, p->machine, M2K_TRACKS); n += M2K_TRACKS;
     m_cpy(o + n, p->glob, G_COUNT); n += G_COUNT;
@@ -62,7 +62,7 @@ static int pat_pack(const m2k_pattern_t *p, uint8_t *o)
 static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
-    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 3) return 0;
+    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 4) return 0;
     int ver = o[1], stride = ver >= 3 ? P_COUNT : P_MODT;          /* before 3 a kit ended before the MOD effect */
     const int head = 2 + 8 + M2K_TRACKS + G_COUNT + 1 + M2K_TRACKS * stride + M2K_TRACKS * M2K_STEPS / 8 + 2;
     if (len < head) return 0;
@@ -102,6 +102,21 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
         n += 4;
     }
     if (ver == 1) amp_v1(p);
+    if (ver < 4)                       /* SWAV-SAW took the Monomachine's page: carry the old one over as near as it goes */
+        for (int t = 0; t < M2K_TRACKS; t++) {
+            if (p->machine[t] != M_SAW) continue;
+            uint8_t *k = p->kit[t], o8[8];
+            m_cpy(o8, k, 8);                       /* DTUN VOIC MIX SUB SHPE DRFT OCTV STRT */
+            int voices = 1 + ((o8[1] * 7) >> 7);
+            k[0] = voices > 1 ? o8[2] : 0;         /* UNIL from the side mix */
+            k[1] = (uint8_t)(o8[0] * 2 > 127 ? 127 : o8[0] * 2);   /* UNIW from the detune */
+            k[2] = voices >= 5 ? 100 : 0;          /* UNIX when there were five voices or more */
+            k[3] = o8[5];                          /* DRFT */
+            k[4] = o8[3];                          /* SUBX: the old sub was a square */
+            k[5] = 0; k[6] = 0; k[7] = 64;         /* SUB1, SUB2, TUNE centred */
+            for (int i = 0; i < M2K_LOCKS; i++)
+                if (p->lock[i].trk == t && p->lock[i].param < 8) p->lock[i].trk = 0xFF;
+        }
     if (ver < 3) {                     /* the reverb's return came up 12 dB: half the sends keep the same space */
         for (int t = 0; t < M2K_TRACKS; t++) p->kit[t][P_SPU] >>= 1;
         for (int i = 0; i < M2K_LOCKS; i++) if (p->lock[i].trk != 0xFF && p->lock[i].param == P_SPU) p->lock[i].val >>= 1;

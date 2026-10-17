@@ -13,7 +13,7 @@
 enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOWL, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
-    K_BPM, K_SWNG, K_LEN, K_PCT, K_GSIZ, K_FINE, K_SCRN, K_PROJ, K_LOAD
+    K_BPM, K_SWNG, K_LEN, K_PCT, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -71,8 +71,8 @@ static const mi_t MI[M_COUNT] = {
      {{"RAT1", "RATIO 1", K_RATIO}, {"DEP1", "DEPTH 1", K_NUM}, {"DEC1", "DECAY 1", K_DECT}, {"RAT2", "RATIO 2", K_RATIO},
       {"DEP2", "DEPTH 2", K_NUM}, {"DEC2", "DECAY 2", K_DECT}, {"FDBK", "FEEDBACK", K_NUM}, {"SWEP", "RATIO SWEEP", K_BI}}},
     {"SWAV-SAW", "SWV", "SUPER", "SYNTH", {2, 1, 2},
-     {{"DTUN", "DETUNE", K_NUM}, {"VOIC", "VOICES", K_VOIC}, {"MIX", "SIDE MIX", K_NUM}, {"SUB", "SUB OSC", K_NUM},
-      {"SHPE", "SAW TO SQUARE", K_NUM}, {"DRFT", "DRIFT", K_NUM}, {"OCTV", "OCTAVE UP", K_NUM}, {"STRT", "PHASE START", K_NUM}}},
+     {{"UNIL", "UNISON LEVEL", K_NUM}, {"UNIW", "UNISON WIDTH", K_NUM}, {"UNIX", "EXTENDED UNISON", K_NUM}, {"DRFT", "DRIFT", K_NUM},
+      {"SUBX", "SQUARE SUB", K_NUM}, {"SUB1", "SINE SUB -1", K_NUM}, {"SUB2", "SINE SUB -2", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
     {"SWAV-ENS", "SWV", "CHORD", "SYNTH", {2, 1, 3},
      {{"INT1", "INTERVAL 1", K_INT25}, {"INT2", "INTERVAL 2", K_INT25}, {"INT3", "INTERVAL 3", K_INT25}, {"DTUN", "DETUNE", K_NUM},
       {"SHPE", "SAW TO PULSE", K_NUM}, {"PW", "PULSE WIDTH", K_NUM}, {"LEV", "CHORD LEVEL", K_NUM}, {"SUB", "SUB OSC", K_NUM}}},
@@ -160,6 +160,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     switch (pi->kind) {
     case K_BI: s_int(out, v - 64); break;
     case K_FINE: s_int(out, ((v - 64) * 100) / 64); *unit = "CENT"; break;
+    case K_TUN2: s_int(out, ((v - 64) * 25) / 8); *unit = "CENT"; break;     /* +-2 semitones, 3.125 c a step */
     case K_TIME: case K_HOLD: case K_DECT: case K_ATIM: case K_AHLD: case K_ADEC: case K_AREL: {
         int k = pi->kind;
         if ((k == K_HOLD || k == K_DECT || k == K_AHLD || k == K_ADEC) && v == 127) { s_cpy(out, "INF"); break; }

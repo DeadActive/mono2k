@@ -127,9 +127,6 @@ static void mach_trig(trk_t *t, int m)
         t->ph[0] = t->ph[1] = t->ph[2] = t->ph[3] = 0;
         t->ms[0] = t->ms[1] = 0;
         break;
-    case M_SAW:
-        if (P7(t, P_SYN + 7)) for (int i = 0; i < 7; i++) t->ph[i] = rnd32() >> (P7(t, P_SYN + 7) < 64 ? 3 : 0);
-        break;
     case M_WAV:
         t->ph[0] = t->ph[1] = 0;
         break;
@@ -304,36 +301,50 @@ static void mach_block(int ti, int m, int32_t pitch)
         }
         break;
     }
-    case M_SAW: {                      /* DTUN VOIC MIX SUB SHPE DRFT OCTV STRT */
-        int nv = 1 + PN(t, P_SYN + 1, 7);
-        if (nv > 7) nv = 7;
-        int32_t dt = P8(t, P_SYN + 0) >> 6;     /* 0..508: 1/64 semitone units, about +-1 semitone at the edge */
-        int32_t side = T_VOL[P7(t, P_SYN + 2)], sub = T_VOL[P7(t, P_SYN + 3)] >> 1;
-        int32_t shp = P7(t, P_SYN + 4), oct = T_VOL[P7(t, P_SYN + 6)] >> 1;
-        int32_t drift = P7(t, P_SYN + 5);
+    case M_SAW: {                      /* UNIL UNIW UNIX DRFT SUBX SUB1 SUB2 TUNE */
+        /* after the Monomachine's SWAVE-SAW, measured on its OS (tools/ref/swave_saw*.spec): a rising saw, free
+         * running; the unison pair at -0.42 / +0.43 c a step of UNIW, each as loud as UNIL says; the extended pair at
+         * half that distance, UNIL x UNIX; a square an octave down on its own curve; all through one pole of highpass
+         * that follows the note (cutoff 1.0 .. 2.6 x f0: the saw's hollow fundamental); then sines an octave and two
+         * down. Against GND-SIN's sine the saw stands at 0.158, SUB1 at 0.217, SUB2 at 0.082. DRFT is MONO2K's own. */
+        int unil = P7(t, P_SYN + 0), uniw = P7(t, P_SYN + 1), drift = P7(t, P_SYN + 3);
+        int32_t pq = pitch + (P7(t, P_SYN + 7) - 64) * 2;               /* TUNE: +-2 semitones, 3.125 c a step */
         if (drift) {
             t->ms[4] += (((int32_t)(rnd32() >> 20) - 2048) * drift) >> 9;
             t->ms[4] = CLAMP(t->ms[4], -drift * 8, drift * 8);
+            pq += t->ms[4] >> 6;
         }
-        uint32_t inc[7], inv[7];
-        for (int k = 0; k < nv; k++) {
-            inc[k] = inc_of(pitch + (SAW_SPREAD[k] * dt >> 4) + (t->ms[4] >> 6) * (k & 1 ? 1 : -1));
-            inv[k] = 0xFFFFFFFFu / (inc[k] | 1);
-        }
-        uint32_t inco = inc[0] << 1, invo = 0xFFFFFFFFu / (inco | 1);
-        int32_t norm = nv == 1 ? 32767 : (32767 * 2) / (nv + 1);
+        uint32_t inc[5], inv[5];
+        inc[0] = inc_of(pq);
+        inc[1] = mulu_hi(inc[0], T_SW1LO[uniw], 24);
+        inc[2] = mulu_hi(inc[0], T_SW1HI[uniw], 24);
+        inc[3] = mulu_hi(inc[0], T_SW2LO[uniw], 24);
+        inc[4] = mulu_hi(inc[0], T_SW2HI[uniw], 24);
+        int nv = unil ? 5 : 1;
+        for (int k = 0; k < nv; k++) inv[k] = 0xFFFFFFFFu / (inc[k] | 1);
+        int32_t g1 = 5166 * unil / 127, g2 = (g1 * P7(t, P_SYN + 2)) / 127;
+        int32_t gx = (3369 * T_SWSUBX[P7(t, P_SYN + 4)]) >> 15;
+        int32_t gs1 = 7097 * P7(t, P_SYN + 5) / 127, gs2 = 2701 * P7(t, P_SYN + 6) / 127;
+        uint32_t ih = inc[0] >> 1, invh = 0xFFFFFFFFu / (ih | 1);
+        int32_t a = T_SWHP[CLAMP(pq >> 6, 0, 127)];
         for (int i = 0; i < M2K_SUB; i++) {
-            int32_t s = 0;
-            for (int k = 0; k < nv; k++) {
-                int32_t v = blep_saw(t->ph[k], inc[k], inv[k]);
-                if (shp) v -= (blep_saw(t->ph[k] + 0x80000000u, inc[k], inv[k]) * shp) >> 7;
-                s += k ? (v * side) >> 15 : v;
-                t->ph[k] += inc[k];
+            int32_t s = blep_saw(t->ph[0], inc[0], inv[0]) * 5166;
+            if (unil) {
+                s += (blep_saw(t->ph[1], inc[1], inv[1]) + blep_saw(t->ph[2], inc[2], inv[2])) * g1;
+                if (g2) s += (blep_saw(t->ph[3], inc[3], inv[3]) + blep_saw(t->ph[4], inc[4], inv[4])) * g2;
             }
-            s = (s * norm) >> 15;
-            if (oct) { s += (blep_saw(t->ph[7], inco, invo) * oct) >> 15; t->ph[7] += inco; }
-            if (sub) { s += ((t->ms[5] & 0x80000000) ? sub : -sub) >> 1; t->ms[5] += (int32_t)(inc[0] >> 1); }
-            o[i] = (int16_t)sat16(s);
+            s >>= 15;                                                     /* rising, a drop at the reset, as the original */
+            if (gx) s += ((blep_saw(t->ph[5], ih, invh) - blep_saw(t->ph[5] + 0x80000000u, ih, invh)) * gx) >> 15;
+            for (int k = 0; k < nv; k++) t->ph[k] += inc[k];
+            /* the highpass: y = a (y + x - x') */
+            t->ms[0] = (int32_t)(((int64_t)a * (t->ms[0] + s - t->ms[1])) >> 15);
+            t->ms[1] = s;
+            int32_t y = t->ms[0];
+            if (gs1) y += (sinp(t->ph[5]) * gs1) >> 15;
+            if (gs2) y += (sinp(t->ph[6]) * gs2) >> 15;
+            t->ph[5] += ih;
+            t->ph[6] += inc[0] >> 2;
+            o[i] = (int16_t)sat16(y);
         }
         break;
     }

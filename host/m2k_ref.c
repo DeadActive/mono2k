@@ -73,6 +73,8 @@ int main(int argc, char **argv)
         while (*c && *c != '\n') {
             int cc, v, used;
             if (sscanf(c, "%d=%d%n", &cc, &v, &used) != 2) break;
+            /* until MONO2K's chain takes the Monomachine's centres: its DIST and delay send are bipolar, 64 their 0 */
+            if (cc == 60 || cc == 84) v = v > 64 ? (v - 64) * 2 : 0;
             m2k_midi(0xB0, cc, v);
             c += used;
             while (*c == ' ' || *c == '\t') c++;

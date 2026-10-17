@@ -63,6 +63,27 @@ def mod_hz(v):
     return 0.1 * 100 ** (v / 127.0)
 out.append(arr("T_MOD_INC", "uint32_t", [round(mod_hz(v) / SR * 2 ** 32) for v in range(128)], 8))
 out.append(arr("T_MOD_HZ10", "uint16_t", [max(1, round(mod_hz(v) * 10)) for v in range(128)]))
+# SWAV-SAW, after the Monomachine's SWAVE-SAW (measured on OS 1.32B, tools/ref/swave_saw*.spec): the unison pair's
+# pitch ratios a step of UNIW (-0.4168 c below, +0.4276 c above), the extended pair's (+-0.2109 c), Q24
+out.append(arr("T_SW1LO", "uint32_t", [round(2 ** 24 * 2 ** (-0.4168 * v / 1200)) for v in range(128)], 8))
+out.append(arr("T_SW1HI", "uint32_t", [round(2 ** 24 * 2 ** (0.4276 * v / 1200)) for v in range(128)], 8))
+out.append(arr("T_SW2LO", "uint32_t", [round(2 ** 24 * 2 ** (-0.2109 * v / 1200)) for v in range(128)], 8))
+out.append(arr("T_SW2HI", "uint32_t", [round(2 ** 24 * 2 ** (0.2109 * v / 1200)) for v in range(128)], 8))
+# its highpass, a pole that follows the note: cutoff (0.98 + 0.0223 (note - 24)) x f0, as the coefficient a (Q15)
+def sw_hp(n):
+    f0 = 440 * 2 ** ((n - 69) / 12)
+    r = min(2.6, max(0.9, 0.98 + 0.0223 * (n - 24)))
+    return round(32768 * math.exp(-2 * math.pi * min(r * f0, SR * 0.45) / SR))
+out.append(arr("T_SWHP", "uint16_t", [min(32767, sw_hp(n)) for n in range(128)]))
+# SUBX's level against its setting (measured: dB from full at 8 16 24 32 48 64 80 96 112 127), Q15
+_sx = [(0, -120), (8, -12.9), (16, -8.4), (24, -6.3), (32, -5.0), (48, -3.4), (64, -2.4), (80, -1.7), (96, -1.0), (112, -0.5), (127, 0)]
+def subx(v):
+    for (a0, d0), (a1, d1) in zip(_sx, _sx[1:]):
+        if a0 <= v <= a1:
+            if v == 0: return 0
+            d = d0 + (d1 - d0) * (v - a0) / (a1 - a0) if a0 else d1 * v / a1 + 20 * math.log10(max(v, 1) / a1)
+            return round(32767 * 10 ** (d / 20))
+out.append(arr("T_SWSUBX", "uint16_t", [subx(v) for v in range(128)]))
 # patterns saved before (version 1) timed ATK HOLD DEC REL on etime(): each value to the one nearest its time
 def nearest(t, f, lo=0, hi=126):
     return min(range(lo, hi + 1), key=lambda v: abs(math.log(max(f(v), 1e-6)) - math.log(max(t, 1e-6))))

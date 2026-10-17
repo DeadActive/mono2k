@@ -188,7 +188,7 @@ static void factory(void)
     SET(p, 3, SA, 70, SG, 60, P_DEC, 70, P_BASE, 50, P_DIST, 30, P_VOL, 90);
     BEAT(p, 3, "....X.......x..2", 60);
     lk(p, 3, 15, SB, 90);
-    SET(p, 4, SA, 30, SB, VOICES(4), P_DEC, 70, P_WDTH, 64, P_LPQ, 90, P_FDEC, 46, P_WOF, 86, P_BITS, 50, P_VOL, 74, P_SPU, 30);
+    SET(p, 4, SA, 100, SB, 24, SC, 80, SF, 20, P_DEC, 70, P_WDTH, 64, P_LPQ, 90, P_FDEC, 46, P_WOF, 86, P_BITS, 50, P_VOL, 127, P_SPU, 30);
     BEAT(p, 4, ".x...x..s....x..", 72, 75, 79, 77);
     lk(p, 4, 5, P_SRR, 80); lk(p, 4, 13, P_XOR, 70);
     SET(p, 5, SH, 127, SC, 70, SB, 110, P_DEC, 70, P_VOL, 70, P_PAN, 90, P_SPU, 60);
@@ -445,8 +445,8 @@ static void factory(void)
     BEAT(p, 1, "........X.......|........X.......", 60);
     SET(p, 2, SA, 116, P_DEC, 3, P_REL, 4, P_BASE, 96, P_VOL, 64, P_PAN, 78);
     BEAT(p, 2, "..x...x.3.x...4.|..x...x...x.4.3.", 84);
-    SET(p, 3, SA, 60, SB, VOICES(5), SC, 80, SD, 60, SE, 40, SF, 20, P_HOLD, 127, P_DEC, 127, P_REL, 16,
-        P_WDTH, 40, P_LPQ, 84, P_DIST, 70, P_VOL, 46, P_GATE, 100);
+    SET(p, 3, SA, 120, SB, 40, SC, 100, SD, 10, SE, 80, P_HOLD, 127, P_DEC, 127, P_REL, 16,
+        P_WDTH, 40, P_LPQ, 84, P_DIST, 70, P_VOL, 53, P_GATE, 100);
     BEAT(p, 3, "x.......x...s...|x.....x.....x...", 41, 41, 44, 41, 39, 44);
     lfo(p, 3, 0, P_WDTH, 1, 3, 64, 120, 1);
     lk(p, 3, 8, P_LFO + L_MULT, enc(4, 8)); lk(p, 3, 22, P_LFO + L_MULT, enc(4, 8)); lk(p, 3, 28, P_LFO + L_SPD, 96);
