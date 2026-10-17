@@ -25,14 +25,15 @@ static int cur_proj;
 
 /* -------------------------------------------------------------------------------------- one pattern, packed */
 
-/* a pattern in the layout of a version (8, today's; the self-test writes the older ones, 3..7, kits 70 wide) */
+/* a pattern in the layout of a version (9, today's; the self-test writes the older ones, 3..8; 3..7 kits 70 wide) */
 static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
 {
     int n = 0, stride = ver >= 8 ? P_COUNT : P_WBNK;
     o[n++] = 'P';
     o[n++] = (uint8_t)ver;             /* 2: amp envelope on the Monomachine's times; 3: MOD; 4: SWAV-SAW's new page;
                                         * 5: the track chain on the Monomachine's; 6: GND-SIN's TUNE in 3.125 c;
-                                        * 7: SWAV-ENS's page; 8: the wave bank's choice (kits 71 wide) */
+                                        * 7: SWAV-ENS's page; 8: the wave bank's choice (kits 71 wide); 9: the bus's
+                                        * controls on their new laws */
     m_cpy(o + n, p->name, 8); n += 8;
     m_cpy(o + n, p->machine, M2K_TRACKS); n += M2K_TRACKS;
     m_cpy(o + n, p->glob, G_COUNT); n += G_COUNT;
@@ -62,7 +63,7 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
     return n;
 }
 
-static int pat_pack(const m2k_pattern_t *p, uint8_t *o) { return pat_pack_v(p, o, 8); }
+static int pat_pack(const m2k_pattern_t *p, uint8_t *o) { return pat_pack_v(p, o, 9); }
 
 static uint8_t tune_v5(int v)
 {
@@ -73,7 +74,7 @@ static uint8_t tune_v5(int v)
 static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
-    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 8) return 0;
+    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 9) return 0;
     int ver = o[1], stride = ver >= 8 ? P_COUNT : ver >= 3 ? P_WBNK : P_MODT;   /* before 3 a kit ended before the MOD
                                                                                * effect, before 8 before the bank */
     const int head = 2 + 8 + M2K_TRACKS + G_COUNT + 1 + M2K_TRACKS * stride + M2K_TRACKS * M2K_STEPS / 8 + 2;
@@ -142,6 +143,7 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
                 if (p->lock[i].trk == t && p->lock[i].param == P_SYN) p->lock[i].val = tune_v5(p->lock[i].val);
         }
     if (ver < 7) ens_v6(p);           /* SWAV-ENS took the Monomachine's page */
+    if (ver < 9) bus_v9(p);           /* the bus's controls took new laws */
     return 1;
 }
 

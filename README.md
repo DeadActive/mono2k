@@ -38,7 +38,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 | Projects | the modern Elektron way: 4 projects × 4 banks (A–D) × 16 patterns, each pattern with its own sounds. SAVE keeps the pattern (its reload point), GLO + SAVE reloads it, SAVE held keeps the project; GLO + REC / PLAY / SEQ copy, paste, clear (the pattern on HOME, the track's sound on its pages); GLO > SET picks and loads a project. On the web: a project picker, export / import as `.m2kp` files. Stored packed (a typical pattern 0.5–1 KB; the DEMO project 32 KB) |
 | Factory | project DEMO, bank A, sixteen four-bar parts with melodic lines: dub techno (DEEP, FOG, GROOVE), ambient and PS1 jungle (JUNGLE, DAYDRM, LIQUID, SPU), electro (ELECTRO, DREXC, ROBOT), glitch (GLITCH, STUTTR, SHARDS), IDM (PRISM, SYRUP, BRAIN); banks B–D blank. A store saved with the earlier demos takes the new ones where the old still stand |
 | Sequencer | 6 × 64 steps, note / accent / slide, parameter locks, trig conditions (chance, A:B, 1ST, PRE, FILL), ratchets, swing, live recording and step entry (REC while stopped), pages held to set the length, patterns queued at the bar |
-| Bus | SPU-style reverb at 22 kHz, beat repeat (reverse, halving, tape stop), tape wow and flutter, 4-bit ADPCM crunch, hiss and dust, drive |
+| Bus | SPU-style reverb at 22 kHz, beat repeat (reverse, halving, tape stop), tape wow and flutter, 4-bit ADPCM crunch, hiss and dust, drive; each control on a law measured over its whole range (GLCH a chance per sixteenth, 0.3–50 %) |
 | MIDI | channels 1–6 are tracks 1–6, notes and the Monomachine's CC map (SYN 48–55, AMP 56–63, FILT 72–79, FX 80–87, LFO 1/2/3 on 88/104/112, level 7, mute 3), start / stop |
 | Screen | 240 × 240 at 1 bit (a 7.2 KB framebuffer): Orbitron in outline-and-dither (one size for every big value), Model:Cycles-style machine cards, machine marks as one family of cut-out stamps after Fors' isotypes (flat, and extruded with dithered sides), dissolves, glitches, live envelopes, filters, LFOs and scopes; light or dark (GLO > SET > SCRN; on the web it follows the page's theme) |
 
@@ -137,7 +137,18 @@ GND-SIN's TUNE, which moved a semitone a step, kept to the semitone within the n
 old interval folded into −11..+12 by octaves, one folding to 0 to +12, keeping every chord's notes; its DTUN (a fixed
 spread, not the chorus's moving copy), shape, level and sub have no counterpart and reset; a trig the old level
 silenced has its intervals locked OFF; an LFO aimed at the old page is cleared, intervals included, since the new axis
-has OFF and an octave down in it; 8: the wave bank's choice, MONO2K's 32 for every older pattern).
+has OFF and an octave down in it; 8: the wave bank's choice, MONO2K's 32 for every older pattern; 9: the bus's
+controls on their new laws, each old value to the new one that measures the same, HISS by its crackle).
+
+The bus's controls are MONO2K's own, so their laws are a design choice, made by measurement (`m2k_host DIR --bus`,
+`tools/bus_curves.py`: every value of each on a reference loop). Before, most of each range sat past where it was
+already intense: GLCH 10 replaced the mix a tenth of the time and DRIV 10 drove it 2.9 dB into the knee; HISS's
+crackle came in long before its hiss could be heard; TAPE's wow grew 0.33 c a step to ±42 c; ADPC had three sounds
+over 64–127. Now GLCH, DRIV and HISS's crackle put the old 10 at 64 and grow by a ratio a step (0.3 % a sixteenth at
+GLCH 1); TAPE puts the old 20 (±6.4 c) at 64; HISS's hiss has its own law (65 dB under the mix at 1, 40 at 64);
+ADPC keeps 0–64 and its rate falls continuously above. The old extremes stay at 127. Measured on the old engine and
+the new, every old value converts to one that measures alike (the hiss there as loud or louder: its law brings it
+in sooner); `tools/check.sh` holds both.
 
 DIGI-WAV plays either bank, set on SYN's third page (BANK: M2K, MONO2K's 32 waves across WAVE's range as before; M64,
 the owner's 64, two WAVE values a wave: an even one is that wave exactly, an odd one between two). The owner's play

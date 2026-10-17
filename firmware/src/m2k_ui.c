@@ -13,7 +13,7 @@
 enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOWL, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
-    K_BPM, K_SWNG, K_LEN, K_PCT, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD,
+    K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD,
     K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
@@ -40,7 +40,7 @@ static const pi_t PI_MOD[4] = {
 
 static const pi_t PI_GLOB[G_COUNT] = {
     {"BPM", "TEMPO", K_BPM}, {"SWNG", "SWING", K_SWNG}, {"LEN", "PATTERN LENGTH", K_LEN}, {"ACNT", "ACCENT", K_NUM},
-    {"TAPE", "TAPE WOW", K_NUM}, {"ADPC", "ADPCM CRUNCH", K_NUM}, {"GLCH", "GLITCH CHANCE", K_PCT}, {"SIZE", "REPEAT SIZE", K_GSIZ},
+    {"TAPE", "TAPE WOW", K_NUM}, {"ADPC", "ADPCM CRUNCH", K_NUM}, {"GLCH", "GLITCH CHANCE", K_GLCH}, {"SIZE", "REPEAT SIZE", K_GSIZ},
     {"DCAY", "REVERB DECAY", K_NUM}, {"DAMP", "REVERB DAMPING", K_NUM}, {"HISS", "HISS AND DUST", K_NUM}, {"DRIV", "BUS DRIVE", K_NUM},
 };
 
@@ -247,7 +247,12 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_BPM: s_int(out, 30 + v); *unit = "BPM"; break;
     case K_SWNG: s_int(out, 50 + (v * 25) / 127); *unit = "%"; break;
     case K_LEN: s_int(out, v); *unit = "STEPS"; break;
-    case K_PCT: s_int(out, (v * 100) / 256); *unit = "%"; break;
+    case K_GLCH: {                     /* a sixteenth's chance of a repeat, its law's: 0.3 % .. 50 % */
+        int c10 = (int)((T_GLCH_P[v & 127] * 1000u + 32768u) >> 16);
+        if (c10 < 100) s_dec1(out, c10); else s_int(out, (c10 + 5) / 10);
+        *unit = "%";
+        break;
+    }
     case K_GSIZ: s_cpy(out, GSIZ_N[(v * 5) >> 7]); *unit = "NOTE"; break;
     case K_SCRN: s_cpy(out, c ? "DARK" : "LIGHT"); *unit = "DISPLAY"; break;
     case K_PROJ: { char *e = s_cpy(out, "P"); s_int(e, c + 1); *unit = m2k_project_name(c); break; }

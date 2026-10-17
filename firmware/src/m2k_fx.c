@@ -128,7 +128,7 @@ static struct {
     int32_t tlp_l, tlp_r;
     /* adpcm */
     int32_t ad_pred[2], ad_idx[2], ad_hold[2];
-    uint8_t ad_cnt;
+    uint16_t ad_acc;                   /* Q8 samples since the 4-bit sample was taken */
     /* hiss */
     uint32_t hs;
     int32_t hlp, crackle, hgain;       /* hgain: Q15, follows tape_rolling over ~0.3 s */
@@ -155,7 +155,7 @@ static void bus_step(void)
 {
     const uint8_t *g = pat[cur_pat].glob;
     if (!g[G_GLCH] || bus.g_on) return;
-    if ((int)(rnd32() & 255) >= g[G_GLCH]) return;
+    if ((rnd32() & 0xFFFF) >= T_GLCH_P[g[G_GLCH]]) return;     /* a sixteenth's chance: 0.3 % at 1, 3.9 % at 64, 50 % at 127 */
     static const uint8_t frac4[5] = {1, 2, 4, 8, 16};          /* 1/64 .. 1/4 in quarters of a sixteenth */
     int n = (g[G_GSIZ] * 5) >> 7;
     uint32_t half_step = sps_q8 >> 9;                           /* a sixteenth in half-rate samples */
@@ -212,11 +212,12 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             L[i + 1] += bus.rv_l; R[i + 1] += bus.rv_r;
         }
     }
+    /* the controls on their laws (tools/gen_tables.py, the bus's controls) */
     int tape = g[G_TAPE], adpc = g[G_ADPC], hiss = g[G_HISS];
-    int32_t drv = 256 + g[G_DRIV] * 10;
+    int32_t tq = T_TAPE_Q8[tape];                   /* the depth, in the old control's units, Q8 */
+    int32_t drv = T_DRIV[g[G_DRIV]];
     int32_t mvol = T_MVOL[master_vol];
-    int32_t ad_mix = adpc * 2 > 127 ? 127 : adpc * 2;
-    int ad_dec = 1 + (adpc > 64 ? (adpc - 64) / 22 : 0);
+    int32_t ad_mix = adpc * 2 > 127 ? 127 : adpc * 2, ad_div = T_ADPC_DIV[adpc];
     uint32_t wow_inc = 54000, flut_inc = 620000;    /* 0.55 Hz, 6.3 Hz */
     for (int i = 0; i < M2K_SUB; i++) {
         int32_t l = L[i], r = R[i];
@@ -259,23 +260,25 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             /* the pitch a swing of the line makes grows with its rate: the flutter (6.3 Hz, 11x the wow's) takes 1/48
              * of the wow's swing, so it wobbles about a quarter as far in pitch (at TAPE 127: wow ~+-40 c, flutter ~+-10 c) */
             int32_t m = (sinp(bus.wow) * 48 + sinp(bus.flut)) >> 6;           /* +-24600 */
-            int32_t d = (420 << 8) + ((m * tape * 3) >> 7);                    /* Q8 samples */
+            int32_t d = (420 << 8) + (int32_t)(((int64_t)m * tq * 3) >> 15);  /* Q8 samples */
             int32_t pos = (int32_t)(bus.tw << 8) - d;
             uint32_t j = (uint32_t)(pos >> 8);
             int32_t f = pos & 255;
             int32_t tl = (tp_buf[j & 2047][0] * (256 - f) + tp_buf[(j + 1) & 2047][0] * f) >> 8;
             int32_t tr = (tp_buf[j & 2047][1] * (256 - f) + tp_buf[(j + 1) & 2047][1] * f) >> 8;
             bus.tw++;
-            int32_t a = T_OP[127 - (tape >> 2)];
+            int32_t li = 127 * 1024 - tq, lj = li >> 10;                     /* the head loss: 127 - old / 4, Q10 */
+            int32_t a = T_OP[lj] + (((T_OP[lj < 127 ? lj + 1 : 127] - T_OP[lj]) * (li & 1023)) >> 10);
             bus.tlp_l += ((tl - bus.tlp_l) * a) >> 15;
             bus.tlp_r += ((tr - bus.tlp_r) * a) >> 15;
             l = bus.tlp_l;
             r = bus.tlp_r;
         }
-        /* the 4-bit crunch, at a third of the rate at the top */
+        /* the 4-bit crunch, its rate falling to a third at the top */
         if (adpc) {
-            if (++bus.ad_cnt >= ad_dec) {
-                bus.ad_cnt = 0;
+            bus.ad_acc += 256;
+            if (bus.ad_acc >= ad_div) {
+                bus.ad_acc -= (uint16_t)ad_div;
                 bus.ad_hold[0] = adpcm_step(0, sat16(l));
                 bus.ad_hold[1] = adpcm_step(1, sat16(r));
             }
@@ -287,8 +290,11 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
         if (hiss && bus.hgain > 64) {
             int32_t n = (int32_t)noise_step(&bus.hs) >> 16;
             bus.hlp += ((n - bus.hlp) * 9000) >> 15;
-            int32_t h = (bus.hlp * hiss * hiss) >> 15;
-            if ((bus.hs & 0x3FFFF) < (uint32_t)hiss && !bus.crackle) bus.crackle = (int32_t)(1500 + (bus.hs >> 21)) * (16 + hiss) >> 6;
+            int32_t h = (bus.hlp * T_HISS_G[hiss]) >> 15;       /* the hiss and the dust on their own laws */
+            /* a crackle's chance: the noise's low 18 bits against the old value, three more bits its fraction (so a
+             * whole old value picks its clicks, and their levels, as it did) */
+            uint32_t cr = ((bus.hs & 0x3FFFF) << 3) | ((bus.hs >> 18) & 7);
+            if (cr < T_CRK_P[hiss] && !bus.crackle) bus.crackle = (int32_t)(1500 + (bus.hs >> 21)) * T_CRK_A[hiss] >> 10;
             if (bus.crackle) { h += (bus.hs & 0x100000) ? bus.crackle : -bus.crackle; bus.crackle = (bus.crackle * 5) >> 3; if (bus.crackle < 100) bus.crackle = 0; }
             h = (h * bus.hgain) >> 15;
             l += h;

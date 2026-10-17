@@ -351,6 +351,47 @@ steps = [7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41
          22385, 24623, 27086, 29794, 32767]
 out.append(arr("T_ADPCM_STEP", "int16_t", steps))
 
+# The bus's controls, rescaled (pattern format 9; host/m2k_host.c --bus measures them, tools/bus_curves.py shows them).
+# The laws before put most of 0..127 past where they are intense: GLCH's chance and DRIV's gain grew in proportion,
+# so 10 was already a repeat every 2.5 bars (7.8 % of the time replaced) and +2.9 dB into the knee; HISS's crackle
+# came in long before its hiss could be heard; TAPE's wow grew 0.33 c a step; ADPC had three sounds over 64..127.
+# Each is now a law in the old control's units (old_v: the old value it sounds as, fractional), so an old value
+# converts to the new one that sounds the same:
+#   GLCH, DRIV, HISS's crackle  old 10 at 64 and 127 at 127, a ratio a step (x1.041): old 1 at 7
+#   TAPE                        old 20 (+-6.4 c) at 64, 127 at 127 (x1.030 a step): +-1 c at 1
+#   HISS's hiss                 its own: 66 dB under the reference mix at 1, 40 at 64, the old top at 127: the
+#                               crackle's law with a bump over it that dies at the top, so a converted value's hiss
+#                               is never quieter than it was (the crackle sets the conversion)
+#   ADPC                        0..64 as before (the 4-bit mix comes in); 64..127 its rate falls continuously,
+#                               1 to 1/2 at 96 and 1/3 at 127, where before it stepped at 86 and 108
+def bus_exp(v, mid):
+    return 0.0 if v == 0 else mid * (127.0 / mid) ** ((v - 64) / 63.0)
+def hiss_old_v(v):          # the old value whose hiss level this one has
+    if v == 0:
+        return 0.0
+    # the old hiss's level is 40 log10(old) dB over a constant (old 10: 43.7 dB under the reference mix); over the
+    # crackle's law, c ((127 - v) / 126)^p: 66 dB under at 1 and 40 at 64 fix c and p
+    line = lambda x: math.log10(bus_exp(x, 10))
+    c = math.log10(10) + (-66 + 43.7) / 40.0 - line(1)
+    p = math.log2(c / (math.log10(10) + (-40 + 43.7) / 40.0 - line(64)))
+    return 10 ** (line(v) + c * ((127 - v) / 126.0) ** p)
+def adpc_div(v):            # samples a 4-bit sample is held, Q8
+    return 256 if v <= 64 else round(256 + 256 * (v - 64) / 32) if v <= 96 else round(512 + 256 * (v - 96) / 31)
+def v9_conv(f, o):          # the new value that sounds as old value o: nearest on a log scale
+    return 0 if o == 0 else nearest_v(lambda v: math.log(max(f(v), 1e-9)), math.log(o), 1)
+out.append(arr("T_GLCH_P", "uint16_t", [round(256 * bus_exp(v, 10)) for v in range(128)]))       # a sixteenth's chance, Q16
+out.append(arr("T_DRIV", "uint16_t", [round(256 + 10 * bus_exp(v, 10)) for v in range(128)]))    # the bus's gain, Q8
+out.append(arr("T_TAPE_Q8", "uint16_t", [round(256 * bus_exp(v, 20)) for v in range(128)]))    # the old TAPE, Q8
+out.append(arr("T_HISS_G", "uint16_t", [round(hiss_old_v(v) ** 2) for v in range(128)]))        # the hiss's gain, Q15
+out.append(arr("T_CRK_P", "uint16_t", [round(8 * bus_exp(v, 10)) for v in range(128)]))         # a crackle's chance, Q3 of the old value
+out.append(arr("T_CRK_A", "uint16_t", [round(16 * (16 + bus_exp(v, 10))) if v else 0 for v in range(128)]))   # its level, Q4
+out.append(arr("T_ADPC_DIV", "uint16_t", [adpc_div(v) for v in range(128)]))
+out.append(arr("T_V9_GLCH", "uint8_t", [v9_conv(lambda v: bus_exp(v, 10), o) for o in range(128)], 16))
+out.append(arr("T_V9_DRIV", "uint8_t", [v9_conv(lambda v: bus_exp(v, 10), o) for o in range(128)], 16))
+out.append(arr("T_V9_HISS", "uint8_t", [v9_conv(lambda v: bus_exp(v, 10), o) for o in range(128)], 16))
+out.append(arr("T_V9_TAPE", "uint8_t", [v9_conv(lambda v: bus_exp(v, 20), o) for o in range(128)], 16))
+out.append(arr("T_V9_ADPC", "uint8_t", [o if o <= 64 else 64 if o < 86 else 96 if o < 108 else 127 for o in range(128)], 16))
+
 # vowels: F1 F2 F3 (Hz) -> cutoff index (Q3), and levels (Q8). A E I O U, then the in-betweens
 vowels = [("A", 800, 1150, 2900), ("AE", 660, 1700, 2400), ("E", 400, 2100, 2800), ("I", 280, 2400, 3200),
           ("Y", 300, 1800, 2400), ("O", 450, 800, 2830), ("U", 325, 700, 2530), ("ER", 500, 1350, 1700)]

@@ -7,6 +7,8 @@
 #     division (__aeabi_ldivmod / __aeabi_uldivmod, __divdi3 ...); its section sizes are printed
 #  3. sanitizers: the self-test, every screen, every bank A track and every reference spec under ASan + UBSan; any
 #     report fails the run
+#  4. the wave banks (tools/wave_check.py); the bus's controls, every value as recorded and every old value as it
+#     sounded once converted (tools/bus_curves.py)
 set -u
 B=build/check
 mkdir -p "$B"
@@ -57,6 +59,9 @@ if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  self-test, screens, ban
 
 echo "== the wave banks"
 .venv/bin/python tools/wave_check.py > "$B/waves.log" 2>&1 && tail -1 "$B/waves.log" | sed 's/^/  /' || { cat "$B/waves.log"; FAIL=1; }
+
+echo "== the bus's controls"
+.venv/bin/python tools/bus_curves.py > "$B/bus.log" 2>&1 && tail -1 "$B/bus.log" | sed 's/^/  /' || { cat "$B/bus.log"; FAIL=1; }
 
 [ "$FAIL" -eq 0 ] && echo "check: passed" || echo "check: FAILED"
 exit "$FAIL"

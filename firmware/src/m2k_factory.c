@@ -189,6 +189,19 @@ static void ens_v6(m2k_pattern_t *p)
         }
 }
 
+/* the bus's controls took new laws (version 9, tools/gen_tables.py): each old value goes to the new one that sounds as
+ * it. GLCH, DRIV, TAPE and ADPC as they were (TAPE's 1..3, under a cent of wow, to its least); HISS by its crackle, the
+ * old crackle as it was, its hiss there as loud or louder (its own law brings it in sooner) */
+static void bus_v9(m2k_pattern_t *p)
+{
+    uint8_t *g = p->glob;
+    g[G_GLCH] = T_V9_GLCH[g[G_GLCH] & 127];
+    g[G_HISS] = T_V9_HISS[g[G_HISS] & 127];
+    g[G_DRIV] = T_V9_DRIV[g[G_DRIV] & 127];
+    g[G_TAPE] = T_V9_TAPE[g[G_TAPE] & 127];
+    g[G_ADPC] = T_V9_ADPC[g[G_ADPC] & 127];
+}
+
 static void lk(m2k_pattern_t *p, int t, int s, int prm, int v)
 {
     for (int i = 0; i < M2K_LOCKS; i++)
@@ -690,6 +703,9 @@ static void factory(void)
     MOD(p, 5, 0, 16, 100, 70);
     trim(p, 56);
 
-    /* bank A was written on SWAV-ENS's old page: onto the Monomachine's, once */
-    for (int i = 0; i < 16; i++) ens_v6(&pat[i]);
+    /* bank A was written on SWAV-ENS's old page and the bus's old laws: onto today's, once */
+    for (int i = 0; i < 16; i++) {
+        ens_v6(&pat[i]);
+        bus_v9(&pat[i]);
+    }
 }
