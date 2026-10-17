@@ -154,17 +154,20 @@ out.append(arr("T_FG1", "uint32_t", [round(2 ** 24 * math.tan(math.pi * fpos(i) 
 # the LP: a resonant two-pole (LP1) before the clip, two one-poles at 1.55 x the cutoff after it (LP2). LP1 sits at
 # 1.35 x the cutoff with Q 0.74 at LPQ 0 and moves onto the cutoff as the Q rises (fits to the stepped sine and to
 # noise with headroom); the HP alike: a resonant two-pole at 1.24 .. 1.0 x, and a one-pole at 1.75 x after the clip.
-# Per Q value: the two-pole's offset in 1/96 octave and its damping 1/Q, Q24
-LPQ = [(0, .74), (8, .95), (16, 1.6), (24, 2.6), (32, 4.5), (40, 7.5), (48, 12.5), (56, 19), (64, 31), (72, 55), (80, 82),
-       (88, 150), (96, 210), (104, 300), (112, 500), (120, 800), (127, 1000)]
-LPC = [(0, 1.35), (8, 1.22), (16, 1.10), (24, 1.06), (32, 1.03), (40, 1.02), (48, 1.01), (56, 1.0)]
-HPQ = [(0, .80), (8, 1.03), (16, 1.43), (24, 1.9), (32, 3.5), (40, 5.6), (48, 8.7), (56, 15.6), (64, 24.5), (72, 40),
-       (80, 69), (88, 92), (96, 149), (104, 226), (112, 270), (120, 363), (127, 494)]
-HPC = [(0, 1.24), (16, 1.26), (32, 1.22), (48, 1.10), (64, 1.04), (80, 1.0)]
+# Per Q value: the two-pole's offset in 1/96 octave Q8 and its damping 1/Q, Q24
+# From Q 96 up both peaks sit 0.18 % under the cutoff (resolved on noise at C4 and C6, tools/ref/resfit.py). The
+# reference's Q also moves with the cutoff (HPQ 96: ~230 at 8.4 kHz, ~160 at 4.2 kHz, ~190 at 131 Hz); one value
+# per setting takes the middle
+LPQ = [(0, .74), (8, .95), (16, 1.6), (24, 2.6), (32, 4.5), (40, 7.5), (48, 12.5), (56, 19), (64, 27.5), (72, 45), (80, 68),
+       (88, 130), (96, 210), (104, 300), (112, 500), (120, 750), (127, 1000)]
+LPC = [(0, 1.35), (8, 1.22), (16, 1.10), (24, 1.06), (32, 1.03), (40, 1.02), (48, 1.0), (64, 1.0), (80, 0.998), (96, 0.9982)]
+HPQ = [(0, .80), (8, 1.03), (16, 1.43), (24, 1.9), (32, 3.5), (40, 5.6), (48, 8.7), (56, 15.6), (64, 30), (72, 50),
+       (80, 85), (88, 140), (96, 190), (104, 340), (112, 486), (120, 800), (127, 1200)]
+HPC = [(0, 1.24), (16, 1.26), (32, 1.114), (48, 1.0), (64, 0.994), (80, 0.999), (96, 0.9982)]
 out.append(arr("T_LPK", "uint32_t", [round(2 ** 24 / interp(LPQ, q, True)) for q in range(128)], 8))
 out.append(arr("T_HPK", "uint32_t", [round(2 ** 24 / interp(HPQ, q, True)) for q in range(128)], 8))
-out.append(arr("T_LPC", "int8_t", [round(96 * math.log2(interp(LPC, q))) for q in range(128)], 16))
-out.append(arr("T_HPC", "int8_t", [round(96 * math.log2(interp(HPC, q))) for q in range(128)], 16))
+out.append(arr("T_LPC", "int16_t", [round(96 * 256 * math.log2(interp(LPC, q))) for q in range(128)], 16))
+out.append(arr("T_HPC", "int16_t", [round(96 * 256 * math.log2(interp(HPC, q))) for q in range(128)], 16))
 out.append("#define F_LP2 %d\n#define F_HP1 %d\n" % (round(96 * math.log2(1.55)), round(96 * math.log2(1.75))))
 # the EQ: a band added to the signal, Q 2.2, a cut the exact inverse of a boost as deep; its
 # centre 13.5 steps an octave, 808 Hz at 64 (fit to the measured centres). g Q24, the linear gain Q16, Hz for the screen

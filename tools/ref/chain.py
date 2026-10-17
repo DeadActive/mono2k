@@ -183,6 +183,87 @@ def ftime5():
     return out
 
 
+# ---- round six: the resonance at high Q, resolved: where its peak sits against the cutoff, how high, how narrow
+
+
+def res6():
+    out = ["# the resonance resolved: noise at C6 with headroom (DIST 32), 4 s; BASE 40 / WDTH 40 put the cutoff at"
+           " 8 x f0 = 8372 Hz; the same at C4 (BASE / WDTH 48, 16 x f0 = 4186 Hz); and GND-SIN's TUNE, to step a sine"]
+    out.append(line("r6_open_n84", NOIS, 84, {60: 32}, gate=4.0))
+    for q in (32, 48, 64, 80, 96, 112, 127):
+        out.append(line(f"r6_hp_n84_{q:03d}", NOIS, 84, {60: 32, 72: 40, 74: q}, gate=4.0))
+        out.append(line(f"r6_lp_n84_{q:03d}", NOIS, 84, {60: 32, 73: 40, 75: q}, gate=4.0))
+    out.append(line("r6_open_n60", NOIS, 60, {60: 32}, gate=4.0))
+    for q in (96, 127):
+        out.append(line(f"r6_hp_n60_{q:03d}", NOIS, 60, {60: 32, 72: 48, 74: q}, gate=4.0))
+        out.append(line(f"r6_lp_n60_{q:03d}", NOIS, 60, {60: 32, 73: 48, 75: q}, gate=4.0))
+    out += [line(f"r6_tune_{v:03d}", SIN, 60, {55: v}, gate=0.6, tail=0.05) for v in (0, 32, 60, 63, 64, 65, 68, 96, 127)]
+    return out
+
+
+def hres8():
+    out = ["# the resonance at low cutoffs, long enough to settle (Q ~1000 at 131 Hz builds over seconds): a sine on the"
+           " cutoff (BASE / WDTH 16) and noise, 12 s, headroom (DIST 16 for the sine, 32 for noise); C3 and C5"]
+    for n in (48, 72):
+        out.append(line(f"h8_open_n{n}", NOIS, n, {60: 32}, gate=12.0))
+        for kind, q in (("hp", 127), ("hp", 96), ("lp", 127)):
+            filt = {72: 16, 74: q} if kind == "hp" else {73: 16, 75: q}
+            out.append(line(f"h8_sin_{kind}{q:03d}_n{n}", SIN, n, {60: 16, **filt}, gate=12.0, tail=0.05))
+            out.append(line(f"h8_noi_{kind}{q:03d}_n{n}", NOIS, n, {60: 32, **filt}, gate=12.0, tail=0.05))
+    return out
+
+
+def drive10():
+    out = ["# drive apart from the build-up: a sine on the cutoff, notes long enough to settle. The HP at low Q (48, 64),"
+           " where it settles in milliseconds, C3 and C5, DIST 64..127; HPQ 127 at C5 (settles in ~1 s), 6 s; the LP at"
+           " LPQ 64 as the control"]
+    for q in (48, 64):
+        for n in (48, 72):
+            out += [line(f"d10_hp{q:03d}_n{n}_d{d:03d}", SIN, n, {72: 16, 74: q, 60: d}, gate=3.0, tail=0.05) for d in (64, 72, 80, 96, 127)]
+    out += [line(f"d10_hp127_n72_d{d:03d}", SIN, 72, {72: 16, 74: 127, 60: d}, gate=6.0, tail=0.05) for d in (16, 64, 80, 127)]
+    out += [line(f"d10_lp064_n48_d{d:03d}", SIN, 48, {73: 16, 75: 64, 60: d}, gate=3.0, tail=0.05) for d in (64, 72, 80, 96, 127)]
+    return out
+
+
+def drive12():
+    out = ["# where the HP saturates: a C3 sine against the HP's cutoff on the note (BASE 16), an octave under it (8) and"
+           " over it (24); HPQ 0..96, DIST from 16 (-65 dB) up to 64, 2.5 s; C5 at HPQ 48"]
+    for base in (16, 8, 24):
+        for q in ((0, 16, 32, 48, 64, 96) if base == 16 else (48, 96)):
+            out += [line(f"d12_b{base:02d}_q{q:03d}_n48_d{d:03d}", SIN, 48, {72: base, 74: q, 60: d}, gate=2.5, tail=0.05)
+                    for d in (16, 32, 40, 48, 52, 56, 60, 64)]
+    out += [line(f"d12_b16_q048_n72_d{d:03d}", SIN, 72, {72: 16, 74: 48, 60: d}, gate=2.5, tail=0.05) for d in (16, 32, 40, 48, 52, 56, 60, 64)]
+    return out
+
+
+def tune13():
+    out = ["# does the filter follow GND-SIN's TUNE? A C4 sine on a resonant LP / HP at the note (WDTH / BASE 16, Q 64:"
+           " settles in ~30 ms), DIST 16 (linear), TUNE across +-100 c: the Monomachine's on CC 55, MONO2K's on A (CC 48),"
+           " both 3.125 c a step. Tracking keeps the level; a fixed filter loses ~10 dB at 100 c"]
+    for kind, filt in (("lp", {73: 16, 75: 64}), ("hp", {72: 16, 74: 64})):
+        for t in (32, 40, 48, 56, 64, 72, 80, 88, 95):
+            out.append(line(f"t13_{kind}_{t:03d}", SIN, 60, {60: 16, **filt}, gate=1.0, tail=0.05) + f" mm:55={t} m2k:48={t}")
+    return out
+
+
+def order11():
+    out = ["# is a render alone? One run, in this order: a resonant C3 sine fresh, the same again, again with the Q moved,"
+           " a long tail after the gate (REL 0), another machine between, fresh again, another note; then a decaying"
+           " sine into the clip (is the envelope after the drive?). Render as ONE chunk: the order is the point"]
+    hp = {60: 16, 72: 16, 74: 127}
+    out.append(line("o11_a", SIN, 48, hp, gate=3.0, tail=0.05))
+    out.append(line("o11_b", SIN, 48, hp, gate=3.0, tail=0.05))
+    out.append(line("o11_q96", SIN, 48, {**hp, 74: 96}, gate=3.0, tail=0.05))
+    out.append(line("o11_tail", SIN, 48, hp, gate=1.0, tail=2.5))
+    out.append(line("o11_rst", NOIS, 48, {}, gate=0.05, tail=0.05))
+    out.append(line("o11_c", SIN, 48, hp, gate=3.0, tail=0.05))
+    out.append(line("o11_n55", SIN, 55, hp, gate=3.0, tail=0.05))
+    out.append(line("o11_rst2", NOIS, 48, {}, gate=0.05, tail=0.05))
+    out.append(line("o11_dec", SIN, 36, {60: 127, 57: 0, 58: 60}, gate=2.0, tail=0.05))
+    out.append(line("o11_dec_lin", SIN, 36, {60: 16, 57: 0, 58: 60}, gate=2.0, tail=0.05))
+    return out
+
+
 if __name__ == "__main__":
     if sys.argv[1] == "specs":
         d = sys.argv[2]
@@ -191,7 +272,7 @@ if __name__ == "__main__":
                 fh.write("\n".join(f()) + "\n")
     elif sys.argv[1] == "specs3":
         d = sys.argv[2]
-        for name, f in (("clip3", clip3), ("map3", map3), ("fenv4", fenv4), ("ftime5", ftime5)):
+        for name, f in (("clip3", clip3), ("map3", map3), ("fenv4", fenv4), ("ftime5", ftime5), ("res6", res6), ("hres8", hres8), ("drive10", drive10), ("order11", order11), ("drive12", drive12), ("tune13", tune13)):
             with open(os.path.join(d, f"chain_{name}.spec"), "w") as fh:
                 fh.write("\n".join(f()) + "\n")
     elif sys.argv[1] == "specs2":

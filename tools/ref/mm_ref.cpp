@@ -6,6 +6,7 @@
 //
 //   mm_ref ROM lcd DIR             the screen after assigning each machine number to track 1 (DIR/lcd_NN.pbm)
 //   mm_ref ROM render DIR < SPEC   one WAV per line of SPEC: name machine note velocity gate_s tail_s [cc=value ...]
+//                                  (mm:cc=value for this renderer alone, m2k:cc=value skipped)
 //   mm_ref ROM pages DIR           GND-SIN's init pages, as the screen shows them, one per press of the page key
 #include "mdLib/mdhardware.h"
 #include "mdLib/mdfrontpanel.h"
@@ -178,6 +179,9 @@ namespace
 			std::string kv;
 			while(in >> kv)
 			{
+				// "m2k:cc=v" is MONO2K's alone (a control it keeps elsewhere); "mm:cc=v" is this instrument's alone
+				if(kv.rfind("m2k:", 0) == 0) continue;
+				if(kv.rfind("mm:", 0) == 0) kv = kv.substr(3);
 				const auto eq = kv.find('=');
 				require(eq != std::string::npos, "cc=value expected");
 				midi(*hw, 0xb0, static_cast<uint8_t>(std::stoi(kv.substr(0, eq))), static_cast<uint8_t>(std::stoi(kv.substr(eq + 1))));

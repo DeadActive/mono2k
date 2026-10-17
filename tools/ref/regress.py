@@ -6,8 +6,12 @@
 # lines (host/m2k_ref), measures it the same way and prints PASS / FAIL / INFO per case, with a JSON result.
 #   .venv/bin/python tools/ref/regress.py capture            from build/ref/mm_c* (the renders the chain specs made)
 #   .venv/bin/python tools/ref/regress.py check [GROUP ...]  needs no OS image; exits 1 on a FAIL
+#   .venv/bin/python tools/ref/regress.py gaps [GROUP ...] [--widen]   records the XFAIL cases' gaps (they only narrow)
 # INFO cases are measured and reported, not asserted (below MONO2K's 16-bit floor, or past its RAM). XFAIL marks a
-# known gap, with its reason: reported, not failing the suite, and XPASS once it closes.
+# known gap, with its reason. Its size is held in tools/ref/regress_gaps.json (MONO2K's error against the reference,
+# per value, nothing else): an XFAIL whose error grows past that plus the tolerance FAILs, and so does one without a
+# recorded gap. XPASS (the gap closed) fails too: the case is to be re-marked PASS. Recording gaps is a decision, as
+# a capture is: the diff of regress_gaps.json shows what it accepted.
 import json, os, subprocess, sys
 import numpy as np
 
@@ -18,11 +22,13 @@ from sweep import load, SR
 from chain_anal import harm, psd
 
 REF_JSON = os.path.join(HERE, "regress_ref.json")
+GAPS_JSON = os.path.join(HERE, "regress_gaps.json")
 SPECS = ["chain_levels", "chain_dist2", "chain_filt2", "chain_map3", "chain_clip3", "chain_eq2", "chain_srr2",
-         "chain_delay", "chain_delay2", "chain_ftime5"]
+         "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13"]
 MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2": "mm_cfilt2", "chain_map3": "mm_cmap3",
           "chain_clip3": "mm_cclip3", "chain_eq2": "mm_ceq2", "chain_srr2": "mm_csrr2", "chain_delay": "mm_cdelay",
-          "chain_delay2": "mm_cdelay2", "chain_ftime5": "mm_cftime5"}
+          "chain_delay2": "mm_cdelay2", "chain_ftime5": "mm_cftime5", "chain_res6": "mm_cres6",
+          "chain_drive12": "mm_cdrive12", "chain_tune13": "mm_ctune13"}
 
 
 def db(v):
@@ -52,8 +58,27 @@ def m_h1_rel(x, a, ld):                   # the fundamental against another rend
 
 
 def m_harm(x, a, ld):                     # h1 dB, then h3 and h5 against it (floored at -60: clean is clean)
-    h = harm(x, f0_of(a["note"]), 5, 0.3, 16384)
+    h = harm(x, f0_of(a["note"]), 5, a.get("t", 0.3), 16384)
     return [db(h[0]), max(-60.0, db(h[2]) - db(h[0])), max(-60.0, db(h[4]) - db(h[0]))]
+
+
+def m_tone_rel(x, a, ld):                 # a sine wherever it sits (parabolic peak), dB against another render's
+    def tone(y):
+        s = y[int(0.4 * SR):int(0.9 * SR), 0]
+        sp = np.abs(np.fft.rfft(s * np.hanning(len(s)), 8 * len(s)))
+        k = int(np.argmax(sp))
+        l0, l1, l2 = np.log(sp[k - 1]), np.log(sp[k]), np.log(sp[k + 1])
+        return l1 - 0.25 * (l0 - l2) ** 2 / (l0 - 2 * l1 + l2) / 2
+    return [float((tone(x) - tone(ld(a["ref"]))) * 20 / np.log(10))]
+
+
+def m_pitch_c(x, a, ld):                  # the sine's pitch, cents from the note
+    s = x[int(0.4 * SR):int(0.9 * SR), 0]
+    sp = np.abs(np.fft.rfft(s * np.hanning(len(s)), 8 * len(s)))
+    k = int(np.argmax(sp))
+    l0, l1, l2 = np.log(sp[k - 1]), np.log(sp[k]), np.log(sp[k + 1])
+    fq = (k + 0.5 * (l0 - l2) / (l0 - 2 * l1 + l2)) * SR / (8 * len(s))
+    return [float(1200 * np.log2(fq / f0_of(a["note"])))]
 
 
 def m_thd(x, a, ld):
@@ -159,9 +184,37 @@ def m_fenv_ms(x, a, ld):                  # when the sine crosses -3.8 dB as the
     return [float((idx[0] + start) / SR * 1000) if len(idx) else float("nan")]
 
 
-METRICS = {"rms": m_rms, "h1": m_h1, "h1_rel": m_h1_rel, "harm": m_harm, "thd": m_thd, "peak_hz": m_peak_hz,
+def m_res_fit(x, a, ld):                  # the resonance resolved (resfit.py): its peak against the cutoff, %, and height, dB
+    from resfit import psd as rpsd
+    f, p = rpsd(x)
+    _, r = rpsd(ld(a["ref"]))
+    ratio = p / np.maximum(r, 1e-30)
+    fc = f0_of(a["note"]) * 2 ** ((a["step"] - 16) / 8)
+    fp, q, g, e = _resfit(f, ratio, fc, a["hp"])
+    return [(fp / fc - 1) * 100, g]
+
+
+def _resfit(f, ratio, fc, hp):
+    from resfit import N
+    k = int(np.argmax(np.where(np.abs(f / fc - 1) < 0.15, np.convolve(ratio, np.ones(5) / 5, "same"), 0)))
+    best = None
+    for q in np.exp(np.linspace(np.log(2), np.log(3000), 160)):
+        bw = f[k] / q
+        sel = np.abs(f - f[k]) < max(6 * bw, 40)
+        for fp in f[k] + np.linspace(-3, 3, 61) * (SR / N):
+            m = 1 / (1 + (2 * q * (f[sel] - fp) / fp) ** 2)
+            aa = np.dot(m, ratio[sel]) / np.dot(m, m)
+            e = np.mean((np.log(np.maximum(aa * m, 1e-30)) - np.log(np.maximum(ratio[sel], 1e-30))) ** 2)
+            if best is None or e < best[0]:
+                best = (e, fp, q, aa)
+    e, fp, q, aa = best
+    pb = ratio[(f > fc * 1.6) & (f < min(fc * 2.1, 17000))] if hp else ratio[(f > fc / 4) & (f < fc / 2.5)]
+    return fp, q, 10 * np.log10(aa / np.median(pb)), e
+
+
+METRICS = {"res_fit": m_res_fit, "rms": m_rms, "h1": m_h1, "h1_rel": m_h1_rel, "harm": m_harm, "thd": m_thd, "peak_hz": m_peak_hz,
            "res_db": m_res_db, "resp_at": m_resp_at, "srr_image": m_srr_image, "level_at": m_level_at, "echo_ms": m_echo_ms,
-           "echoes": m_echoes, "echo_bands": m_echo_bands, "fenv_ms": m_fenv_ms}
+           "echoes": m_echoes, "echo_bands": m_echo_bands, "fenv_ms": m_fenv_ms, "tone_rel": m_tone_rel, "pitch_c": m_pitch_c}
 
 
 # ------------------------------------------------------------------------------------------------------ cases
@@ -171,6 +224,9 @@ def cases():
     C = []
     def add(group, spec, name, metric, args, tol, rel=False, info=False, xfail=None):
         C.append(dict(group=group, spec=spec, name=name, metric=metric, args=args, tol=tol, rel=rel, info=info, xfail=xfail))
+    sat = ("the reference's HP saturates inside its resonance: from h1 ~-16 dBFS out (DIST <= 64, any Q) its output is a"
+           " square through a high-pass, scaled by the DIST ceiling; MONO2K's clamped SVF stays near clean (chain_drive12)")
+    vary = "the reference's Q at 96 / 127 varies with the cutoff (C6 against C4): one table fits C6"
     for v in (8, 32, 64, 96, 120, 127):
         add("levels", "chain_levels", f"vol_{v:03d}", "rms", {}, 0.1)
     for v in (16, 64, 127):
@@ -201,21 +257,62 @@ def cases():
         add("res_map", "chain_map3", f"m3_note_{n:03d}", "peak_hz", {}, 0.01, rel=True)
         add("res_map", "chain_map3", f"m3_hnote_{n:03d}", "peak_hz", {}, 0.01, rel=True)
     for q in range(16, 121, 8):
-        add("res_level", "chain_filt2", f"qn_lp_{q:03d}", "res_db", {"ref": "qn_open"}, 2.5)
+        add("res_level", "chain_filt2", f"qn_lp_{q:03d}", "res_db", {"ref": "qn_open"}, 2.5,
+            xfail="LPQ 120 on C4 noise: MONO2K ~4 dB under (" + vary + ")" if q == 120 else None)
     for q in range(32, 121, 8):
         add("res_level", "chain_filt2", f"qn_hp_{q:03d}", "res_db", {"ref": "qn_open"}, 2.5)
-    for d in (32, 48, 64, 72, 80, 96, 127):              # resonance and drive: the clip holds the LP's resonance
-        add("clip", "chain_clip3", f"c3_res_{d:03d}", "harm", {"note": 48}, [0.7, 1.5, 2.0])
+    for kind, step in (("hp", 40), ("lp", 40)):          # the resonance resolved: where its peak sits, how high
+        for q in (64, 80, 96, 112, 127):
+            add("res_fit", "chain_res6", f"r6_{kind}_n84_{q:03d}", "res_fit",
+                {"ref": "r6_open_n84", "note": 84, "step": step, "hp": kind == "hp"}, [0.05, 1.5] if q >= 96 else [0.6, 2.0],
+                xfail="HPQ 96's peak 0.07 % over the reference's (C6)" if (kind, q) == ("hp", 96) else None)
+    for kind in ("hp", "lp"):
+        for q in (96, 127):
+            add("res_fit", "chain_res6", f"r6_{kind}_n60_{q:03d}", "res_fit",
+                {"ref": "r6_open_n60", "note": 60, "step": 48, "hp": kind == "hp"}, [0.05, 1.5],
+                xfail=None if (kind, q) == ("hp", 127) else vary)
+    for d in (32, 48, 64, 72, 80, 96, 127):              # resonance and drive: the clip holds the LP's resonance; at 32
+        # LPQ 127 at 131 Hz is still building at 0.8 s, and the reference's run carried it from the line before
+        add("clip", "chain_clip3", f"c3_res_{d:03d}", "harm", {"note": 48}, [0.7, 1.5, 2.0], info=d == 32)
     for d in (80, 96, 126):
         add("clip", "chain_clip3", f"c3_lpf_{d:03d}", "harm", {"note": 48}, [0.7, 1.5, 2.0])
     for d in (80, 96, 124):
         add("clip", "chain_clip3", f"c3_lp24_{d:03d}", "harm", {"note": 48}, [0.7, 1.5, 2.0])
     for d in (80, 96, 127):
         add("clip", "chain_dist2", f"dclip_lp_{d:03d}", "harm", {"note": 36}, [0.7, 1.5, 2.0])
-        add("clip", "chain_dist2", f"dclip_hp_{d:03d}", "harm", {"note": 36}, [0.7, 1.5, 2.0])
-    for d in (16, 32, 40, 48, 64, 72, 80, 96, 127):   # the HP's resonance under drive: the known gap
-        add("hp_drive", "chain_clip3", f"c3_hres_{d:03d}", "harm", {"note": 48}, [1.0, 3.0, 3.0],
-            xfail="HP at HPQ 127, a sine at the cutoff: 2-7 dB louder than the reference (Phase 1)")
+        add("clip", "chain_dist2", f"dclip_hp_{d:03d}", "harm", {"note": 36}, [0.7, 1.5, 2.0], xfail=sat)
+    for d in (16, 32, 40, 48, 64, 72, 80, 96, 127):   # 0.8 s into a 2.9 s build-up, and rendered one after another:
+        # the reference's resonance carries from the line before (chain_order11), so these are not comparable
+        add("hp_drive", "chain_clip3", f"c3_hres_{d:03d}", "harm", {"note": 48}, [1.0, 3.0, 3.0], info=True)
+    floor = dict(info=True)                           # h3 / h5 near -105 dBFS: under MONO2K's 16-bit floor
+    def d12(name, note=48, **kw):
+        add("hp_sat", "chain_drive12", name, "harm", {"note": note, "t": 1.5}, [1.0, 2.0, 2.0], **kw)
+    for q, d in ((0, 32), (32, 32)):
+        d12(f"d12_b16_q{q:03d}_n48_d{d:03d}", **floor)
+    d12("d12_b16_q000_n48_d064")
+    for q in (16,):
+        for d in (32, 64):
+            d12(f"d12_b16_q{q:03d}_n48_d{d:03d}", xfail="HPQ 16 at the cutoff: MONO2K 1.3-1.6 dB quieter")
+    d12("d12_b16_q032_n48_d056", xfail="HPQ 32 at the cutoff, C3: MONO2K 1.35 dB quieter (C4 noise wants no more Q)")
+    for q, d in ((48, 32), (48, 48), (64, 32), (64, 40)):               # linear: the level at the cutoff
+        d12(f"d12_b16_q{q:03d}_n48_d{d:03d}")
+    for d in (32, 48):
+        d12(f"d12_b16_q048_n72_d{d:03d}", note=72)
+    d12("d12_b16_q096_n48_d016")
+    d12("d12_b16_q096_n48_d032", xfail="HPQ 96 at the cutoff, C3, DIST 32: MONO2K 2 dB louder, near the saturation")
+    for q, ds in ((32, (60, 64)), (48, (52, 56, 64)), (64, (48, 56, 64)), (96, (40, 48, 64))):   # saturated
+        for d in ds:
+            d12(f"d12_b16_q{q:03d}_n48_d{d:03d}", xfail=sat)
+    for d in (56, 64):
+        d12(f"d12_b16_q048_n72_d{d:03d}", note=72, xfail=sat)
+    for q in (48, 96):                                # the cutoff an octave under the note (passband), over it (stopband)
+        d12(f"d12_b08_q{q:03d}_n48_d064", xfail="the passband at HPQ 48 / 96, DIST 64: MONO2K 1.8 dB louder")
+        d12(f"d12_b24_q{q:03d}_n48_d064", xfail="an octave under a resonant HP's cutoff the reference falls 7.6-9.4 dB further")
+    for kind in ("lp", "hp"):                         # the filter follows GND-SIN's TUNE (chain_tune13); the reference
+        for t in (32, 48, 56, 72, 80, 95):            # itself scatters +-0.5 dB, a fixed filter loses 2 dB at 25 c
+            add("tune", "chain_tune13", f"t13_{kind}_{t:03d}", "tone_rel", {"ref": f"t13_{kind}_064"}, 1.0)
+        for t in (32, 48, 80, 95):
+            add("tune", "chain_tune13", f"t13_{kind}_{t:03d}", "pitch_c", {"note": 60}, 1.0)
     hz = [60, 150, 400, 800, 1600, 3200, 6400]
     top = "the EQ's top band: the reference's skirts stay wide toward Nyquist, MONO2K's warp narrow"
     for v in (0, 16, 32, 48, 64, 80, 96, 112, 127):
@@ -293,39 +390,89 @@ def render_m2k(cs, d):
                    check=True, stdout=subprocess.DEVNULL)
 
 
-def check(groups):
+def errors(c, r, m):
+    """MONO2K's error against the reference, one per value (absolute, or a fraction where the case is relative);
+    NaN where both are NaN, inf where only one is"""
+    tol = c["tol"] if isinstance(c["tol"], list) else [c["tol"]] * len(r)
+    out = []
+    for a, b, t in zip(r, m, tol):
+        if np.isnan(a) or np.isnan(b):
+            out.append(float("nan") if np.isnan(a) and np.isnan(b) else float("inf"))
+            continue
+        rel = c["rel"] or isinstance(t, str)
+        out.append(float(abs(b - a) / abs(a) if rel else abs(b - a)))
+    return out, [float(t.rstrip("%")) / 100 if isinstance(t, str) else t for t in tol]
+
+
+def run(groups):
     ref = json.load(open(REF_JSON))["cases"]
     cs = [c for c in cases() if not groups or c["group"] in groups]
     d = os.path.join(ROOT, "build", "ref", "regress_m2k")
     render_m2k(cs, d)
-    rows, fails = [], 0
+    out = []
     for c in cs:
         r = ref.get(key(c))
-        if r is None:
-            rows.append((c, None, None, "BLOCKED"))
+        out.append((c, r, None if r is None else measure(c, d)))
+    return out
+
+
+def gaps(groups, widen=False):
+    """a new known gap is recorded as it stands; a recorded one only narrows, unless widen (--widen) says otherwise"""
+    old = json.load(open(GAPS_JSON))["cases"] if os.path.exists(GAPS_JSON) else {}
+    new = {k: v for k, v in old.items()}
+    n, kept = 0, []
+    for c, r, m in run(groups):
+        if not c["xfail"] or r is None:
             continue
-        m = measure(c, d)
-        tol = c["tol"] if isinstance(c["tol"], list) else [c["tol"]] * len(r)
-        ok = True
-        for a, b, t in zip(r, m, tol):
-            if np.isnan(a) or np.isnan(b):
-                ok = ok and np.isnan(a) and np.isnan(b)
-                continue
-            rel = c["rel"] or isinstance(t, str)
-            t = float(t.rstrip("%")) / 100 if isinstance(t, str) else t
-            err = abs(b - a) / abs(a) if rel else abs(b - a)
-            ok = ok and err <= t
+        e, tol = errors(c, r, m)
+        g = [round(v, 4) if np.isfinite(v) else None for v in e]
+        was = old.get(key(c))
+        if was is not None and not widen:
+            g = [w if w is not None and (v is None or v > w) else v for v, w in zip(g, was)]
+            if g != [round(v, 4) if np.isfinite(v) else None for v in e]:
+                kept.append(c["name"])
+        new[key(c)] = g
+        n += 1
+    if kept:
+        print("held at their recorded size (grown since; --widen to accept):", " ".join(kept))
+    live = {key(c) for c in cases() if c["xfail"]}
+    new = {k: v for k, v in new.items() if k in live}
+    with open(GAPS_JSON, "w") as f:
+        json.dump({"note": "MONO2K's error against the reference per known gap (regress.py gaps); differences only",
+                   "cases": new}, f, indent=0, sort_keys=True)
+    print(f"recorded {n} gaps into {os.path.relpath(GAPS_JSON, ROOT)} ({len(new)} held)")
+
+
+def check(groups):
+    known = json.load(open(GAPS_JSON))["cases"] if os.path.exists(GAPS_JSON) else {}
+    rows, fails = [], 0
+    for c, r, m in run(groups):
+        if r is None:
+            rows.append((c, None, None, "BLOCKED", ""))
+            continue
+        e, tol = errors(c, r, m)
+        ok = all(np.isnan(v) or v <= t for v, t in zip(e, tol))
+        why = ""
         if c["info"]:
             st = "INFO"
         elif c["xfail"]:
-            st = "XPASS" if ok else "XFAIL"
+            g = known.get(key(c))
+            if ok:
+                st, why = "XPASS", "the known gap closed: re-mark the case PASS"
+            elif g is None:
+                st, why = "FAIL", "a known gap without a recorded size (regress.py gaps)"
+            elif any(not np.isnan(v) and v > (float("inf") if gv is None else gv) + t for v, gv, t in zip(e, g, tol)):
+                st, why = "FAIL", "the known gap grew: " + " ".join(f"{v:.3g}>{gv}+{t:.3g}" for v, gv, t in zip(e, g, tol)
+                                                                     if not np.isnan(v) and gv is not None and v > gv + t)
+            else:
+                st = "XFAIL"
         else:
             st = "PASS" if ok else "FAIL"
-        fails += st == "FAIL"
-        rows.append((c, r, m, st))
+        fails += st in ("FAIL", "XPASS")
+        rows.append((c, r, m, st, why))
     res = []
     last = None
-    for c, r, m, st in rows:
+    for c, r, m, st, why in rows:
         if c["group"] != last:
             print(f"== {c['group']}")
             last = c["group"]
@@ -333,9 +480,9 @@ def check(groups):
             print(f"  {st:5s} {c['name']:18s} no reference measurement")
         else:
             print(f"  {st:5s} {c['name']:18s} {c['metric']:10s} MM " + " ".join(f"{v:8.2f}" for v in r) +
-                  "   M2K " + " ".join(f"{v:8.2f}" for v in m))
+                  "   M2K " + " ".join(f"{v:8.2f}" for v in m) + (f"   ({why})" if why else ""))
         res.append(dict(group=c["group"], name=c["name"], metric=c["metric"], args=c["args"], tol=c["tol"],
-                        rel=c["rel"], mm=r, m2k=m, status=st, xfail=c["xfail"]))
+                        rel=c["rel"], mm=r, m2k=m, status=st, xfail=c["xfail"], why=why))
     ST = ("PASS", "FAIL", "XFAIL", "XPASS", "INFO", "BLOCKED")
     summary = {s: sum(1 for x in res if x["status"] == s) for s in ST}
     by_group = {}
@@ -348,7 +495,9 @@ def check(groups):
                                 for g, v in by_group.items()))
     for x in res:
         if x["status"] == "XPASS":
-            print(f"XPASS {x['group']}:{x['name']}: the known gap no longer shows ({x['xfail']})")
+            print(f"XPASS {x['group']}:{x['name']}: the known gap no longer shows, re-mark it PASS ({x['xfail']})")
+        elif x["status"] == "FAIL" and x["why"]:
+            print(f"FAIL  {x['group']}:{x['name']}: {x['why']} ({x['xfail']})")
     print("summary:", summary)
     return 1 if fails else 0
 
@@ -358,5 +507,7 @@ if __name__ == "__main__":
         capture()
     elif sys.argv[1:2] == ["check"]:
         sys.exit(check(set(sys.argv[2:])))
+    elif sys.argv[1:2] == ["gaps"]:
+        gaps({a for a in sys.argv[2:] if a != "--widen"}, "--widen" in sys.argv[2:])
     else:
-        print(__doc__ if __doc__ else "regress.py capture | check [GROUP ...]")
+        print("regress.py capture | check [GROUP ...] | gaps [GROUP ...]")

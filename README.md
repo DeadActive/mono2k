@@ -97,7 +97,12 @@ Done so far, all measured on OS 1.32B:
   - The filter follows the note: a cutoff of 2^((step − 16)/8) × the note, for the HP (BASE) and the LP (BASE + WDTH),
     exact from C1 to C7. The LP is a resonant two-pole (1.35 × the cutoff at LPQ 0, onto it as the Q rises, up to
     Q ≈ 1000 and +54 dB without oscillating), the clip, then two one-poles at 1.55 ×; the HP a resonant two-pole and
-    a one-pole at 1.75 ×, 18 dB an octave. Within 0.1 dB (LP) and 0.4 dB (HP, to −44 dB); the resonance within 0.3 %.
+    a one-pole at 1.75 ×, 18 dB an octave. Within 0.1 dB (LP) and 0.4 dB (HP, to −44 dB); the resonance within 0.3 %,
+    and from Q 96 up both peaks sit 0.18 % under the cutoff, as the Monomachine's do. The filter follows GND-SIN's TUNE
+    too (±2 semitones, 3.125 c a step). Its coefficients are exact down to 20 Hz: a low cutoff's damping used to round
+    away (at 131 Hz HPQ 127 rang on without decaying).
+  - The amp envelope comes after the filter and the drive: a note that decays keeps its distortion, and the
+    Monomachine's oscillator keeps feeding the filter between notes.
   - BOFS / WOFS move the cutoff 7·d·|d|/256 steps; the filter envelope runs in straight lines (decay 863 ms at 64,
     ×1.565 every 8 steps; 127 holds).
   - EQ: a band added to the signal, Q 2.2, +36 / −31 dB, its cut the inverse of a boost as deep. SRR: a rate from
@@ -105,12 +110,16 @@ Done so far, all measured on OS 1.32B:
   - The delay: DTIM in 256ths of a note plus 7.6 ms, the send squared, negative keeping the source's side and positive
     ping-pong, feedback DFB / 64, the echoes through a one-pole HP and LP. Times within 0.5 ms.
 
-  Known gaps: an HP resonance driven into the clip is ~7 dB louder than the Monomachine's; the delay keeps half-rate
+  Known gaps (`tools/ref/regress.py`, each held to its measured size): the Monomachine's HP saturates inside its
+  resonance (from about −16 dBFS out at DIST 64, a square through a high-pass) where MONO2K's stays near clean, and
+  falls 7–9 dB further an octave under a resonant cutoff; its Q moves with the cutoff (HPQ 96: ~230 at 8.4 kHz, ~160
+  at 4.2 kHz), MONO2K takes one value per setting; the delay keeps half-rate
   8-bit lines, so ping-pong past 0.37 s (and any delay past 0.74 s) slows the line's clock and darkens, where the
   Monomachine stays bright; SWAV-SAW's top harmonics at C7 are 2–6 dB short.
 
 Patterns saved before are moved onto each new scale as they load (version 1: the envelope; 5: the chain, each old
-setting to the one giving the same Hz, dB or time, the filter placed against the note each track plays most). The
+setting to the one giving the same Hz, dB or time, the filter placed against the note each track plays most; 6:
+GND-SIN's TUNE, which moved a semitone a step, kept to the semitone within the new ±2). The
 DigiPro waves and BeatBox samples are the OS's data and are not copied: DIGI-WAV plays MONO2K's own waves.
 
 ## Credits and licence

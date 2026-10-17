@@ -38,13 +38,17 @@ static inline int32_t svf_tick(svf_t *f, int32_t x, int32_t *hp_out, int32_t *bp
 typedef struct { int32_t s1, s2, a1, a2, a3, k; int64_t r1, r2; } zsvf_t;   /* a1 a2 a3 Q30, k Q24; r: remainders */
 typedef struct { int32_t s, G; int64_t r; } zop_t;                          /* G Q24 */
 
-/* g, k Q24 (g = tan(pi fc / fs), k = 1 / Q); the one division a block is 32-bit */
+/* g, k Q24 (g = tan(pi fc / fs), k = 1 / Q); the one division a block is 32-bit. 1 / den from it alone holds 14
+ * bits, and a low cutoff's damping is g k ~1e-5 of den: at 131 Hz HPQ 127 rounded to no damping at all. One Newton
+ * step (multiplies only) takes it to Q30 */
 static void zsvf_set(zsvf_t *f, uint32_t g, uint32_t k)
 {
     int64_t den = (1LL << 24) + (((int64_t)g * ((int64_t)g + k)) >> 24);         /* Q24, 1 .. ~110 */
-    int32_t a1 = (int32_t)(0x80000000u / (uint32_t)(den >> 10));                  /* Q17 */
-    f->a1 = a1 << 13;
-    f->a2 = (int32_t)(((int64_t)g * a1) >> 11);
+    int64_t a1 = (int64_t)(0x80000000u / (uint32_t)(den >> 10)) << 13;          /* Q30, ~14 bits */
+    int64_t e = ((1LL << 54) - den * a1) >> 24;                                    /* Q30: 1 - den a1 */
+    a1 += (a1 * e) >> 30;
+    f->a1 = (int32_t)a1;
+    f->a2 = (int32_t)(((int64_t)g * a1) >> 24);
     f->a3 = (int32_t)(((int64_t)g * f->a2) >> 24);
     f->k = (int32_t)k;
 }
@@ -200,7 +204,7 @@ static void mach_block(int ti, int m, int32_t pitch)
     switch (m) {
     case M_GSIN: {                     /* TUNE FOLD SUB NOIS PDEP PDEC CLIK HARM */
         int32_t env = (int32_t)(t->menv[0] >> 15);
-        int32_t pq = pitch + (PB8(t, P_SYN + 0) >> 2) + ((P7(t, P_SYN + 4) * 24 * env) >> 15);
+        int32_t pq = pitch + (PB8(t, P_SYN + 0) >> 7) + ((P7(t, P_SYN + 4) * 24 * env) >> 15);   /* TUNE: +-2 semitones */
         uint32_t inc = inc_of(pq);
         t->menv[0] = mulu_hi(t->menv[0], T_ENV_COEF[P7(t, P_SYN + 5)], 31);
         int32_t fold = P8(t, P_SYN + 1), sub = T_VOL[P7(t, P_SYN + 2)], noi = T_VOL[P7(t, P_SYN + 3)] >> 1;
@@ -712,7 +716,7 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     int32_t pitch = t->pitch + (PB8(t, P_PTCH) >> 2);
     mach_block(ti, m, pitch);
 
-    /* the filter follows the note: a cutoff 2^((step - 16) / 8) x f0, HP at BASE, LP at BASE + WDTH; the envelope adds
+    /* the filter follows the note (and the tuned pitch): a cutoff 2^((step - 16) / 8) x f0, HP at BASE, LP at BASE + WDTH; the envelope adds
      * 7 d|d| / 256 steps at full (d: BOFS / WOFS from their centre). Positions in 1/96 octave over note 0, Q8 */
     int32_t fe = (int32_t)(t->fenv >> 15);
     int32_t db = PB8(t, P_BOF), dw = PB8(t, P_WOF);
@@ -720,10 +724,11 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     int32_t ow = (int32_t)((((int64_t)7 * dw * (dw < 0 ? -dw : dw)) >> 16) * fe >> 15);
     int32_t sb = P8(t, P_BASE) + ob, sl = sb + P8(t, P_WDTH) + ow;          /* steps, Q8 */
     int32_t key = t->note * 8 * 256;
+    if (m == M_GSIN) key += (PB8(t, P_SYN + 0) >> 7) * 32;               /* and GND-SIN's TUNE (chain_tune13) */
     int32_t ph = key + 12 * (sb - 16 * 256), pl = key + 12 * (sl - 16 * 256);
     int lq = P7(t, P_LPQ), hq = P7(t, P_HPQ);
-    zsvf_set(&t->lp1, fg_at(T_FG, pl + T_LPC[lq] * 256), T_LPK[lq]);
-    zsvf_set(&t->hp2, fg_at(T_FG, ph + T_HPC[hq] * 256), T_HPK[hq]);
+    zsvf_set(&t->lp1, fg_at(T_FG, pl + T_LPC[lq]), T_LPK[lq]);
+    zsvf_set(&t->hp2, fg_at(T_FG, ph + T_HPC[hq]), T_HPK[hq]);
     t->lp2a.G = t->lp2b.G = (int32_t)fg_at(T_FG1, pl + F_LP2 * 256);
     t->hp1.G = (int32_t)fg_at(T_FG1, ph + F_HP1 * 256);
     mon.cut_hp[ti] = CLAMP(((ph >> 8) * 1087 >> 10) - 132, 0, 1016);       /* on the screen's 20 Hz .. 20 kHz */

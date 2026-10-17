@@ -150,11 +150,13 @@ static int selftest(void)
         kit_v4(&a, 1, M_SAW);
         a.kit[0][P_DIST] = 34; a.kit[0][P_DTIM] = 8; a.kit[0][P_DFB] = 64; a.kit[0][P_BASE] = 40; a.kit[0][P_WDTH] = 30;
         a.kit[0][P_SYN + 2] = 77; a.kit[0][P_LFO + L_SPD] = 21; a.kit[0][P_BITS] = 9;
+        a.kit[0][P_SYN] = 63; a.kit[1][P_SYN] = 63;                  /* GND-SIN's TUNE a semitone down; SWAV-SAW's A */
         for (int st = 0; st < 16; st += 4) { a.step[0][st].flags = ST_TRIG; a.step[0][st].note = 36; }
         lk(&a, 0, 4, P_DTIM, 16);
         lk(&a, 0, 8, P_SYN + 1, 99);
+        lk(&a, 0, 12, P_SYN, 65);
         int n = pat_pack(&a, bl);
-        CHECK(bl[1] == 5, "format: patterns are written as version 5");
+        CHECK(bl[1] == 6, "format: patterns are written as version 6");
         bl[1] = 4;
         CHECK(pat_unpack(&b, bl, n), "format: a version-4 pattern loads");
         CHECK(b.kit[0][P_DIST] == T_V5_DIST[34] && b.kit[0][P_DTIM] == 32 && b.kit[0][P_DSND] == 64 &&
@@ -170,10 +172,17 @@ static int selftest(void)
             if (b.lock[i].trk == 0 && b.lock[i].param == P_SYN + 1 && b.lock[i].val == 99) lock_ok |= 2;
         }
         CHECK(lock_ok == 3, "format: a chain lock converts, a machine lock does not");
+        int tl = -1;
+        for (int i = 0; i < M2K_LOCKS; i++) if (b.lock[i].trk == 0 && b.lock[i].param == P_SYN) tl = b.lock[i].val;
+        CHECK(b.kit[0][P_SYN] == 32 && tl == 96 && b.kit[1][P_SYN] == 63,
+              "format: version 5 -> 6 keeps GND-SIN's TUNE in semitones (-1: 32, a lock +1: 96), SWAV-SAW's A as it was");
         CHECK(pat_unpack(&c, bl, n) && !memcmp(&b, &c, sizeof b), "format: the conversion is deterministic");
         int n2 = pat_pack(&b, bl2);
         CHECK(pat_unpack(&c, bl2, n2) && !memcmp(b.kit, c.kit, sizeof b.kit) && !memcmp(b.lock, c.lock, sizeof b.lock),
-              "format: version 5 loads unchanged (no second conversion)");
+              "format: version 6 loads unchanged (no second conversion)");
+        bl[1] = 5;
+        CHECK(pat_unpack(&c, bl, n) && c.kit[0][P_SYN] == 32 && c.kit[0][P_DTIM] == 8,
+              "format: version 5 takes only the TUNE");
         bl[1] = 3;
         CHECK(pat_unpack(&c, bl, n) && c.kit[1][0] == 0 && c.kit[1][7] == 64 && c.kit[0][P_DTIM] == 32,
               "format: version 3 takes SWAV-SAW's page and the chain");

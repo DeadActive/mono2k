@@ -25,13 +25,18 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
 - Calibration (README, Calibration): `tools/ref/mm_ref` (gearmulator, the user's OS image at a path, never in the repo;
   it logs to stdout, so send stdout to /dev/null) against `host/m2k_ref.c`, same specs in `tools/ref/*.spec`.
   Pattern format: 2 amp ATK/HOLD/DEC/REL on the measured curve; 4 SWAV-SAW's page; 5 the track chain on the
-  Monomachine's (DIST/DSND/EQG bipolar, the filter follows the note); older ones are converted on load, and the factory
-  demos are written on the version-4 chain and converted the same way (`chain_v4`). The reference renderer writes
-  32-bit float WAVs; `tools/ref/sweep.py`'s `load` reads both.
+  Monomachine's (DIST/DSND/EQG bipolar, the filter follows the note); 6 GND-SIN's TUNE +-2 semitones (3.125 c a
+  step). Older ones are converted on load; the factory demos are written on today's scales. The reference renderer
+  writes 32-bit float WAVs; `tools/ref/sweep.py`'s `load` reads both.
 - Fidelity regressions: `.venv/bin/python tools/ref/regress.py check [GROUP ...]` renders MONO2K with the chain specs
   and compares against `tools/ref/regress_ref.json` (numbers measured from the Monomachine's output; `capture` rebuilds
-  it from `build/ref/mm_c*`). PASS / FAIL, XFAIL for a known gap (with its reason), INFO not asserted. Every DSP fix
-  gets a case that failed before it. `m2k_host --selftest` covers the pattern formats.
+  it from `build/ref/mm_c*`). PASS / FAIL, XFAIL for a known gap (with its reason), INFO not asserted. Each XFAIL's
+  size is held in `tools/ref/regress_gaps.json` (`regress.py gaps`; it only narrows unless `--widen`, a decision the
+  diff shows): a gap that grows past it plus the tolerance FAILs, and XPASS fails too (re-mark the case PASS). Every
+  DSP fix gets a case that failed before it. `m2k_host --selftest` covers the pattern formats.
+- The Monomachine's renders in one `mm_ref` run are not independent: its oscillator keeps feeding the filter between
+  notes (the amp envelope comes after the filter and the drive), so a line inherits the last one's resonance; another
+  machine between them resets it (`chain_order11`). Split slow-building renders, or put a GND-NOIS line before each.
 - `reference/candidate_waves/` holds third-party waves of unverified provenance: git-ignored, never committed, never in
   web/ or the firmware.
 

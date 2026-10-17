@@ -71,8 +71,12 @@ int main(int argc, char **argv)
         const char *c = line;
         for (int f = 0; f < 6 && *c; f++) { while (*c && *c != ' ' && *c != '\t') c++; while (*c == ' ' || *c == '\t') c++; }
         while (*c && *c != '\n') {
-            int cc, v, used;
+            int cc, v, used, skip = 0;
+            /* "mm:cc=v" is the Monomachine's alone (a control MONO2K keeps elsewhere); "m2k:cc=v" is MONO2K's alone */
+            if (!strncmp(c, "mm:", 3)) { c += 3; skip = 1; }
+            else if (!strncmp(c, "m2k:", 4)) c += 4;
             if (sscanf(c, "%d=%d%n", &cc, &v, &used) != 2) break;
+            if (skip) { c += used; while (*c == ' ' || *c == '\t') c++; continue; }
             m2k_midi(0xB0, cc, v);
             c += used;
             while (*c == ' ' || *c == '\t') c++;

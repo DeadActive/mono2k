@@ -57,7 +57,7 @@ typedef struct {
 
 static const mi_t MI[M_COUNT] = {
     {"GND-SIN", "GND", "SINE", "PERC", {5, 1, 3},
-     {{"TUNE", "FINE TUNE", K_FINE}, {"FOLD", "SINE FOLD", K_NUM}, {"SUB", "SUB LEVEL", K_NUM}, {"NOIS", "NOISE", K_NUM},
+     {{"TUNE", "TUNE", K_TUN2}, {"FOLD", "SINE FOLD", K_NUM}, {"SUB", "SUB LEVEL", K_NUM}, {"NOIS", "NOISE", K_NUM},
       {"PDEP", "PITCH DROP", K_NUM}, {"PDEC", "DROP TIME", K_TIME}, {"CLIK", "CLICK", K_NUM}, {"HARM", "2ND HARMONIC", K_NUM}}},
     {"GND-NOIS", "GND", "NOISE", "PERC", {3, 4, 1},
      {{"COLR", "COLOUR", K_BI}, {"S&H", "PITCHED HOLD", K_NUM}, {"META", "METAL MIX", K_NUM}, {"MSPR", "METAL SPREAD", K_NUM},
@@ -1460,7 +1460,7 @@ static void footer(void)
         int h = ui.ease[k] >> 8;
         rect_pat(bx, by, bw, bh, PT_SPARSE, 0);
         frame(bx, by, bw, bh, 1);
-        int bip = pi->kind == K_BI || pi->kind == K_PAN || pi->kind == K_SEMI || pi->kind == K_FINE || pi->kind == K_SEMI24;
+        int bip = pi->kind == K_BI || pi->kind == K_PAN || pi->kind == K_SEMI || pi->kind == K_FINE || pi->kind == K_TUN2 || pi->kind == K_SEMI24;
         if (bip) {
             int mid = by + bh / 2;
             hline(bx - 2, mid, bw + 4, 1);

@@ -29,8 +29,8 @@ static int pat_pack(const m2k_pattern_t *p, uint8_t *o)
 {
     int n = 0;
     o[n++] = 'P';
-    o[n++] = 5;                        /* 2: amp envelope on the Monomachine's times; 3: MOD; 4: SWAV-SAW's new page;
-                                        * 5: the track chain on the Monomachine's */
+    o[n++] = 6;                        /* 2: amp envelope on the Monomachine's times; 3: MOD; 4: SWAV-SAW's new page;
+                                        * 5: the track chain on the Monomachine's; 6: GND-SIN's TUNE in 3.125 c */
     m_cpy(o + n, p->name, 8); n += 8;
     m_cpy(o + n, p->machine, M2K_TRACKS); n += M2K_TRACKS;
     m_cpy(o + n, p->glob, G_COUNT); n += G_COUNT;
@@ -60,10 +60,16 @@ static int pat_pack(const m2k_pattern_t *p, uint8_t *o)
     return n;
 }
 
+static uint8_t tune_v5(int v)
+{
+    v = 64 + (v - 64) * 32;
+    return (uint8_t)(v < 0 ? 0 : v > 127 ? 127 : v);
+}
+
 static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
-    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 5) return 0;
+    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 6) return 0;
     int ver = o[1], stride = ver >= 3 ? P_COUNT : P_MODT;          /* before 3 a kit ended before the MOD effect */
     const int head = 2 + 8 + M2K_TRACKS + G_COUNT + 1 + M2K_TRACKS * stride + M2K_TRACKS * M2K_STEPS / 8 + 2;
     if (len < head) return 0;
@@ -123,6 +129,13 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
         for (int i = 0; i < M2K_LOCKS; i++) if (p->lock[i].trk != 0xFF && p->lock[i].param == P_SPU) p->lock[i].val >>= 1;
     }
     if (ver < 5) chain_v4(p);          /* the chain became the Monomachine's */
+    if (ver < 6)                       /* GND-SIN's TUNE was a semitone a step: the Monomachine's +-2 semitones hold +-2 */
+        for (int t = 0; t < M2K_TRACKS; t++) {
+            if (p->machine[t] != M_GSIN) continue;
+            p->kit[t][P_SYN] = tune_v5(p->kit[t][P_SYN]);
+            for (int i = 0; i < M2K_LOCKS; i++)
+                if (p->lock[i].trk == t && p->lock[i].param == P_SYN) p->lock[i].val = tune_v5(p->lock[i].val);
+        }
     return 1;
 }
 
