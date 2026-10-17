@@ -161,7 +161,7 @@ namespace
 			std::snprintf(name, sizeof name, "/page_%u.pbm", i);
 			writePbm(_dir + name, hw->getFrontPanelSnapshot());
 			tap(*hw, md::PanelControl::DataPageForward);
-			advance(*hw, g_rate / 4);
+			advance(*hw, g_rate * 3 / 2);           // the controllers land one by one on the OS: let them all arrive
 		}
 		return 0;
 	}
@@ -186,7 +186,7 @@ namespace
 				require(eq != std::string::npos, "cc=value expected");
 				midi(*hw, 0xb0, static_cast<uint8_t>(std::stoi(kv.substr(0, eq))), static_cast<uint8_t>(std::stoi(kv.substr(eq + 1))));
 			}
-			advance(*hw, g_rate / 4);
+			advance(*hw, g_rate * 3 / 2);           // the controllers land one by one on the OS: let them all arrive
 			std::vector<float> lr;
 			midi(*hw, 0x90, static_cast<uint8_t>(note), static_cast<uint8_t>(vel));
 			render(*hw, static_cast<uint32_t>(gate * g_rate), lr);
