@@ -127,6 +127,66 @@ static int analyze(const char *out)
     return 0;
 }
 
+/* each track of bank A alone, two loops, and every trig it plays: the frame, the note the engine was given, the
+ * track's parameters as they stood; then its most played note held on its kit (tools/demo_pitch.py measures each
+ * against its note). The factory is rebuilt between tracks, so the held note's kit change does not stay */
+static int pitch_dump(const char *out)
+{
+    char path[512];
+    for (int p = 0; p < 16; p++) {
+        m2k_init(2000);
+        int steps = pat[p].glob[G_LEN] < 1 ? 1 : pat[p].glob[G_LEN] > 64 ? 64 : pat[p].glob[G_LEN];
+        int frames = (int)(2.0 * steps * M2K_SR * 15.0 / (30 + pat[p].glob[G_TMPO]) + M2K_SR) / 16 * 16;
+        for (int t = 0; t < M2K_TRACKS; t++) {
+            m2k_init(2000);
+            cur_pat = p;
+            sq.queued = (uint8_t)p;
+            pat[p].mute = (uint8_t)(~(1 << t) & 0x3F);
+            lockmap_build();
+            for (int k = 0; k < M2K_TRACKS; k++) m_cpy(trk[k].eff, pat[p].kit[k], P_COUNT);
+            seq_play(1);
+            int16_t *keep = malloc((size_t)frames * 4);
+            snprintf(path, sizeof path, "%s/p%02d_t%d.txt", out, p + 1, t + 1);
+            FILE *ev = fopen(path, "w");
+            if (!ev || !keep) { perror(path); return 1; }
+            fprintf(ev, "# A%02d %s T%d machine %d bpm %d steps %d\n", p + 1, pat[p].name, t + 1, pat[p].machine[t],
+                    30 + pat[p].glob[G_TMPO], steps);
+            uint32_t seen = mon.trig[t];
+            for (int f = 0; f < frames; f += 16) {
+                m2k_render(keep + 2 * f, 16);
+                if (mon.trig[t] != seen) {
+                    fprintf(ev, "%d %d %d %u", f, trk[t].note, trk[t].vel, (unsigned)(mon.trig[t] - seen));
+                    for (int k = 0; k < P_COUNT; k++) fprintf(ev, " %d", trk[t].eff[k]);
+                    fprintf(ev, "\n");
+                    seen = mon.trig[t];
+                }
+            }
+            fclose(ev);
+            snprintf(path, sizeof path, "%s/p%02d_t%d.wav", out, p + 1, t + 1);
+            wav_write(path, keep, frames);
+            /* and the track's most played note held 1.5 s on its kit, the sequencer stopped: the engine's own tuning */
+            int count[128] = {0}, note = 60, best = 0;
+            for (int s = 0; s < steps; s++)
+                if ((pat[p].step[t][s].flags & ST_TRIG) && ++count[pat[p].step[t][s].note & 127] > best) {
+                    best = count[pat[p].step[t][s].note & 127];
+                    note = pat[p].step[t][s].note & 127;
+                }
+            m2k_init(2000);
+            cur_pat = p;
+            int held = (int)(1.5 * M2K_SR) / 16 * 16;
+            pat[p].kit[t][P_HOLD] = 127;
+            pat[p].kit[t][P_DEC] = 127;
+            m2k_midi(0x90 | t, note, 100);
+            for (int f = 0; f < held; f += 16) m2k_render(keep + 2 * f, 16);
+            snprintf(path, sizeof path, "%s/p%02d_t%d_held%d.wav", out, p + 1, t + 1, note);
+            wav_write(path, keep, held);
+            free(keep);
+        }
+    }
+    printf("bank A: 16 patterns x %d tracks into %s\n", M2K_TRACKS, out);
+    return 0;
+}
+
 #define CHECK(c, m) do { if (!(c)) { printf("FAIL: %s\n", m); fails++; } else printf("ok   %s\n", m); } while (0)
 
 /* the bus's tape at TAPE 127 on a held 1047 Hz sine: the pitch per cycle (between interpolated rising zero
@@ -235,6 +295,24 @@ static int selftest(void)
               "format: version 3 takes SWAV-SAW's page and the chain");
         n = pat_pack(&pat[0], bl);
         CHECK(pat_unpack(&c, bl, n) && !memcmp(pat[0].kit, c.kit, sizeof c.kit), "format: a saved demo reloads as it was");
+        /* no conversion moves a pitch: every demo saved and reloaded as version 4 and 5 keeps its notes, its PTCH,
+         * its machines' pages and the locks on them (GND-SIN's TUNE converts, and no demo moves it) */
+        int moved = 0;
+        for (int d = 0; d < 16; d++)
+            for (int ver = 4; ver <= 5; ver++) {
+                n = pat_pack(&pat[d], bl);
+                bl[1] = (uint8_t)ver;
+                if (!pat_unpack(&c, bl, n)) { moved++; continue; }
+                for (int t = 0; t < M2K_TRACKS; t++) {
+                    moved += c.kit[t][P_PTCH] != pat[d].kit[t][P_PTCH] || memcmp(c.kit[t], pat[d].kit[t], 8) != 0;
+                    for (int s = 0; s < M2K_STEPS; s++)
+                        moved += c.step[t][s].note != pat[d].step[t][s].note || c.step[t][s].flags != pat[d].step[t][s].flags;
+                }
+                for (int i = 0; i < M2K_LOCKS; i++)
+                    if (pat[d].lock[i].trk != 0xFF && (pat[d].lock[i].param < 8 || pat[d].lock[i].param == P_PTCH))
+                        moved += c.lock[i].val != pat[d].lock[i].val;
+            }
+        CHECK(moved == 0, "format: versions 4 and 5 move no demo's notes, PTCH, machine page or their locks");
     }
     /* the sequencer's keys, as a hand plays them: pages, the length, step entry */
     {
@@ -356,6 +434,7 @@ int main(int argc, char **argv)
     const char *out = argc > 1 ? argv[1] : "build/host";
     char path[512];
     if (argc > 2 && !strcmp(argv[2], "--analyze")) return analyze(out);
+    if (argc > 2 && !strcmp(argv[2], "--pitch")) return pitch_dump(out);
     /* 1: the three factory patterns, 12 s each */
     for (int p = 0; p < 3; p++) {
         m2k_init(2000);
