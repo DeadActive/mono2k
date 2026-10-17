@@ -457,5 +457,6 @@ static void factory(void)
     lfo(p, 5, 0, SA, 3, 3, 64, 110, 1);
 
     /* A16: empty, to start from */
-    pat_new(15, "INIT", 120, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_SID, M_FMS, M_ENS));
+    p = pat_now(15, "INIT", 120, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_SID, M_FMS, M_ENS));   /* the blank kit itself */
+    p->glob[G_VERB] = 40;
 }
