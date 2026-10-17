@@ -107,18 +107,14 @@ namespace
 	{
 		FILE* f = std::fopen(_path.c_str(), "wb");
 		require(f, "could not write the WAV");
-		const uint32_t frames = static_cast<uint32_t>(_lr.size() / 2), bytes = frames * 4;
+		// 32-bit float, unclipped: quiet measurements keep the DSP's own resolution instead of a 16-bit floor
+		const uint32_t frames = static_cast<uint32_t>(_lr.size() / 2), bytes = frames * 8;
 		auto u32 = [&](uint32_t v) { std::fwrite(&v, 4, 1, f); };
 		auto u16 = [&](uint16_t v) { std::fwrite(&v, 2, 1, f); };
 		std::fwrite("RIFF", 1, 4, f); u32(36 + bytes); std::fwrite("WAVEfmt ", 1, 8, f);
-		u32(16); u16(1); u16(2); u32(g_rate); u32(g_rate * 4); u16(4); u16(16);
+		u32(16); u16(3); u16(2); u32(g_rate); u32(g_rate * 8); u16(8); u16(32);
 		std::fwrite("data", 1, 4, f); u32(bytes);
-		for(const float s : _lr)
-		{
-			const float c = s > 1.f ? 1.f : s < -1.f ? -1.f : s;
-			const int16_t v = static_cast<int16_t>(c * 32767.f);
-			std::fwrite(&v, 2, 1, f);
-		}
+		std::fwrite(_lr.data(), sizeof(float), _lr.size(), f);
 		std::fclose(f);
 	}
 

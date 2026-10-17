@@ -4,17 +4,18 @@
 # averaged, both shifted to start where the fundamental rises through zero, scaled to the same peak; under it the
 # first 16 harmonics of each, in dB from the strongest. The waveform match, made visible.
 #   .venv/bin/python tools/ref/cycles.py build/ref/mm build/ref/m2k build/ref/cycles.png
-import os, sys, wave
+import os, sys
 import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sweep import load as load2
 from PIL import Image, ImageDraw
 
 SR = 44100
 
 
 def load(p):
-    with wave.open(p) as w:
-        x = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float64) / 32768
-    return x.reshape(-1, 2)[:, 0]
+    return load2(p)[:, 0]
 
 
 def cycle(x, f0=261.6256):

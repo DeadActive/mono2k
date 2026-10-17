@@ -331,11 +331,11 @@ static void kit_default(m2k_pattern_t *p, int t, int m)
     uint8_t *k = p->kit[t];
     static const uint8_t D[P_COUNT] = {
         0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 64, 64, 0, 100, 64, 0,           /* ATK HOLD DEC REL (the Monomachine's init) DIST VOL PAN PORT */
-        0, 127, 0, 0, 0, 64, 64, 64,           /* BASE WDTH HPQ LPQ FATK FDEC BOF WOF */
-        64, 64, 0, 12, 0, 50, 0, 110,          /* EQF EQG SRR DTIM DSND DFB DBAS DWID */
+        0, 0, 64, 64, 64, 64, 64, 0,           /* ATK HOLD DEC REL DIST VOL PAN PORT: the Monomachine's init, as all */
+        0, 127, 0, 0, 0, 32, 64, 64,           /* BASE WDTH HPQ LPQ FATK FDEC BOF WOF       of these but PTCH..GATE */
+        64, 64, 0, 64, 64, 32, 0, 127,         /* EQF EQG SRR DTIM DSND DFB DBAS DWID */
         0, 0, 0, 0,                            /* BITS FOLD XOR SPU */
-        64, 110, 0, 64, 0, 14,                 /* PTCH LEVL AMOD ASPD ARNG GATE */
+        64, 100, 0, 64, 0, 14,                 /* PTCH LEVL AMOD ASPD ARNG GATE */
     };
     m_cpy(k, D, P_COUNT);
     k[P_MODR] = 40;                    /* the modulation: a slow chorus, off until its MIX is up */

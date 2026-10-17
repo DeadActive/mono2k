@@ -121,6 +121,162 @@ out.append(arr("T_PAN", "uint16_t", [round(32767 * math.cos(v / 127.0 * math.pi 
 # volume curve (squared), Q15
 out.append(arr("T_VOL", "uint16_t", [round(32767 * (v / 127.0) ** 2) for v in range(128)]))
 
+# ---- the track chain, after the Monomachine's (measured on OS 1.32B in gearmulator, tools/ref/chain.py and README)
+def interp(pts, x, log=False):
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        if x0 <= x <= x1:
+            t = (x - x0) / (x1 - x0)
+            return math.exp(math.log(y0) + t * (math.log(y1) - math.log(y0))) if log else y0 + t * (y1 - y0)
+    return pts[0][1] if x < pts[0][0] else pts[-1][1]
+# DIST: below 64 headroom, 1.35 dB a step (63: -1.01 dB); 64..72 clean; above, gain into the clip (small signals:
+# +1.95 dB at 76, +4.58 at 80, +10.55 at 88, then ~0.62 dB a step). The clip's ceiling, against a full-scale machine:
+# +5.79 dB up to 64, falling to -3.24 dB at 80 and staying there. The gain Q24, the ceiling in machine units
+def dist_h(d):
+    if d < 64:
+        return -1.35 * (64 - d) + 0.34
+    if d >= 88:
+        return 10.55 + (d - 88) * 0.62
+    return interp([(64, 0), (72, 0), (76, 1.95), (80, 4.58), (84, 7.78), (88, 10.55)], d)
+def dist_c(d):
+    return 0.6 + interp([(64, 5.79), (68, 3.94), (72, 0.0), (76, -2.27), (80, -3.24)], d)
+out.append(arr("T_DIST_H", "uint32_t", [round(2 ** 24 * 10 ** (dist_h(d) / 20)) for d in range(128)], 8))
+out.append(arr("T_DIST_C", "int32_t", [round(32767 * 10 ** (dist_c(d) / 20)) for d in range(128)], 8))
+# the filter follows the note: a cutoff 2^((step - 16) / 8) x f0, the same for the HP (BASE) and the LP (BASE + WDTH).
+# Positions in 1/96 octave over MIDI note 0 (8.18 Hz): 8 a semitone, 12 a step. Every section stops at 18 kHz,
+# which gives the open filter the Monomachine's top (-1 dB at 12.5 kHz, -1.8 dB at 14 kHz). ZDF g = tan(pi fc / fs)
+# for the two-poles, G = g / (1 + g) for the one-poles, both Q24 (a low cutoff keeps its precision)
+F_TOP = round(96 * math.log2(18000 / 8.1758))
+def fpos(i):
+    return 8.1758 * 2 ** (min(i, F_TOP) / 96)
+out.append("#define F_TOP %d\n" % F_TOP)
+out.append(arr("T_FG", "uint32_t", [round(2 ** 24 * math.tan(math.pi * fpos(i) / SR)) for i in range(F_TOP + 1)], 8))
+out.append(arr("T_FG1", "uint32_t", [round(2 ** 24 * math.tan(math.pi * fpos(i) / SR) / (1 + math.tan(math.pi * fpos(i) / SR))) for i in range(F_TOP + 1)], 8))
+# the LP: a resonant two-pole (LP1) before the clip, two one-poles at 1.55 x the cutoff after it (LP2). LP1 sits at
+# 1.35 x the cutoff with Q 0.74 at LPQ 0 and moves onto the cutoff as the Q rises (fits to the stepped sine and to
+# noise with headroom); the HP alike: a resonant two-pole at 1.24 .. 1.0 x, and a one-pole at 1.75 x after the clip.
+# Per Q value: the two-pole's offset in 1/96 octave and its damping 1/Q, Q24
+LPQ = [(0, .74), (8, .95), (16, 1.6), (24, 2.6), (32, 4.5), (40, 7.5), (48, 12.5), (56, 19), (64, 31), (72, 55), (80, 82),
+       (88, 150), (96, 210), (104, 300), (112, 500), (120, 800), (127, 1000)]
+LPC = [(0, 1.35), (8, 1.22), (16, 1.10), (24, 1.06), (32, 1.03), (40, 1.02), (48, 1.01), (56, 1.0)]
+HPQ = [(0, .80), (8, 1.03), (16, 1.43), (24, 1.9), (32, 3.5), (40, 5.6), (48, 8.7), (56, 15.6), (64, 24.5), (72, 40),
+       (80, 69), (88, 92), (96, 149), (104, 226), (112, 270), (120, 363), (127, 494)]
+HPC = [(0, 1.24), (16, 1.26), (32, 1.22), (48, 1.10), (64, 1.04), (80, 1.0)]
+out.append(arr("T_LPK", "uint32_t", [round(2 ** 24 / interp(LPQ, q, True)) for q in range(128)], 8))
+out.append(arr("T_HPK", "uint32_t", [round(2 ** 24 / interp(HPQ, q, True)) for q in range(128)], 8))
+out.append(arr("T_LPC", "int8_t", [round(96 * math.log2(interp(LPC, q))) for q in range(128)], 16))
+out.append(arr("T_HPC", "int8_t", [round(96 * math.log2(interp(HPC, q))) for q in range(128)], 16))
+out.append("#define F_LP2 %d\n#define F_HP1 %d\n" % (round(96 * math.log2(1.55)), round(96 * math.log2(1.75))))
+# the EQ: a band added to the signal, Q 2.2, a cut the exact inverse of a boost as deep; its
+# centre 13.5 steps an octave, 808 Hz at 64 (fit to the measured centres). g Q24, the linear gain Q16, Hz for the screen
+EQC = [(16, 65), (20, 75), (24, 105), (28, 132), (32, 172), (36, 191), (40, 223), (44, 301), (48, 353), (52, 468),
+       (56, 544), (60, 630), (64, 829), (68, 991), (72, 1141), (76, 1556), (80, 1898), (84, 2336), (88, 2719),
+       (92, 3488), (96, 3957), (100, 5370), (104, 6097), (108, 7749), (112, 9881), (116, 10882)]
+_n = len(EQC); _sx = sum(v for v, _ in EQC); _sy = sum(math.log2(f) for _, f in EQC)
+_sxx = sum(v * v for v, _ in EQC); _sxy = sum(v * math.log2(f) for v, f in EQC)
+EQ_B = (_n * _sxy - _sx * _sy) / (_n * _sxx - _sx * _sx); EQ_A = (_sy - EQ_B * _sx) / _n
+def eqf(v):
+    return 2 ** (EQ_A + EQ_B * v)
+out.append(arr("T_EQG", "uint32_t", [round(2 ** 24 * math.tan(math.pi * min(eqf(v), 18000) / SR)) for v in range(128)], 8))
+# its gain, measured (a curve, not a straight line in dB): boost to +36.1 dB, cut to -31.1 dB
+EQUP = [(0, 0), (8, 7.1), (16, 12.0), (24, 16.8), (32, 21.3), (40, 24.7), (48, 29.1), (56, 32.6), (63, 36.1)]
+EQDN = [(0, 0), (8, 5.3), (16, 8.6), (24, 12.5), (32, 16.0), (40, 19.8), (48, 24.6), (56, 26.9), (64, 31.1)]
+out.append(arr("T_EQGAIN", "uint32_t", [round(65536 * 10 ** (interp(EQUP if v > 64 else EQDN, abs(v - 64)) / 20)) for v in range(128)], 8))
+out.append(arr("T_EQHZ", "uint16_t", [round(eqf(v)) for v in range(128)]))
+# SRR: a sample and hold whose period runs from 1 sample (0) to 15.7 (127, 2.8 kHz); measured, smooth between. Q16
+SRRP = [(0, 1.0), (16, 2.823), (24, 3.765), (32, 4.706), (40, 5.647), (48, 6.589), (56, 7.467), (64, 8.471), (72, 9.290),
+        (80, 10.182), (88, 11.078), (96, 12.003), (104, 13.001), (112, 14.0), (120, 15.0), (127, 15.677)]
+out.append(arr("T_SRR_INC", "uint32_t", [round(65536 / interp(SRRP, v)) for v in range(128)], 8))
+out.append(arr("T_SRRHZ", "uint16_t", [round(SR / interp(SRRP, v)) for v in range(128)]))
+# the delay's loop filter: a one-pole HP at DBAS, a one-pole LP at DBAS + DWID, 11.5 steps an octave (HP 500 Hz and
+# LP 900 Hz at 64); coefficients for the line's half rate, Q15
+def dhp(v):
+    return 500 * 2 ** ((v - 64) / 11.5)
+def dlp(v):
+    return 900 * 2 ** ((v - 64) / 11.5)
+out.append(arr("T_DLY_HP", "uint16_t", [round(32767 * (1 - math.exp(-2 * math.pi * min(dhp(v), 10000) / (SR / 2)))) for v in range(128)]))
+out.append(arr("T_DLY_LP", "uint16_t", [32767 if dlp(v) > 10000 else round(32767 * (1 - math.exp(-2 * math.pi * dlp(v) / (SR / 2)))) for v in range(128)]))
+out.append(arr("T_DBHZ", "uint16_t", [round(min(dhp(v), 65535)) for v in range(128)]))
+# the filter envelope: both stages straight lines (measured: a C4 sine crossed by the swept cutoff, tools/ref/chain.py
+# ftime5, and ftime6 for the short ones). Attack ~5 ms up to 32, 121 ms at 64, doubling every ~8.4 steps above; decay
+# 863 ms at 64, x1.565 every 8 steps (24 ms at 0); 127 holds. Per control block, full scale 2^30; ms x10 for the screen
+FATK = [(0, 1.0), (32, 5.9), (36, 15.7), (40, 20.6), (44, 26.0), (48, 36.5), (52, 47.7), (56, 64.7), (64, 121), (72, 280),
+        (80, 560), (88, 1100), (96, 2180), (104, 4260), (112, 8330), (120, 16180), (127, 29000)]
+def f_atk(v):
+    return interp(FATK, v, True) / 1000
+def f_dec(v):
+    return 0.863 * 1.565 ** ((v - 64) / 8)
+out.append(arr("T_FATK_INC", "uint32_t", [min(1 << 30, round((1 << 30) * SUB / (f_atk(v) * SR))) for v in range(128)], 8))
+out.append(arr("T_FDEC_DEC", "uint32_t", [0 if v == 127 else max(1, round((1 << 30) * SUB / (f_dec(v) * SR))) for v in range(128)], 8))
+out.append(arr("T_FATK_MS10", "uint32_t", [round(f_atk(v) * 10000) for v in range(128)], 8))
+out.append(arr("T_FDEC_MS10", "uint32_t", [round(f_dec(v) * 10000) for v in range(128)], 8))
+# ---- patterns saved before version 5 (MONO2K's own chain) onto the Monomachine's: each old setting to the new one
+# that gives the same Hz, dB or time. The filter's positions need the track's note, so they go as old positions in
+# 1/96 octave over note 0 (T_V5_FPOS) and the code places them
+def old_fcut(v):
+    return 20.0 * 1000 ** (v / 127.0)
+def nearest_v(f, target, lo=0, hi=127):
+    return min(range(lo, hi + 1), key=lambda v: abs(f(v) - target))
+def v5_dist(d):            # old: a gain of 1 + 0.094 d into tanh; a soft tanh distorts about as a hard clip at half
+    # the dB over; new: 1.25 dB of overdrive a step from 72
+    return 64 if d == 0 else min(127, round(72 + 20 * math.log10(1 + 0.094 * d) / 2.5))
+def old_q_db(v):           # the old resonance's peak: Q = 1 / (2 R), R = 0.025^(v / 127)
+    return max(0.0, 20 * math.log10(0.5 / (0.025 ** (v / 127.0))))
+def v5_lpq(v):
+    pk = old_q_db(v)
+    return round(pk * 16 / 3.9) if pk <= 3.9 else min(127, round(16 + (pk - 3.9) / 0.484))
+def v5_hpq(v):
+    pk = old_q_db(v)
+    return round(pk * 32 / 4.9) if pk <= 4.9 else min(127, round(32 + (pk - 4.9) / 0.45))
+def v5_ofs(v):             # old: (v - 64) x 0.314 octave at full; new: 7 d |d| / 256 steps of 1/8 octave
+    oct_ = (v - 64) * 4 * math.log2(1000) / 127
+    d = math.sqrt(abs(oct_) * 8 * 256 / 7)
+    return max(0, min(127, 64 + round(math.copysign(d, oct_))))
+def v5_fatk(v):
+    return nearest_v(lambda x: math.log(f_atk(x)), math.log(etime(v)))
+def v5_fdec(v):            # old: exponential to -60 dB in etime; new: a straight line, about 10 % at 0.37 of that
+    return 127 if v == 127 else nearest_v(lambda x: math.log(f_dec(x)), math.log(0.37 * etime(v)), 0, 126)
+def old_srr_hz(s):
+    return SR * (128 - s) ** 2 * 4 / 65536
+def v5_srr(s):
+    return 0 if s == 0 else nearest_v(lambda x: math.log(SR / interp(SRRP, x)), math.log(min(SR, old_srr_hz(s))), 1)
+def v5_eqf(v):
+    return nearest_v(lambda x: math.log(eqf(x)), math.log(old_fcut(v)))
+def v5_eqg(v):             # old: 1 + (v - 64) / 64 for a cut, 1 + 3 (v - 64) / 64 for a boost
+    if v == 64:
+        return 64
+    g = 1 + (v - 64) / 64.0 if v < 64 else 1 + 3 * (v - 64) / 64.0
+    db = 20 * math.log10(max(g, 1e-4))
+    if db >= 0:
+        return 64 + nearest_v(lambda x: interp(EQUP, x), db, 0, 63)
+    return 64 - nearest_v(lambda x: interp(EQDN, x), -db, 0, 64)
+out.append(arr("T_V5_DIST", "uint8_t", [v5_dist(v) for v in range(128)], 16))
+out.append(arr("T_V5_LPQ", "uint8_t", [v5_lpq(v) for v in range(128)], 16))
+out.append(arr("T_V5_HPQ", "uint8_t", [v5_hpq(v) for v in range(128)], 16))
+out.append(arr("T_V5_OFS", "uint8_t", [v5_ofs(v) for v in range(128)], 16))
+out.append(arr("T_V5_FATK", "uint8_t", [v5_fatk(v) for v in range(128)], 16))
+out.append(arr("T_V5_FDEC", "uint8_t", [v5_fdec(v) for v in range(128)], 16))
+out.append(arr("T_V5_SRR", "uint8_t", [v5_srr(v) for v in range(128)], 16))
+out.append(arr("T_V5_EQF", "uint8_t", [v5_eqf(v) for v in range(128)], 16))
+out.append(arr("T_V5_EQG", "uint8_t", [v5_eqg(v) for v in range(128)], 16))
+out.append(arr("T_V5_DHP", "uint8_t", [nearest_v(lambda x: math.log(dhp(x)), math.log(min(old_fcut(v), 10000))) for v in range(128)], 16))
+out.append(arr("T_V5_DLP", "uint8_t", [127 if v >= 120 else nearest_v(lambda x: math.log(dlp(x)), math.log(old_fcut(v))) for v in range(128)], 16))
+out.append(arr("T_V5_FPOS", "int16_t", [round(96 * math.log2(old_fcut(v) / 8.1758)) for v in range(128)], 16))
+# the old VOL into the bus at 0.62 (the master at 100) without the Monomachine's scale: the same loudness is
+# sqrt(0.62 / 1.758) of the old setting; 3 dB under that, as the old bus's tanh no longer rounds the peaks (a clipped
+# sound through the Monomachine's high-pass is spikier than MONO2K's soft square was)
+out.append(arr("T_V5_VOL", "uint8_t", [round(v * math.sqrt(0.62 / 1.758) * 10 ** (-3 / 40)) for v in range(128)], 16))
+# volume with the Monomachine's scale: a full-scale sine at VOL 64, LEV 100, centre, peaks at -14.8 dBFS (after the
+# filter's 0.6 dB on the note at BASE 0). Q15
+out.append(arr("T_VOLK", "uint16_t", [round(32767 * 1.758 * (v / 127.0) ** 2) for v in range(128)]))
+# the master: unity at 100, Q15
+out.append(arr("T_MVOL", "uint16_t", [min(65535, round(32767 * (v / 100.0) ** 2)) for v in range(128)]))
+# the bus limiter: straight to 0.75 of full scale, then a tanh knee to full. Input -131072..131072 in 257 steps
+def lim(x):
+    a = abs(x)
+    y = a if a <= 0.75 else 0.75 + 0.25 * math.tanh((a - 0.75) / 0.25)
+    return math.copysign(y, x)
+out.append(arr("T_LIM", "int16_t", [round(32767 * lim((i - 128) / 32.0)) for i in range(257)]))
+
 # FM ratios (Q8) and their names; inharmonic ones for the metallic sounds
 ratios = [0.25, 0.5, 0.75, 1.0, 1.41, 1.5, 2.0, 2.5, 2.76, 3.0, 3.5, 4.0, 4.24, 5.0, 5.4, 6.0,
           7.0, 7.07, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 15.7, 16.0, 18.0, 20.0, 24.0, 32.0]

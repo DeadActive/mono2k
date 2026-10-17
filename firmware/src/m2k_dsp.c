@@ -31,7 +31,60 @@ static inline int32_t svf_tick(svf_t *f, int32_t x, int32_t *hp_out, int32_t *bp
     return lp;
 }
 
-#define DL_LEN 16384u                  /* bytes per track: 0.74 s at half rate, mu-law */
+/* the track filter's parts, after the Monomachine's (measured, README: Calibration): a ZDF two-pole and a ZDF one-pole
+ * on Q24 coefficients and 64-bit products, their states held in range. Each update carries its remainder to the next
+ * sample, so a low cutoff settles exactly instead of sticking a few hundred steps off zero */
+#define ZS_MAX (1 << 28)
+typedef struct { int32_t s1, s2, a1, a2, a3, k; int64_t r1, r2; } zsvf_t;   /* a1 a2 a3 Q30, k Q24; r: remainders */
+typedef struct { int32_t s, G; int64_t r; } zop_t;                          /* G Q24 */
+
+/* g, k Q24 (g = tan(pi fc / fs), k = 1 / Q); the one division a block is 32-bit */
+static void zsvf_set(zsvf_t *f, uint32_t g, uint32_t k)
+{
+    int64_t den = (1LL << 24) + (((int64_t)g * ((int64_t)g + k)) >> 24);         /* Q24, 1 .. ~110 */
+    int32_t a1 = (int32_t)(0x80000000u / (uint32_t)(den >> 10));                  /* Q17 */
+    f->a1 = a1 << 13;
+    f->a2 = (int32_t)(((int64_t)g * a1) >> 11);
+    f->a3 = (int32_t)(((int64_t)g * f->a2) >> 24);
+    f->k = (int32_t)k;
+}
+
+static inline void zsvf_tick(zsvf_t *f, int32_t v0, int32_t *lp, int32_t *bp, int32_t *hp)
+{
+    int32_t v3 = v0 - f->s2;
+    int64_t p1 = (int64_t)f->a1 * f->s1 + (int64_t)f->a2 * v3 + f->r1;
+    int64_t p2 = (int64_t)f->a2 * f->s1 + (int64_t)f->a3 * v3 + f->r2;
+    int32_t v1 = (int32_t)(p1 >> 30), d2 = (int32_t)(p2 >> 30);
+    f->r1 = p1 - ((int64_t)v1 << 30);
+    f->r2 = p2 - ((int64_t)d2 << 30);
+    int32_t v2 = f->s2 + d2;
+    f->s1 = CLAMP(2 * v1 - f->s1, -ZS_MAX, ZS_MAX);
+    f->s2 = CLAMP(2 * v2 - f->s2, -ZS_MAX, ZS_MAX);
+    if (lp) *lp = v2;
+    if (bp) *bp = v1;
+    if (hp) *hp = v0 - (int32_t)(((int64_t)f->k * v1) >> 24) - v2;
+}
+
+static inline int32_t zop_lp(zop_t *f, int32_t x)
+{
+    int64_t p = (int64_t)(x - f->s) * f->G + f->r;
+    int32_t v = (int32_t)(p >> 24);
+    f->r = p - ((int64_t)v << 24);
+    int32_t y = v + f->s;
+    f->s = CLAMP(y + v, -ZS_MAX, ZS_MAX);
+    return y;
+}
+
+/* a Q24 coefficient at a filter position (1/96 octave over MIDI note 0, Q8), between table entries */
+static uint32_t fg_at(const uint32_t *T, int32_t pos)
+{
+    if (pos <= 0) return T[0];
+    int32_t i = pos >> 8;
+    if (i >= F_TOP) return T[F_TOP];
+    return T[i] + (uint32_t)(((uint64_t)(T[i + 1] - T[i]) * (uint32_t)(pos & 255)) >> 8);
+}
+
+#define DL_LEN 16384u                  /* bytes per track: 0.74 s at half rate, mu-law; two lines of half that for ping-pong */
 
 typedef struct {
     uint8_t note, gate, vel, sounding, slide, let_go;   /* let_go: a key or a MIDI note-off, not the sequencer */
@@ -47,16 +100,18 @@ typedef struct {
     uint32_t menv[3];                  /* Q30 envelopes owned by the machine */
     uint32_t lfsr;
     svf_t fm[3];                       /* formants (VOX) */
-    /* the chain */
-    svf_t hp, lp, eq;
-    int32_t eqk;
+    /* the chain: EQ, the filter (LP1 before the clip, the HP's two-pole, its one-pole and LP2 after), SRR */
+    zsvf_t eq, lp1, hp2;
+    zop_t hp1, lp2a, lp2b;
+    int32_t eqc;                       /* the EQ band's mix, Q24 */
     uint32_t srr_acc;
-    int32_t srr_hold;
-    /* delay */
+    int32_t srr_hold, srr_prev;
+    /* delay: a sum line, and a difference line while the send is positive (ping-pong) */
     uint8_t *dl;
-    uint32_t dw;
+    uint32_t dw, dph;                  /* write index; the line's clock, Q16 of a line sample */
     int32_t dt_q8;                     /* smoothed delay time in half-rate samples, Q8 */
-    int32_t dacc, dprev, dcur, dhp, dlp;
+    int32_t dacc[2], dn, dprev[2], dcur[2], dhp[2], dlp[2];
+    uint8_t dmode;                     /* 0: one line, the echoes keep the source's side; 1: ping-pong */
     /* LFOs */
     uint32_t lph[3];
     int32_t lval[3], lhold[3], lrnd[3];
@@ -485,13 +540,13 @@ static void env_block(trk_t *t)
         break;
     }
     if (t->astage == 0) t->sounding = 0;
-    /* filter: attack, decay to zero (127: stays) */
+    /* filter: a straight attack, a straight decay to zero (127: stays), timed as the Monomachine's (measured) */
     if (t->fstage == 1) {
-        t->fenv += T_ENV_INC[t->eff[P_FATK]];
+        t->fenv += T_FATK_INC[t->eff[P_FATK]];
         if (t->fenv >= (1u << 30)) { t->fenv = 1u << 30; t->fstage = 2; }
     } else if (t->fstage == 2) {
-        int d = P7(t, P_FDEC);
-        if (d < 127) t->fenv = mulu_hi(t->fenv, T_ENV_COEF[d], 31);
+        uint32_t d = T_FDEC_DEC[P7(t, P_FDEC)];
+        t->fenv = t->fenv > d ? t->fenv - d : 0;
     }
 }
 
@@ -633,6 +688,9 @@ static inline int32_t mod_tick(trk_t *t, int16_t *buf, int32_t x, int type, uint
     return x + (((y - x) * mix) >> 8);
 }
 
+#define EQ_K 7626007                   /* 1 / 2.2, Q24: the EQ band's damping */
+#define T_CLIP 32244                   /* a track's ceiling, per channel after the pan: just under full at LEV 127 */
+
 /* one control block of one track: modulation, envelopes, the machine, then the chain, summed into lr */
 static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t *rsend)
 {
@@ -654,65 +712,95 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     int32_t pitch = t->pitch + (PB8(t, P_PTCH) >> 2);
     mach_block(ti, m, pitch);
 
-    /* filters: HP at base, LP at base + width, both moved by the envelope */
+    /* the filter follows the note: a cutoff 2^((step - 16) / 8) x f0, HP at BASE, LP at BASE + WDTH; the envelope adds
+     * 7 d|d| / 256 steps at full (d: BOFS / WOFS from their centre). Positions in 1/96 octave over note 0, Q8 */
     int32_t fe = (int32_t)(t->fenv >> 15);
-    int32_t base = P8(t, P_BASE) + ((PB8(t, P_BOF) * 4 * fe) >> 15);
-    int32_t lpc = base + P8(t, P_WDTH) + ((PB8(t, P_WOF) * 4 * fe) >> 15);
-    int32_t hq3 = base >> 5, lq3 = lpc >> 5;
-    int hp_on = hq3 > 4, lp_on = lq3 < 1010 || P7(t, P_LPQ) > 0;
-    if (hp_on) svf_set(&t->hp, hq3, T_RES_R[P7(t, P_HPQ)]);
-    if (lp_on) svf_set(&t->lp, lq3, T_RES_R[P7(t, P_LPQ)]);
-    mon.cut_hp[ti] = CLAMP(hq3, 0, 1016);
-    mon.cut_lp[ti] = CLAMP(lq3, 0, 1016);
-    /* EQ: a band around EQF, cut or boost */
-    int32_t eqg = PB8(t, P_EQG) >> 8;
-    int eq_on = eqg != 0;
+    int32_t db = PB8(t, P_BOF), dw = PB8(t, P_WOF);
+    int32_t ob = (int32_t)((((int64_t)7 * db * (db < 0 ? -db : db)) >> 16) * fe >> 15);
+    int32_t ow = (int32_t)((((int64_t)7 * dw * (dw < 0 ? -dw : dw)) >> 16) * fe >> 15);
+    int32_t sb = P8(t, P_BASE) + ob, sl = sb + P8(t, P_WDTH) + ow;          /* steps, Q8 */
+    int32_t key = t->note * 8 * 256;
+    int32_t ph = key + 12 * (sb - 16 * 256), pl = key + 12 * (sl - 16 * 256);
+    int lq = P7(t, P_LPQ), hq = P7(t, P_HPQ);
+    zsvf_set(&t->lp1, fg_at(T_FG, pl + T_LPC[lq] * 256), T_LPK[lq]);
+    zsvf_set(&t->hp2, fg_at(T_FG, ph + T_HPC[hq] * 256), T_HPK[hq]);
+    t->lp2a.G = t->lp2b.G = (int32_t)fg_at(T_FG1, pl + F_LP2 * 256);
+    t->hp1.G = (int32_t)fg_at(T_FG1, ph + F_HP1 * 256);
+    mon.cut_hp[ti] = CLAMP(((ph >> 8) * 1087 >> 10) - 132, 0, 1016);       /* on the screen's 20 Hz .. 20 kHz */
+    mon.cut_lp[ti] = CLAMP(((pl >> 8) * 1087 >> 10) - 132, 0, 1016);
+    /* DIST: headroom below 64, a gain into the clip above 72; the clip's ceiling falls from +5.8 dB to -3.2 dB of a
+     * full-scale machine between 64 and 80. Between steps, interpolated */
+    int32_t d8 = P8(t, P_DIST), di = d8 >> 8, df = d8 & 255, dn = di < 127 ? di + 1 : 127;
+    int64_t dh = T_DIST_H[di] + ((((int64_t)T_DIST_H[dn] - T_DIST_H[di]) * df) >> 8);
+    int32_t ceil = T_DIST_C[di] + (((T_DIST_C[dn] - T_DIST_C[di]) * df) >> 8);
+    /* EQ: a band added to the signal, Q 2.2, +36 / -31 dB; a cut is the inverse of a boost as deep (its band widened
+     * by the gain) */
+    int eqv = P7(t, P_EQG), eq_on = eqv != 64;
     if (eq_on) {
-        svf_set(&t->eq, P7(t, P_EQF) * 8, 2048);
-        t->eqk = eqg < 0 ? eqg * 64 : eqg * 192;   /* Q12: -1 .. +3 */
+        uint32_t gb = T_EQGAIN[eqv];
+        uint32_t k = eqv > 64 ? EQ_K : (uint32_t)(((uint64_t)EQ_K * gb) >> 16);
+        zsvf_set(&t->eq, T_EQG[P7(t, P_EQF)], k);
+        int32_t c = (int32_t)(((int64_t)(gb - 65536) * EQ_K) >> 16);
+        t->eqc = eqv > 64 ? c : -c;
     }
     /* amp */
     t->amp0 = t->amp1;
     t->amp1 = (int32_t)(t->aenv >> 15);
     mon.aenv[ti] = t->amp1;
     mon.astage[ti] = t->astage;
-    int32_t vol = (T_VOL[P7(t, P_VOL)] * T_VOL[P7(t, P_LEVL)]) >> 15;
+    int32_t vol = T_VOLK[P7(t, P_VOL)];
     int32_t acc = 256 + (t->vel > 100 ? (pp->glob[G_ACNT] * 2) : 0);
     vol = (vol * acc) >> 8;
-    int32_t dist = P7(t, P_DIST), dg = 256 + dist * 24;
-    int32_t srr = P7(t, P_SRR), sstep = (128 - srr) * (128 - srr) * 4;
+    int32_t lev = T_VOL[P7(t, P_LEVL)];
+    int srr = P7(t, P_SRR);
+    uint32_t sinc = T_SRR_INC[srr];
     int bits = 16 - (P7(t, P_BITS) * 14 >> 7);
     int32_t fold = P7(t, P_FOLD), xr = P7(t, P_XOR), xm = (xr * xr * 2) & 0x7FFF;
     int pan = P7(t, P_PAN);
     int32_t gl = T_PAN[pan], gr = T_PAN[127 - pan];
-    int32_t ds = T_VOL[P7(t, P_DSND)], rs = T_VOL[P7(t, P_SPU)];
+    int32_t sd = P7(t, P_DSND) - 64, ds = sd * sd * 8;                      /* the send: (d / 64)^2, Q15 */
+    int32_t rs = T_VOL[P7(t, P_SPU)];
     int mtype = PN(t, P_MODT, 3), mmix = P7(t, P_MODM) * 2, mdep = P7(t, P_MODD);
     uint32_t minc = T_MOD_INC[P7(t, P_MODR)];
     int32_t pk = 0;
     for (int i = 0; i < M2K_SUB; i++) {
-        int32_t s = blk[ti][i];
-        if (hp_on) { int32_t h; svf_tick(&t->hp, s, &h, 0); s = h; }
-        if (lp_on) s = svf_tick(&t->lp, s, 0, 0);
-        if (fold) s = fold16((s * (256 + fold * 6)) >> 8);
+        /* the filter: gain, EQ, LP1, the clip, the HP's two-pole (its resonance held by the ceiling too), its
+         * one-pole, LP2 */
+        int32_t u = (int32_t)CLAMP((blk[ti][i] * dh) >> 24, -(1 << 24), 1 << 24);
+        if (eq_on) { int32_t b; zsvf_tick(&t->eq, u, 0, &b, 0); u = CLAMP(u + (int32_t)(((int64_t)b * t->eqc) >> 24), -(1 << 26), 1 << 26); }
+        int32_t v;
+        zsvf_tick(&t->lp1, u, &v, 0, 0);
+        u = CLAMP(v, -ceil, ceil);
+        zsvf_tick(&t->hp2, u, 0, 0, &u);
+        t->hp2.s1 = CLAMP(t->hp2.s1, -ceil, ceil);
+        t->hp2.s2 = CLAMP(t->hp2.s2, -ceil, ceil);
+        u -= zop_lp(&t->hp1, u);
+        int32_t s = zop_lp(&t->lp2b, zop_lp(&t->lp2a, u));
+        /* MONO2K's own breakage */
+        if (fold) s = fold16((sat16(s) * (256 + fold * 6)) >> 8);
         if (xr) s = (int32_t)(int16_t)((uint16_t)sat16(s) ^ (uint16_t)xm);
-        if (dist) s = sat_soft((s * dg) >> 8);
         int32_t a = t->amp0 + (((t->amp1 - t->amp0) * i) >> 4);
-        s = (s * a) >> 15;
-        s = (s * vol) >> 15;
-        if (eq_on) { int32_t b; svf_tick(&t->eq, s, 0, &b); s += (int32_t)(((int64_t)b * t->eqk) >> 12); }
-        if (srr) {
-            t->srr_acc += (uint32_t)sstep;
-            if (t->srr_acc >= 65536u) { t->srr_acc -= 65536u; t->srr_hold = s; }
-            s = t->srr_hold;
+        s = (int32_t)(((int64_t)s * a) >> 15);
+        if (mmix) s = mod_tick(t, mod_mem[ti], s, mtype, minc, mdep, mmix);
+        s = (int32_t)(((int64_t)s * vol) >> 15);
+        /* the track clips here, a channel at a time after the pan: one ceiling for both while the pan holds the
+         * louder side at or under it */
+        if (srr) {                     /* resampled, and joined by straight lines as the Monomachine does (its images
+                                        * fall twice as far in dB as a plain hold's) */
+            t->srr_acc += sinc;
+            if (t->srr_acc >= 65536u) { t->srr_acc -= 65536u; t->srr_prev = t->srr_hold; t->srr_hold = s; }
+            s = t->srr_prev + (int32_t)(((int64_t)(t->srr_hold - t->srr_prev) * (int32_t)t->srr_acc) >> 16);
         }
         if (bits < 16) s = (sat16(s) >> (16 - bits)) << (16 - bits);
-        if (mmix) s = mod_tick(t, mod_mem[ti], s, mtype, minc, mdep, mmix);
-        int32_t as = s < 0 ? -s : s;
+        int32_t l = (int32_t)CLAMP(((int64_t)s * gl) >> 15, -T_CLIP, T_CLIP), r = (int32_t)CLAMP(((int64_t)s * gr) >> 15, -T_CLIP, T_CLIP);
+        int32_t as = l < 0 ? -l : l, ar = r < 0 ? -r : r;
+        if (ar > as) as = ar;
         if (as > pk) pk = as;
-        L[i] += (s * gl) >> 15;
-        R[i] += (s * gr) >> 15;
-        dsend[i] = (s * ds) >> 15;
-        rsend[i] += (s * rs) >> 15;
+        L[i] += (l * lev) >> 15;
+        R[i] += (r * lev) >> 15;
+        int32_t m = CLAMP(s, -T_CLIP, T_CLIP);
+        dsend[i] = (m * ds) >> 15;
+        rsend[i] += (((m * rs) >> 15) * lev) >> 15;
     }
     t->peak = pk;
     if (pk > mon.peak[ti]) mon.peak[ti] = pk;

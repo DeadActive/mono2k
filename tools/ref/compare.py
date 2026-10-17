@@ -3,17 +3,18 @@
 # Compares MONO2K's renders with the Monomachine's, note by note: level, pitch, brightness, envelope and the first
 # harmonics. Prints a table and draws each pair's envelope and spectrum in one sheet.
 #   .venv/bin/python tools/ref/compare.py build/ref/mm build/ref/m2k build/ref/compare.png
-import os, sys, wave
+import os, sys
 import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sweep import load as load2
 from PIL import Image, ImageDraw
 
 SR = 44100
 
 
 def load(path):
-    with wave.open(path) as w:
-        x = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float64) / 32768
-    return x.reshape(-1, 2).mean(1)
+    return load2(path).mean(1)
 
 
 def db(v):

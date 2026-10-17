@@ -20,39 +20,82 @@ static uint8_t mulaw_enc(int32_t x)
 static uint32_t sps_q8 = 1411200;      /* samples per sixteenth, Q8; the sequencer sets it */
 static uint8_t tape_rolling;           /* the sequencer runs or a voice sounds: the hiss and dust follow it */
 
+/* one line's sample at a fractional position, Q8 of a line sample */
+static inline int32_t dl_read(const uint8_t *b, uint32_t mask, int32_t pos)
+{
+    uint32_t j = (uint32_t)(pos >> 8);
+    int32_t f = pos & 255;
+    return (T_MULAW[b[j & mask]] * (256 - f) + T_MULAW[b[(j + 1) & mask]] * f) >> 8;
+}
+
+/* the track's delay, after the Monomachine's (measured): DTIM in 256ths of a note plus 7.6 ms; the send (d / 64)^2,
+ * negative keeping the source's side, positive ping-pong; feedback DFB / 64, unity at 64 and saturating above; the
+ * echoes through a one-pole HP at DBAS and a one-pole LP at DBAS + DWID. The line runs at half rate in 8-bit mu-law;
+ * a time longer than the line slows its clock instead, the echoes darker, as a tape or a BBD would. Ping-pong
+ * keeps a sum and a difference line, each half the memory */
 static void delay_block(int ti, const int32_t *in, int32_t *L, int32_t *R)
 {
     trk_t *t = &trk[ti];
-    int32_t target = (int32_t)(((uint32_t)P7(t, P_DTIM) * (sps_q8 >> 3)));
-    target = CLAMP(target, 2 << 8, (int32_t)(DL_LEN - 8) << 8);
-    t->dt_q8 += (target - t->dt_q8) >> 5;
-    int32_t fb = P7(t, P_DFB) * 270;
-    int dbas = P7(t, P_DBAS), dtop = CLAMP(dbas + P7(t, P_DWID), 0, 127);
-    int32_t ahp = T_OP_H[dbas], alp = T_OP_H[dtop];
+    int dual = P7(t, P_DSND) > 64;
+    if (dual != t->dmode) {            /* the lines change their layout: start them empty */
+        m_set(t->dl, 0x7F, DL_LEN);
+        t->dmode = (uint8_t)dual;
+        t->dacc[0] = t->dacc[1] = t->dn = 0;
+        t->dhp[0] = t->dhp[1] = t->dlp[0] = t->dlp[1] = 0;
+    }
+    uint32_t n = dual ? DL_LEN / 2 : DL_LEN, mask = n - 1;
+    /* the time, half-rate samples Q8: whole samples once it settles (a read between two samples dulls the top) */
+    int32_t target = ((int32_t)((uint32_t)P7(t, P_DTIM) * (sps_q8 >> 5)) + (167 << 8) + 128) & ~255;
+    int32_t dd = target - t->dt_q8;
+    t->dt_q8 = dd > -64 && dd < 64 ? target : t->dt_q8 + (dd >> 5);
+    uint32_t th = (uint32_t)t->dt_q8 >> 8, room = n - 4;
+    uint32_t rate = th <= room ? 65536u : (room << 16) / th;                  /* the line's clock, Q16 */
+    int32_t back = th <= room ? t->dt_q8 : (int32_t)(room << 8);               /* the delay in line samples, Q8 */
+    int32_t fb = P7(t, P_DFB) * 512;
+    int dbas = P7(t, P_DBAS);
+    int32_t ahp = T_DLY_HP[dbas], alp = T_DLY_LP[CLAMP(dbas + P7(t, P_DWID), 0, 127)];
     int pan = P7(t, P_PAN);
-    int32_t gl = T_PAN[pan], gr = T_PAN[127 - pan];
+    int32_t gl = T_PAN[pan], gr = T_PAN[127 - pan], lev = T_VOL[P7(t, P_LEVL)];
     uint8_t *b = t->dl;
     int32_t pk = 0;
     for (int i = 0; i < M2K_SUB; i += 2) {
         int32_t x = (in[i] + in[i + 1]) >> 1;
-        int32_t pos = (int32_t)(t->dw << 8) - t->dt_q8;
-        uint32_t j = (uint32_t)(pos >> 8);
-        int32_t f = pos & 255;
-        int32_t y = (T_MULAW[b[j & (DL_LEN - 1)]] * (256 - f) + T_MULAW[b[(j + 1) & (DL_LEN - 1)]] * f) >> 8;
-        t->dlp += ((y - t->dlp) * alp) >> 15;
-        t->dhp += ((t->dlp - t->dhp) * ahp) >> 15;
-        int32_t band = dbas ? t->dlp - t->dhp : t->dlp;
-        int32_t w = x + ((band * fb) >> 15);
-        b[t->dw & (DL_LEN - 1)] = mulaw_enc(sat_soft(w));
-        t->dw++;
-        t->dprev = t->dcur;
-        t->dcur = y;
-        int32_t o0 = (t->dprev + t->dcur) >> 1, o1 = t->dcur;
-        L[i] += (o0 * gl) >> 15;
-        R[i] += (o0 * gr) >> 15;
-        L[i + 1] += (o1 * gl) >> 15;
-        R[i + 1] += (o1 * gr) >> 15;
-        int32_t a = y < 0 ? -y : y;
+        int32_t pos = (int32_t)((t->dw << 8) + (t->dph >> 8)) - back;
+        int32_t e[2];
+        for (int c = 0; c <= dual; c++) {
+            int32_t y = dl_read(b + c * n, mask, pos);
+            t->dhp[c] += ((y - t->dhp[c]) * ahp) >> 15;
+            t->dlp[c] += ((y - t->dhp[c] - t->dlp[c]) * alp) >> 15;
+            e[c] = t->dlp[c];
+        }
+        int32_t l, r;
+        if (dual) {                    /* sum and difference: the echo crosses sides on every pass */
+            t->dacc[0] += ((x * (gl + gr)) >> 15) + ((e[0] * fb) >> 15);
+            t->dacc[1] += ((x * (gl - gr)) >> 15) - ((e[1] * fb) >> 15);
+            l = (e[0] - e[1]) >> 1;
+            r = (e[0] + e[1]) >> 1;
+        } else {
+            t->dacc[0] += x + ((e[0] * fb) >> 15);
+            l = (e[0] * gl) >> 15;
+            r = (e[0] * gr) >> 15;
+        }
+        t->dn++;
+        t->dph += rate;
+        if (t->dph >= 65536u) {        /* the clock ticks: the inputs since the last tick, averaged, go in */
+            t->dph -= 65536u;
+            for (int c = 0; c <= dual; c++) b[c * n + (t->dw & mask)] = mulaw_enc(t->dacc[c] / t->dn);
+            t->dw++;
+            t->dacc[0] = t->dacc[1] = t->dn = 0;
+        }
+        l = (l * lev) >> 15;
+        r = (r * lev) >> 15;
+        L[i] += (t->dprev[0] + l) >> 1;
+        R[i] += (t->dprev[1] + r) >> 1;
+        L[i + 1] += l;
+        R[i + 1] += r;
+        t->dprev[0] = l;
+        t->dprev[1] = r;
+        int32_t a = (l < 0 ? -l : l) + (r < 0 ? -r : r);
         if (a > pk) pk = a;
     }
     mon.dly[ti] = pk;
@@ -170,7 +213,7 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
     }
     int tape = g[G_TAPE], adpc = g[G_ADPC], hiss = g[G_HISS];
     int32_t drv = 256 + g[G_DRIV] * 10;
-    int32_t mvol = T_VOL[master_vol];
+    int32_t mvol = T_MVOL[master_vol];
     int32_t ad_mix = adpc * 2 > 127 ? 127 : adpc * 2;
     int ad_dec = 1 + (adpc > 64 ? (adpc - 64) / 22 : 0);
     uint32_t wow_inc = 54000, flut_inc = 620000;    /* 0.55 Hz, 6.3 Hz */
@@ -248,8 +291,8 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             l += h;
             r += h;
         }
-        l = (sat_soft((l * drv) >> 8) * mvol) >> 15;
-        r = (sat_soft((r * drv) >> 8) * mvol) >> 15;
+        l = lim_soft((int32_t)(((int64_t)((l * drv) >> 8) * mvol) >> 15));
+        r = lim_soft((int32_t)(((int64_t)((r * drv) >> 8) * mvol) >> 15));
         out[2 * i] = (int16_t)l;
         out[2 * i + 1] = (int16_t)r;
         if ((i & 7) == 0) mon.scope[mon.scope_w++] = (int16_t)((l + r) >> 1);

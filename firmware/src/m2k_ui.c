@@ -13,17 +13,18 @@
 enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOWL, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
-    K_BPM, K_SWNG, K_LEN, K_PCT, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD
+    K_BPM, K_SWNG, K_LEN, K_PCT, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD,
+    K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
 static const pi_t PI_COMMON[P_LFO - 8] = {
     {"ATCK", "ATTACK", K_ATIM}, {"HOLD", "HOLD", K_AHLD}, {"DEC", "DECAY", K_ADEC}, {"REL", "RELEASE", K_AREL},
-    {"DIST", "DISTORTION", K_NUM}, {"VOL", "VOLUME", K_NUM}, {"PAN", "PAN", K_PAN}, {"PORT", "PORTAMENTO", K_NUM},
-    {"BASE", "FILTER BASE", K_HZ}, {"WDTH", "FILTER WIDTH", K_NUM}, {"HPQ", "HP RESONANCE", K_NUM}, {"LPQ", "LP RESONANCE", K_NUM},
-    {"ATCK", "FILTER ATTACK", K_TIME}, {"DEC", "FILTER DECAY", K_DECT}, {"B-OF", "BASE BY ENV", K_BI}, {"W-OF", "WIDTH BY ENV", K_BI},
-    {"EQF", "EQ FREQUENCY", K_HZ}, {"EQG", "EQ GAIN", K_BI}, {"SRR", "RATE REDUCTION", K_NUM}, {"DTIM", "DELAY TIME", K_DTIM},
-    {"DSND", "DELAY SEND", K_NUM}, {"DFB", "DELAY FEEDBACK", K_NUM}, {"DBAS", "DELAY BASE", K_HZ}, {"DWID", "DELAY WIDTH", K_NUM},
+    {"DIST", "DISTORTION", K_BI}, {"VOL", "VOLUME", K_NUM}, {"PAN", "PAN", K_PAN}, {"PORT", "PORTAMENTO", K_NUM},
+    {"BASE", "FILTER BASE", K_FOCT}, {"WDTH", "FILTER WIDTH", K_FWID}, {"HPQ", "HP RESONANCE", K_NUM}, {"LPQ", "LP RESONANCE", K_NUM},
+    {"ATCK", "FILTER ATTACK", K_FATK}, {"DEC", "FILTER DECAY", K_FDEC}, {"B-OF", "BASE BY ENV", K_BI}, {"W-OF", "WIDTH BY ENV", K_BI},
+    {"EQF", "EQ FREQUENCY", K_EQHZ}, {"EQG", "EQ GAIN", K_BI}, {"SRR", "RATE REDUCTION", K_SRR}, {"DTIM", "DELAY TIME", K_DTIM},
+    {"DSND", "DELAY SEND", K_BI}, {"DFB", "DELAY FEEDBACK", K_NUM}, {"DBAS", "DELAY BASE", K_DBHZ}, {"DWID", "DELAY WIDTH", K_NUM},
     {"BITS", "BIT DEPTH", K_BITS}, {"FOLD", "WAVEFOLD", K_NUM}, {"XOR", "XOR MANGLE", K_NUM}, {"VERB", "REVERB SEND", K_NUM},
     {"PTCH", "TRACK PITCH", K_SEMI}, {"LEVL", "TRACK LEVEL", K_NUM}, {"MODE", "ARP MODE", K_AMOD}, {"SPD", "ARP SPEED", K_ASPD},
     {"RNG", "ARP RANGE", K_ARNG}, {"GATE", "GATE LENGTH", K_GATE},
@@ -142,6 +143,13 @@ static char *s_int(char *d, int v)
     return d;
 }
 static char *s_dec1(char *d, int v10) { d = s_int(d, v10 / 10); *d++ = '.'; *d++ = (char)('0' + v10 % 10); *d = 0; return d; }
+/* signed, one decimal: -2.0, +0.5 */
+static char *s_sdec1(char *d, int v10) { *d++ = v10 < 0 ? '-' : '+'; return s_dec1(d, v10 < 0 ? -v10 : v10); }
+static void s_hz(char *out, const char **unit, int hz)
+{
+    if (hz < 1000) { s_int(out, hz); *unit = "HZ"; }
+    else { s_dec1(out, hz / 100); *unit = "KHZ"; }
+}
 /* a pattern's name on the panel: A01 .. A16 */
 /* a pattern's name on the panel: the bank's letter and its place, A01 .. D16 */
 static char *s_pat(char *d, int n)
@@ -151,6 +159,14 @@ static char *s_pat(char *d, int n)
     return d + 3;
 }
 static char *s_note(char *d, int n) { d = s_cpy(d, NOTE_N[n % 12]); return s_int(d, n / 12 - 1); }
+
+/* where a filter step sits on the screen's 20 Hz .. 20 kHz axis (0..1016): the filter follows the track's last note */
+static int filt_q3(int t, int32_t steps_q8)
+{
+    int note = trk[t].note ? trk[t].note : 60;
+    int32_t pos = (note * 8 * 256 + 12 * (steps_q8 - 16 * 256)) >> 8;
+    return CLAMP((pos * 1087 >> 10) - 132, 0, 1016);
+}
 
 /* the value as the screen shows it, and its unit */
 static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
@@ -173,10 +189,18 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     }
     case K_MODT: { static const char *const N[3] = {"CHOR", "FLNG", "PHAS"}; s_cpy(out, N[c < 3 ? c : 2]); break; }
     case K_MHZ: s_dec1(out, T_MOD_HZ10[v]); *unit = "HZ"; break;
-    case K_HZ: {
-        int hz = T_HZ[v];
-        if (hz < 1000) { s_int(out, hz); *unit = "HZ"; }
-        else { s_dec1(out, hz / 100); *unit = "KHZ"; }
+    case K_HZ: s_hz(out, unit, T_HZ[v]); break;
+    case K_EQHZ: s_hz(out, unit, T_EQHZ[v]); break;
+    case K_DBHZ: s_hz(out, unit, T_DBHZ[v]); break;
+    case K_SRR: if (!v) { s_cpy(out, "OFF"); break; } s_hz(out, unit, T_SRRHZ[v]); break;
+    case K_FOCT: s_sdec1(out, ((v - 16) * 10) / 8); *unit = "OCT"; break;     /* the filter follows the note: 16 is on it */
+    case K_FWID: s_sdec1(out, (v * 10) / 8); *unit = "OCT"; break;
+    case K_FATK: case K_FDEC: {
+        if (pi->kind == K_FDEC && v == 127) { s_cpy(out, "INF"); break; }
+        uint32_t ms10 = pi->kind == K_FATK ? T_FATK_MS10[v] : T_FDEC_MS10[v];
+        if (ms10 < 100) { s_dec1(out, (int)ms10); *unit = "MS"; }
+        else if (ms10 < 10000) { s_int(out, (int)(ms10 / 10)); *unit = "MS"; }
+        else { s_dec1(out, (int)(ms10 / 1000)); *unit = "S"; }
         break;
     }
     case K_PAN:
@@ -185,8 +209,8 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
         break;
     case K_DTIM: {
         if (v == 0) { s_cpy(out, "COMB"); break; }
-        /* in 1/64 notes: simplify */
-        int num = v, den = 64;
+        /* in 256ths of a note, as the Monomachine counts: simplify */
+        int num = v, den = 256;
         while (!(num & 1) && den > 1) { num >>= 1; den >>= 1; }
         char *e = s_int(out, num);
         if (den > 1) { *e++ = '/'; s_int(e, den); }
@@ -935,14 +959,16 @@ static void picture(void)
         if (ui.sub == 1) {
             /* distortion as a transfer curve, the volume as its height and a bar, the pan on a line, the glide
              * as a ramp between two notes; the part being turned is drawn heavy and its tag inverted */
-            int dg = 256 + k[P_DIST] * 24, vol = T_VOL[k[P_VOL]];
+            int64_t dh = T_DIST_H[k[P_DIST]];
+            int32_t dc = T_DIST_C[k[P_DIST]], vol = T_VOL[k[P_VOL]];
             int bx = X + 2, by = Y + 2, bs = 46, mid = by + bs / 2;
             frame(bx, by, bs, bs, 1);
             for (int j = 4; j < bs; j += 4) px(bx + j, by + bs - 1 - j, 1);           /* the clean line */
             int prev = mid;
             for (int i = 0; i < bs - 2; i++) {
                 int32_t in = (i - (bs - 2) / 2) * 65535 / (bs - 2);
-                int32_t o = (sat_soft((in * dg) >> 8) * (vol >> 3)) >> 12;           /* Q15 */
+                int32_t c = (int32_t)CLAMP((in * dh) >> 24, -dc, dc);                  /* the headroom and the clip */
+                int32_t o = ((c << 7) / (T_DIST_C[64] >> 8)) * (vol >> 3) >> 12;    /* Q15, 32-bit division only */
                 int y = mid - (int)((o * (bs / 2 - 2)) >> 15);
                 if (i) { line(bx + i, prev, bx + 1 + i, y, 1); if (fk == 0) line(bx + i, prev + 1, bx + 1 + i, y + 1, 1); }
                 prev = y;
@@ -1019,12 +1045,13 @@ static void picture(void)
     case PG_FILT: {
         int fk = ui.focus_t && ui.now - ui.focus_t < 2500 ? ui.focus : -1;
         int yb = Y + 80, top = Y + 14;
-        int hp0 = k[P_BASE] * 8, lp0 = CLAMP((k[P_BASE] + k[P_WDTH]) * 8, 0, 1016);
+        int db = k[P_BOF] - 64, dw = k[P_WOF] - 64, ob = 7 * db * (db < 0 ? -db : db), ow = 7 * dw * (dw < 0 ? -dw : dw);
+        int hp0 = filt_q3(ui.trk, k[P_BASE] << 8), lp0 = filt_q3(ui.trk, (k[P_BASE] + k[P_WDTH]) << 8);
         if (ui.sub == 1) {
             /* the filter envelope: the band at rest in dots, where the envelope takes it solid, and the envelope's
              * attack and decay under it */
-            int hp1 = CLAMP(hp0 + (k[P_BOF] - 64) * 32, 0, 1016);
-            int lp1 = CLAMP(hp1 + k[P_WDTH] * 8 + (k[P_WOF] - 64) * 32, 0, 1016);
+            int hp1 = filt_q3(ui.trk, (k[P_BASE] << 8) + ob);
+            int lp1 = filt_q3(ui.trk, ((k[P_BASE] + k[P_WDTH]) << 8) + ob + ow);
             int yb2 = Y + 70, prev0 = yb2, prev1 = yb2;
             for (int i = 0; i < W; i++) {
                 int y0 = filt_y(i, W, hp0, lp0, k[P_HPQ], k[P_LPQ], top, yb2), y1 = filt_y(i, W, hp1, lp1, k[P_HPQ], k[P_LPQ], top, yb2);
@@ -1090,20 +1117,20 @@ static void picture(void)
         break;
     }
     case PG_FX: {
-        if (ui.sub == 1) {             /* echoes: one bar is 64/64; each lights when it sounds */
+        if (ui.sub == 1) {             /* echoes: the width is half a bar; each lights when it sounds */
             int dt = k[P_DTIM] ? k[P_DTIM] : 1;
-            int fb = k[P_DFB];
+            int fb = k[P_DFB];                           /* 64 is unity */
             int lvl = 256;
             uint32_t ms_step = 15000u / seq_bpm();       /* a sixteenth in ms */
             uint32_t since = ui.now - ui.flash_t[ui.trk];
             for (int e = 0; e < 12; e++) {
-                int x = X + 6 + (dt * (e + 1) * (W - 8)) / 32;
+                int x = X + 6 + (dt * (e + 1) * (W - 8)) / 128;
                 if (x >= X + W) break;
                 int h = (80 * lvl) >> 8;
-                uint32_t at = (uint32_t)dt * (uint32_t)(e + 1) * ms_step / 4u;
+                uint32_t at = (uint32_t)dt * (uint32_t)(e + 1) * ms_step / 16u;
                 int lit = since >= at && since < at + 90;
                 rect_pat(x, Y + 88 - h, 4, h, lit ? PT_SOLID : PT_CHECK, 0);
-                lvl = (lvl * fb) >> 7;
+                lvl = CLAMP((lvl * fb) >> 6, 0, 256);
                 if (lvl < 8) break;
             }
             rect(X, Y + 2, 4, 86, 1);

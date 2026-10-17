@@ -34,7 +34,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 | | |
 |---|---|
 | Machines | GND-SIN, GND-NOIS, SID-8BIT, FM+STAT, FM+DYN, SWAV-SAW, SWAV-ENS, DIGI-WAV, VOX-6: clean-room designs after the Monomachine's families, integer only |
-| Per track | the Monomachine's chain and pages: SYN A–H · AMP (ATK HOLD DEC REL DIST VOL PAN PORT) · FILT (HP / LP as base and width, resonance, envelope) · FX (EQ, SRR, a delay of its own in 8-bit mu-law) · DSTR (bits, fold, xor, SPU send) · 3 LFOs (any track's parameter) · ARP |
+| Per track | the Monomachine's chain and pages: SYN A–H · AMP (ATK HOLD DEC REL DIST VOL PAN PORT) · FILT (HP / LP as base and width following the note, resonance, envelope) · FX (EQ, SRR, a delay of its own in 8-bit mu-law, ping-pong on positive sends) · DSTR (bits, fold, xor, SPU send) · 3 LFOs (any track's parameter) · ARP |
 | Projects | the modern Elektron way: 4 projects × 4 banks (A–D) × 16 patterns, each pattern with its own sounds. SAVE keeps the pattern (its reload point), GLO + SAVE reloads it, SAVE held keeps the project; GLO + REC / PLAY / SEQ copy, paste, clear (the pattern on HOME, the track's sound on its pages); GLO > SET picks and loads a project. On the web: bank tabs, a project picker, export / import as `.m2kp` files. Stored packed (a typical pattern 0.5–1 KB; the DEMO project 32 KB) |
 | Factory | project DEMO, bank A: LATEX, PVC, SPU RM, ELECTRO, GLITCH, CHROME, ACID, 2STEP, RUNNER, HYPRPOP, DUBTEC, CHIP, INDSTRL, MINIMAL, TRAP |
 | Sequencer | 6 × 64 steps, note / accent / slide, parameter locks, trig conditions (chance, A:B, 1ST, PRE, FILL), ratchets, swing, live recording, patterns queued at the bar |
@@ -58,8 +58,8 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 1. **The FM-1 build**: Felucca 1.6.1's platform (HAL, loader, USB, storage, installer) around this core, the audio on
    the second core as CS-1 does, the 1-bit framebuffer blitted in strips with the palette's two colours. The projects'
    images move to the 1 MiB flash (`m2k_proj.c` get / put), and RAM keeps the playing bank, not all 64 patterns.
-2. **Calibration against the Monomachine**, machine by machine: levels, spectra, the machines' own envelopes, the
-   filter envelope. The amp envelope is done (below).
+2. **Calibration against the Monomachine**, machine by machine: levels, spectra, the machines' own envelopes. The amp
+   envelope, SWAV-SAW and the whole track chain are done (below); SWAV-ENS, SID, FM+, VO-6 and GND-NOIS are next.
 3. More machines (DPRO-BBOX, FX machines that take the previous track), songs, MIDI out and clock.
 
 ## Author
@@ -82,10 +82,36 @@ build/host/m2k_ref build/ref/m2k < tools/ref/amp.spec
 .venv/bin/python tools/ref/envtimes.py build/ref/mm build/ref/m2k
 ```
 
-Done so far: the **amp envelope**. On OS 1.32B the attack rises in a straight line in 0.90 ms × e^(0.0814·v), decay
-and release fall 20 dB in 8.3 ms × e^(0.0665·v), and the hold lasts 14.6 ms a step; a key let go ends the hold and the
-decay. MONO2K now follows within a few percent from 0 to 127. Patterns saved before (version 1) are moved onto the
-new times as they load, so they sound as they did.
+Done so far, all measured on OS 1.32B:
+
+- **The amp envelope.** The attack rises in a straight line in 0.90 ms × e^(0.0814·v), decay and release fall 20 dB
+  in 8.3 ms × e^(0.0665·v), the hold lasts 14.6 ms a step; a key let go ends the hold and the decay. MONO2K follows
+  within a few percent from 0 to 127.
+- **SWAV-SAW** on SWAVE-SAW's page: the unison pairs' detune and levels, the square and sine subs, within 0.2 c and
+  0.5 dB (`tools/ref/swave_saw*.spec`).
+- **The track chain** (`tools/ref/chain.py` writes the specs, `chain_anal.py` reads them), in the Monomachine's order:
+  - VOL and LEV squared; PAN cos / sin; the track clips per channel after the pan, just under full scale at LEV 127.
+    MONO2K matches within 0.02 dB.
+  - DIST: below 64 headroom, 1.35 dB a step; 65–72 nothing; above, a gain into a hard clip whose ceiling falls from
+    +5.8 dB to −3.2 dB of a full-scale machine between 64 and 80. Within 0.15 dB.
+  - The filter follows the note: a cutoff of 2^((step − 16)/8) × the note, for the HP (BASE) and the LP (BASE + WDTH),
+    exact from C1 to C7. The LP is a resonant two-pole (1.35 × the cutoff at LPQ 0, onto it as the Q rises, up to
+    Q ≈ 1000 and +54 dB without oscillating), the clip, then two one-poles at 1.55 ×; the HP a resonant two-pole and
+    a one-pole at 1.75 ×, 18 dB an octave. Within 0.1 dB (LP) and 0.4 dB (HP, to −44 dB); the resonance within 0.3 %.
+  - BOFS / WOFS move the cutoff 7·d·|d|/256 steps; the filter envelope runs in straight lines (decay 863 ms at 64,
+    ×1.565 every 8 steps; 127 holds).
+  - EQ: a band added to the signal, Q 2.2, +36 / −31 dB, its cut the inverse of a boost as deep. SRR: a rate from
+    44.1 kHz to 2.8 kHz, the samples joined by straight lines (its images match within 1 dB).
+  - The delay: DTIM in 256ths of a note plus 7.6 ms, the send squared, negative keeping the source's side and positive
+    ping-pong, feedback DFB / 64, the echoes through a one-pole HP and LP. Times within 0.5 ms.
+
+  Known gaps: an HP resonance driven into the clip is ~7 dB louder than the Monomachine's; the delay keeps half-rate
+  8-bit lines, so ping-pong past 0.37 s (and any delay past 0.74 s) slows the line's clock and darkens, where the
+  Monomachine stays bright; SWAV-SAW's top harmonics at C7 are 2–6 dB short.
+
+Patterns saved before are moved onto each new scale as they load (version 1: the envelope; 5: the chain, each old
+setting to the one giving the same Hz, dB or time, the filter placed against the note each track plays most). The
+DigiPro waves and BeatBox samples are the OS's data and are not copied: DIGI-WAV plays MONO2K's own waves.
 
 ## Credits and licence
 

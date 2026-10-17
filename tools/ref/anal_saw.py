@@ -3,15 +3,17 @@
 # SWAVE-SAW, from tools/ref/swave_saw.spec (every value given): the base saw's harmonics and shape, the unison
 # pairs' detune and level (read at C6, where cents are wide in Hz), the subs' levels against the base.
 #   .venv/bin/python tools/ref/anal_saw.py build/ref/mm_saw
-import sys, wave
+import os, sys
 import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sweep import load as load2
 SR = 44100
 D = sys.argv[1]
 
 
 def load(n):
-    with wave.open(f"{D}/saw_{n}.wav") as w:
-        return np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float64).reshape(-1, 2)[:, 0] / 32768
+    return load2(f"{D}/saw_{n}.wav")[:, 0]
 
 
 def spec(x):

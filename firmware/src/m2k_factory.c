@@ -60,6 +60,59 @@ static void amp_v1(m2k_pattern_t *p)
         if (p->lock[i].trk != 0xFF) p->lock[i].val = amp_v1_val(p->lock[i].param, p->lock[i].val);
 }
 
+/* patterns before version 5 ran MONO2K's own chain; from 5 it is the Monomachine's (measured): every chain setting
+ * goes to the one that gives the same Hz, dB or time (tools/gen_tables.py, T_V5_*). The filter now follows the
+ * note, so its old cutoffs are placed against the note the track plays most */
+static int v5_base(int pos, int note) { return pos <= 0 ? 0 : CLAMP(16 + (pos - 8 * note + (pos >= 8 * note ? 6 : -6)) / 12, 0, 127); }
+
+static uint8_t v5_val(int prm, int v, const uint8_t *k, int note)
+{
+    switch (prm) {
+    case P_DIST: return T_V5_DIST[v];
+    case P_VOL: return T_V5_VOL[v];
+    case P_BASE: return (uint8_t)(v ? v5_base(T_V5_FPOS[v], note) : 0);
+    case P_WDTH: {
+        int b = k[P_BASE], lp = b + v;
+        if (lp >= 127 && k[P_LPQ] == 0) return 127;
+        int nb = b ? v5_base(T_V5_FPOS[b], note) : 0;
+        return (uint8_t)CLAMP(v5_base(T_V5_FPOS[CLAMP(lp, 0, 127)], note) - nb, 0, 127);
+    }
+    case P_HPQ: return T_V5_HPQ[v];
+    case P_LPQ: return T_V5_LPQ[v];
+    case P_FATK: return T_V5_FATK[v];
+    case P_FDEC: return T_V5_FDEC[v];
+    case P_BOF: case P_WOF: return T_V5_OFS[v];
+    case P_EQF: return T_V5_EQF[v];
+    case P_EQG: return T_V5_EQG[v];
+    case P_SRR: return T_V5_SRR[v];
+    case P_DTIM: return (uint8_t)(v * 4 > 127 ? 127 : v * 4);
+    case P_DSND: return (uint8_t)(64 - (v + 1) / 2);
+    case P_DFB: return (uint8_t)((v * 270 * 64 + 16384) >> 15);
+    case P_DBAS: return T_V5_DHP[v];
+    case P_DWID: {
+        int nb = T_V5_DHP[k[P_DBAS]];
+        return (uint8_t)CLAMP(T_V5_DLP[CLAMP(k[P_DBAS] + v, 0, 127)] - nb, 0, 127);
+    }
+    default: return (uint8_t)v;
+    }
+}
+
+static void chain_v4(m2k_pattern_t *p)
+{
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        int count[128] = {0}, note = 60, best = 0;
+        for (int s = 0; s < M2K_STEPS; s++)
+            if ((p->step[t][s].flags & ST_TRIG) && ++count[p->step[t][s].note & 127] > best) { best = count[p->step[t][s].note & 127]; note = p->step[t][s].note & 127; }
+        uint8_t old[P_COUNT], *k = p->kit[t];
+        m_cpy(old, k, P_COUNT);
+        for (int i = 0; i < M2K_LOCKS; i++) {          /* the locks against the old kit, before it changes */
+            m2k_lock_t *l = &p->lock[i];
+            if (l->trk == t) l->val = v5_val(l->param, l->val, old, note);
+        }
+        for (int prm = P_ATK; prm < P_BITS; prm++) k[prm] = v5_val(prm, old[prm], old, note);
+    }
+}
+
 /* the first demos were voiced on MONO2K's first envelope curve and its quiet reverb: their ATK HOLD DEC REL move
  * onto the Monomachine's times as they are set (amp_v1_val), and their reverb sends come down a little, so the
  * space they were written with is now heard. The later demos (pat_now) are written on today's scales. */
@@ -96,13 +149,23 @@ static void lfo(m2k_pattern_t *p, int t, int l, int dest, int wave, int mult, in
     b[L_TRIG] = enc(trig, 5);
 }
 
+/* the demos are written on the chain they were voiced on (MONO2K's before version 5) and converted as old patterns are:
+ * this is that chain's blank kit */
+static void kit_v4(m2k_pattern_t *p, int t, int m)
+{
+    static const uint8_t D[] = {0, 0, 64, 64, 0, 100, 64, 0, 0, 127, 0, 0, 0, 64, 64, 64, 64, 64, 0, 12, 0, 50, 0, 110};
+    kit_default(p, t, m);
+    m_cpy(&p->kit[t][P_ATK], D, sizeof D);
+    p->kit[t][P_LEVL] = 110;
+}
+
 static m2k_pattern_t *pat_new(int i, const char *name, int bpm, const uint8_t *machines)
 {
     m2k_pattern_t *p = &pat[i];
     fac_v1 = 1;
     pat_init(p, name);
     for (int t = 0; t < M2K_TRACKS; t++) {
-        kit_default(p, t, machines[t]);
+        kit_v4(p, t, machines[t]);
         static const uint8_t AMP0[4] = {0, 0, 60, 30};          /* the blank kit the demos were voiced from */
         for (int k = 0; k < 4; k++) p->kit[t][P_ATK + k] = amp_v1_val(P_ATK + k, AMP0[k]);
     }
@@ -118,7 +181,7 @@ static m2k_pattern_t *pat_now(int i, const char *name, int bpm, const uint8_t *m
     m2k_pattern_t *p = &pat[i];
     fac_v1 = 0;
     pat_init(p, name);
-    for (int t = 0; t < M2K_TRACKS; t++) kit_default(p, t, machines[t]);
+    for (int t = 0; t < M2K_TRACKS; t++) kit_v4(p, t, machines[t]);
     p->glob[G_TMPO] = (uint8_t)(bpm - 30);
     p->glob[G_VERB] = 60;
     return p;
@@ -457,6 +520,13 @@ static void factory(void)
     lfo(p, 5, 0, SA, 3, 3, 64, 110, 1);
 
     /* A16: empty, to start from */
-    p = pat_now(15, "INIT", 120, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_SID, M_FMS, M_ENS));   /* the blank kit itself */
+    for (int i = 0; i < 15; i++) chain_v4(&pat[i]);    /* onto the Monomachine's chain, as an old pattern would go */
+
+    /* A16 INIT: the blank kit itself, on today's chain */
+    p = &pat[15];
+    pat_init(p, "INIT");
+    static const uint8_t M16[M2K_TRACKS] = {M_GSIN, M_GNOI, M_GNOI, M_SID, M_FMS, M_ENS};
+    for (int t = 0; t < M2K_TRACKS; t++) kit_default(p, t, M16[t]);
+    p->glob[G_TMPO] = 120 - 30;
     p->glob[G_VERB] = 40;
 }

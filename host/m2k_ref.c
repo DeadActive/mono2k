@@ -73,13 +73,15 @@ int main(int argc, char **argv)
         while (*c && *c != '\n') {
             int cc, v, used;
             if (sscanf(c, "%d=%d%n", &cc, &v, &used) != 2) break;
-            /* until MONO2K's chain takes the Monomachine's centres: its DIST and delay send are bipolar, 64 their 0 */
-            if (cc == 60 || cc == 84) v = v > 64 ? (v - 64) * 2 : 0;
             m2k_midi(0xB0, cc, v);
             c += used;
             while (*c == ' ' || *c == '\t') c++;
         }
         for (int i = 0; i < 4; i++) m2k_frame(ms += 16);
+        {   /* let what glides settle (the delay's time, as the reference renderer waits 1.5 s on the Monomachine) */
+            static int16_t pre[M2K_SR / 2 * 2];
+            run(pre, M2K_SR / 2 & ~127u, &ms);
+        }
         uint32_t g = (uint32_t)(gate * M2K_SR) & ~127u, tl = (uint32_t)(tail * M2K_SR) & ~127u;
         int16_t *s = calloc((size_t)(g + tl) * 2, sizeof *s);
         m2k_midi(0x90, note, vel);

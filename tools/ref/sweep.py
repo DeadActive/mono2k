@@ -5,7 +5,7 @@
 # shows that parameter alone; then measures both sides' renders.
 #   .venv/bin/python tools/ref/sweep.py spec MACHINE CC [VALUES] > tools/ref/x.spec
 #   .venv/bin/python tools/ref/sweep.py measure build/ref/mm_x build/ref/m2k_x [--partials]
-import os, sys, wave
+import os, sys
 import numpy as np
 
 SR = 44100
@@ -18,8 +18,17 @@ def spec(machine, cc, values, note=48, gate=1.2, extra=""):
 
 
 def load(p):
-    with wave.open(p) as w:
-        x = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float64) / 32768
+    """a stereo WAV, 16-bit (MONO2K) or 32-bit float (the reference renderer), as floats"""
+    d = open(p, "rb").read()
+    i, fmt, data = 12, None, None
+    while i + 8 <= len(d):
+        tag, n = d[i:i + 4], int.from_bytes(d[i + 4:i + 8], "little")
+        if tag == b"fmt ":
+            fmt = int.from_bytes(d[i + 8:i + 10], "little")
+        elif tag == b"data":
+            data = d[i + 8:i + 8 + n]
+        i += 8 + n + (n & 1)
+    x = np.frombuffer(data, np.float32).astype(np.float64) if fmt == 3 else np.frombuffer(data, np.int16).astype(np.float64) / 32768
     return x.reshape(-1, 2)
 
 

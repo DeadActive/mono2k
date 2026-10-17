@@ -318,7 +318,7 @@
   const status = (s) => console.info("MONO2K:", s);   /* the page keeps no status line: messages go to the console */
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=28");
+    const r = await fetch("m2k.wasm?v=29");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();
@@ -345,7 +345,7 @@
     try {
       try { ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }); }
       catch (e) { ctx = new AudioContext({ latencyHint: "interactive" }); }
-      await ctx.audioWorklet.addModule("worklet.js?v=28");
+      await ctx.audioWorklet.addModule("worklet.js?v=29");
       node = new AudioWorkletNode(ctx, "mono2k", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(ctx.destination);
       node.port.onmessage = (ev) => {

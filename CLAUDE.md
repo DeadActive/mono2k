@@ -24,7 +24,10 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
 - Web: `sh web/build.sh`, serve `web/` (`.claude/launch.json`: mono2k-web on port 8742).
 - Calibration (README, Calibration): `tools/ref/mm_ref` (gearmulator, the user's OS image at a path, never in the repo;
   it logs to stdout, so send stdout to /dev/null) against `host/m2k_ref.c`, same specs in `tools/ref/*.spec`.
-  Pattern format version 2: amp ATK/HOLD/DEC/REL on the measured curve; version 1 is converted on load.
+  Pattern format: 2 amp ATK/HOLD/DEC/REL on the measured curve; 4 SWAV-SAW's page; 5 the track chain on the
+  Monomachine's (DIST/DSND/EQG bipolar, the filter follows the note); older ones are converted on load, and the factory
+  demos are written on the version-4 chain and converted the same way (`chain_v4`). The reference renderer writes
+  32-bit float WAVs; `tools/ref/sweep.py`'s `load` reads both.
 
 ## Style
 

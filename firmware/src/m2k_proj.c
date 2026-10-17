@@ -29,7 +29,8 @@ static int pat_pack(const m2k_pattern_t *p, uint8_t *o)
 {
     int n = 0;
     o[n++] = 'P';
-    o[n++] = 4;                        /* 2: amp envelope on the Monomachine's times; 3: MOD; 4: SWAV-SAW's new page */
+    o[n++] = 5;                        /* 2: amp envelope on the Monomachine's times; 3: MOD; 4: SWAV-SAW's new page;
+                                        * 5: the track chain on the Monomachine's */
     m_cpy(o + n, p->name, 8); n += 8;
     m_cpy(o + n, p->machine, M2K_TRACKS); n += M2K_TRACKS;
     m_cpy(o + n, p->glob, G_COUNT); n += G_COUNT;
@@ -62,7 +63,7 @@ static int pat_pack(const m2k_pattern_t *p, uint8_t *o)
 static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
-    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 4) return 0;
+    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 5) return 0;
     int ver = o[1], stride = ver >= 3 ? P_COUNT : P_MODT;          /* before 3 a kit ended before the MOD effect */
     const int head = 2 + 8 + M2K_TRACKS + G_COUNT + 1 + M2K_TRACKS * stride + M2K_TRACKS * M2K_STEPS / 8 + 2;
     if (len < head) return 0;
@@ -121,6 +122,7 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
         for (int t = 0; t < M2K_TRACKS; t++) p->kit[t][P_SPU] >>= 1;
         for (int i = 0; i < M2K_LOCKS; i++) if (p->lock[i].trk != 0xFF && p->lock[i].param == P_SPU) p->lock[i].val >>= 1;
     }
+    if (ver < 5) chain_v4(p);          /* the chain became the Monomachine's */
     return 1;
 }
 

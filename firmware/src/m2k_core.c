@@ -45,6 +45,15 @@ static inline int32_t sat_soft(int32_t x)
     return T_SAT[i] + (((T_SAT[i + 1] - T_SAT[i]) * f) >> 10);
 }
 
+/* the bus limiter: straight to 3/4 of full scale, then a knee; -131072..131072 in */
+static inline int32_t lim_soft(int32_t x)
+{
+    if (x >= 131071) return 32767;
+    if (x <= -131071) return -32767;
+    int32_t u = x + 131072, i = u >> 10, f = u & 1023;
+    return T_LIM[i] + (((T_LIM[i + 1] - T_LIM[i]) * f) >> 10);
+}
+
 /* the state the screen reads from the audio side */
 static struct {
     int32_t peak[M2K_TRACKS];          /* 0..32767, decays in the UI */

@@ -3,14 +3,16 @@
 # One cycle, exactly: the pitch measured first (the fundamental's peak, interpolated), then the steady part averaged
 # over that period; prints the harmonics against an ideal saw and returns the cycle.
 #   .venv/bin/python tools/ref/onecycle.py file.wav [file.wav ...]
-import sys, wave
+import os, sys
 import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sweep import load as load2
 SR = 44100
 
 
 def load(p):
-    with wave.open(p) as w:
-        return np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(float).reshape(-1, 2)[:, 0] / 32768
+    return load2(p)[:, 0]
 
 
 def f0_of(x, guess=None):

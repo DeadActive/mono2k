@@ -2,15 +2,17 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Times the amp envelope in the amp.spec renders, Monomachine against MONO2K: decay and release to -20 and -40 dB,
 # attack to within 1 dB of the top.   .venv/bin/python tools/ref/envtimes.py build/ref/mm_amp build/ref/m2k_amp
-import sys, wave
+import os, sys
 import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sweep import load as load2
 
 HOP = 0.002
 
 
 def env(path):
-    with wave.open(path) as w:
-        x = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float64).reshape(-1, 2)[:, 0] / 32768
+    x = load2(path)[:, 0]
     n = int(44100 * HOP)
     e = np.sqrt(np.convolve(x ** 2, np.ones(n * 4) / (n * 4), "same"))[::n]   # rms over 8 ms, every 2 ms
     return 20 * np.log10(np.maximum(e, 1e-9))
