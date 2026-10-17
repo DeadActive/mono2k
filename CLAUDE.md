@@ -32,7 +32,8 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   it logs to stdout, so send stdout to /dev/null) against `host/m2k_ref.c`, same specs in `tools/ref/*.spec`.
   Pattern format: 2 amp ATK/HOLD/DEC/REL on the measured curve; 4 SWAV-SAW's page; 5 the track chain on the
   Monomachine's (DIST/DSND/EQG bipolar, the filter follows the note); 6 GND-SIN's TUNE +-2 semitones (3.125 c a
-  step). Older ones are converted on load; the factory demos are written on today's scales. The reference renderer
+  step); 7 SWAV-ENS on SWAVE-ENS's page (`ens_v6`). Older ones are converted on load; bank A is written on SWAV-ENS's
+  old page and converted once at build (`ens_v6` in `factory()`), until the new bank replaces it. The reference renderer
   writes 32-bit float WAVs; `tools/ref/sweep.py`'s `load` reads both.
 - Fidelity regressions: `.venv/bin/python tools/ref/regress.py check [GROUP ...]` renders MONO2K with the chain specs
   and compares against `tools/ref/regress_ref.json` (numbers measured from the Monomachine's output; `capture` rebuilds

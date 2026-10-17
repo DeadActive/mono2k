@@ -114,6 +114,42 @@ static void chain_v4(m2k_pattern_t *p)
     }
 }
 
+/* SWAV-ENS took the Monomachine's page (version 7): an old interval (0..24 semitones over the root) folds into the
+ * table's -11..+12 by octaves, and one that would fold to 0 is +12 (the voice stays and keeps its note); always the
+ * equal-tempered value in the middle of its group, so never OFF (61-63) nor the octave down (0-1). DTUN's fixed spread is not the chorus's
+ * moving copy: CHRL 0. SHPE, PW, LEV and SUB have no counterpart: one saw at the note; a chord LEV 0 had silenced
+ * is OFF (62). Locks on the intervals convert, the rest go; an LFO aimed at an ENS track's DTUN..SUB is cleared */
+static uint8_t ens_fold(int v)
+{
+    int i = (v * 25) >> 7;
+    while (i > 12) i -= 12;
+    if (i == 0) i = 12;
+    return T_ENS_ET[i + 10];
+}
+
+static void ens_v6(m2k_pattern_t *p)
+{
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        if (p->machine[t] != M_ENS) continue;
+        uint8_t *k = p->kit[t];
+        int silent = k[P_SYN + 6] == 0;
+        for (int i = 0; i < M2K_LOCKS; i++) {
+            m2k_lock_t *l = &p->lock[i];
+            if (l->trk != t || l->param >= 8) continue;
+            if (l->param < 3) l->val = ens_fold(l->val);
+            else l->trk = 0xFF;
+        }
+        for (int i = 0; i < 3; i++) k[P_SYN + i] = silent ? 62 : ens_fold(k[P_SYN + i]);
+        k[P_SYN + 3] = 0; k[P_SYN + 4] = 64; k[P_SYN + 5] = 0; k[P_SYN + 6] = 64; k[P_SYN + 7] = 64;
+    }
+    for (int t = 0; t < M2K_TRACKS; t++)
+        for (int l = 0; l < 3; l++) {
+            uint8_t *b = &p->kit[t][P_LFO + 8 * l];
+            int to = (b[L_TRCK] * M2K_TRACKS) >> 7, dest = b[L_DEST] - 1;
+            if (p->machine[to] == M_ENS && dest >= P_SYN + 3 && dest < P_SYN + 8) b[L_DEST] = 0;
+        }
+}
+
 static void lk(m2k_pattern_t *p, int t, int s, int prm, int v)
 {
     for (int i = 0; i < M2K_LOCKS; i++)
@@ -614,4 +650,7 @@ static void factory(void)
     BEAT(p, 5, "x...............|x...............|x...............|x...............", 54, 50, 57, 52);
     MOD(p, 5, 0, 16, 100, 70);
     trim(p, 56);
+
+    /* bank A was written on SWAV-ENS's old page: onto the Monomachine's, once */
+    for (int i = 0; i < 16; i++) ens_v6(&pat[i]);
 }

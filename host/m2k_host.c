@@ -299,7 +299,7 @@ static int selftest(void)
         lk(&a, 0, 8, P_SYN + 1, 99);
         lk(&a, 0, 12, P_SYN, 65);
         int n = pat_pack(&a, bl);
-        CHECK(bl[1] == 6, "format: patterns are written as version 6");
+        CHECK(bl[1] == 7, "format: patterns are written as version 7");
         bl[1] = 4;
         CHECK(pat_unpack(&b, bl, n), "format: a version-4 pattern loads");
         CHECK(b.kit[0][P_DIST] == T_V5_DIST[34] && b.kit[0][P_DTIM] == 32 && b.kit[0][P_DSND] == 64 &&
@@ -339,16 +339,70 @@ static int selftest(void)
                 n = pat_pack(&pat[d], bl);
                 bl[1] = (uint8_t)ver;
                 if (!pat_unpack(&c, bl, n)) { moved++; continue; }
-                for (int t = 0; t < M2K_TRACKS; t++) {
-                    moved += c.kit[t][P_PTCH] != pat[d].kit[t][P_PTCH] || memcmp(c.kit[t], pat[d].kit[t], 8) != 0;
+                for (int t = 0; t < M2K_TRACKS; t++) {               /* SWAV-ENS's page converts at 7, by design */
+                    moved += c.kit[t][P_PTCH] != pat[d].kit[t][P_PTCH] ||
+                             (pat[d].machine[t] != M_ENS && memcmp(c.kit[t], pat[d].kit[t], 8) != 0);
                     for (int s = 0; s < M2K_STEPS; s++)
                         moved += c.step[t][s].note != pat[d].step[t][s].note || c.step[t][s].flags != pat[d].step[t][s].flags;
                 }
                 for (int i = 0; i < M2K_LOCKS; i++)
-                    if (pat[d].lock[i].trk != 0xFF && (pat[d].lock[i].param < 8 || pat[d].lock[i].param == P_PTCH))
+                    if (pat[d].lock[i].trk != 0xFF && pat[d].machine[pat[d].lock[i].trk] != M_ENS &&
+                        (pat[d].lock[i].param < 8 || pat[d].lock[i].param == P_PTCH))
                         moved += c.lock[i].val != pat[d].lock[i].val;
             }
         CHECK(moved == 0, "format: versions 4 and 5 move no demo's notes, PTCH, machine page or their locks");
+        /* SWAV-ENS onto the Monomachine's page (7): every old interval folds by octaves into -11..+12, keeping its
+         * pitch class, exact from 1 to 12, 0 and 24 to +12; never OFF (61-63) nor the octave down (0-1) */
+        int fold_ok = 1;
+        for (int v = 0; v < 128; v++) {
+            int old_i = (v * 25) >> 7, nv = ens_fold(v), c64 = T_ENS_PCH[nv], semi = c64 / 64;
+            if (nv <= 1 || (nv >= 61 && nv <= 63) || c64 == ENS_OFF || c64 % 64 || ((semi - old_i) % 12 + 12) % 12 ||
+                (old_i >= 1 && old_i <= 12 && semi != old_i) || ((old_i == 0 || old_i == 24) && semi != 12)) fold_ok = 0;
+        }
+        CHECK(fold_ok, "format: an old SWAV-ENS interval keeps its pitch class (exact 1..12, 0 and 24 to +12), never OFF");
+        /* and every chord of bank A as it stood at ea69d53 (the fixture, version 6) keeps its notes at every trig */
+        {
+            FILE *f = fopen("tools/ref/fixtures/bank_a_ea69d53.bin", "rb");
+            static uint8_t fx[16 * BLOB_MAX];
+            int fl = f ? (int)fread(fx, 1, sizeof fx, f) : 0, o = 0, chords = 0, kept = 0, exact_bad = 0, off_bad = 0;
+            if (f) fclose(f);
+            for (int d = 0; d < 16 && o + 2 <= fl; d++) {
+                int n6 = fx[o] | (fx[o + 1] << 8);
+                static m2k_pattern_t was, now;
+                static uint8_t raw[BLOB_MAX];
+                m_cpy(raw, fx + o + 2, (size_t)n6);
+                raw[1] = 7;                                       /* read as is: the old page's values */
+                int ok1 = pat_unpack(&was, raw, n6), ok2 = pat_unpack(&now, fx + o + 2, n6);
+                o += 2 + n6;
+                if (!ok1 || !ok2) { off_bad++; continue; }
+                for (int t = 0; t < M2K_TRACKS; t++) {
+                    if (was.machine[t] != M_ENS) continue;
+                    for (int st = 0; st < M2K_STEPS; st++) {
+                        if (!(was.step[t][st].flags & ST_TRIG)) continue;
+                        uint8_t ok[8], nk[8];
+                        m_cpy(ok, was.kit[t], 8); m_cpy(nk, now.kit[t], 8);
+                        for (int i = 0; i < M2K_LOCKS; i++) {
+                            if (was.lock[i].trk == t && was.lock[i].step == st && was.lock[i].param < 8) ok[was.lock[i].param] = was.lock[i].val;
+                            if (now.lock[i].trk == t && now.lock[i].step == st && now.lock[i].param < 8) nk[now.lock[i].param] = now.lock[i].val;
+                        }
+                        unsigned pcw = 1, pcn = 1;                    /* the root's class: bit 0 */
+                        for (int k = 0; k < 3; k++) {
+                            int oi = (ok[k] * 25) >> 7, c64 = T_ENS_PCH[nk[k]];
+                            if (ok[6]) pcw |= 1u << (oi % 12);
+                            if (c64 == ENS_OFF) { if (ok[6]) off_bad++; continue; }
+                            pcn |= 1u << (((c64 / 64) % 12 + 12) % 12);
+                            if (oi >= 1 && oi <= 12 && c64 != oi * 64) exact_bad++;
+                            if (nk[k] >= 61 && nk[k] <= 63) off_bad++;
+                        }
+                        chords++;
+                        kept += pcw == pcn;
+                    }
+                }
+            }
+            printf("     bank A's SWAV-ENS trigs: %d, their notes kept: %d\n", chords, kept);
+            CHECK(fl > 0 && chords > 0 && kept == chords && exact_bad == 0 && off_bad == 0,
+                  "format: every chord of bank A (ea69d53) keeps its notes through version 7, none in OFF");
+        }
     }
     /* the clipboard, a sound: track 6's copied with GLO + REC on its page, pasted onto track 1 with GLO + PLAY */
     {

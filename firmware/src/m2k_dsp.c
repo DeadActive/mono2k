@@ -134,6 +134,9 @@ static trk_t trk[M2K_TRACKS];
 static uint8_t dl_mem[M2K_TRACKS][DL_LEN] POOL;
 #define MOD_LEN 1024u                  /* 23 ms: room for the chorus' sweep */
 static int16_t mod_mem[M2K_TRACKS][MOD_LEN] POOL;
+#define ENS_LEN 1024u                  /* SWAV-ENS's chorus line: 46 ms at half rate */
+#define ENS_GAIN 7119                  /* a voice against the others' levels (calibrated: chain_ens20) */
+static int16_t ens_mem[M2K_TRACKS][ENS_LEN] POOL;
 static int16_t blk[M2K_TRACKS][M2K_SUB];      /* machine output of this block */
 
 /* a parameter with its modulation, 0..127*256 */
@@ -188,6 +191,9 @@ static void mach_trig(trk_t *t, int m)
         break;
     case M_WAV:
         t->ph[0] = t->ph[1] = 0;
+        break;
+    case M_ENS:                        /* the voices start together on a trig (chain_ens18: two trigs alike) */
+        t->ph[0] = t->ph[1] = t->ph[2] = t->ph[3] = 0;
         break;
     default:
         break;
@@ -407,28 +413,49 @@ static void mach_block(int ti, int m, int32_t pitch)
         }
         break;
     }
-    case M_ENS: {                      /* INT1 INT2 INT3 DTUN SHPE PW LEV SUB */
-        int32_t dt = P8(t, P_SYN + 3) >> 9;
-        int32_t iv[4] = {0, PN(t, P_SYN + 0, 25), PN(t, P_SYN + 1, 25), PN(t, P_SYN + 2, 25)};
-        int32_t shp = P7(t, P_SYN + 4), pw = 0x80000000u - (uint32_t)P7(t, P_SYN + 5) * 0x00F00000u;
-        int32_t lev = T_VOL[P7(t, P_SYN + 6)], sub = T_VOL[P7(t, P_SYN + 7)] >> 1;
+    case M_ENS: {                      /* PCH2 PCH3 PCH4 WAVE PW CHRL CHRW TUNE */
+        /* after the Monomachine's SWAVE-ENS, measured on its OS (tools/ref/chain_ens15..20): the root and up to three
+         * voices off its interval table (equal tempered, and the just 3/2 4/3 5/4 6/5 beside them), no level shared
+         * between them. A voice is two saws an octave under its note, the second PW / 128 of a period on; WAVE fades
+         * their sum out and their difference in at 0.63 (weights 1 - 0.37 x and 1 - 1.63 x, x = WAVE / 127): PW 64
+         * one saw at the note, WAVE 127 a pulse an octave under. The chorus: a copy whose pitch
+         * travels a triangle (+-13.5 c at 0.66 Hz .. +-18 c at 0.2 Hz by CHRW) off a half-rate line, CHRL its mix
+         * (dry 1 - 0.83 x, wet 0.85 x); mono here, where the Monomachine's widens the stereo by CHRW */
+        int32_t base = pitch + (P7(t, P_SYN + 7) - 64) * 2 - 12 * 64;
+        int32_t wa = 32768 - (P7(t, P_SYN + 3) * 12124) / 127, wb = 32768 - (P7(t, P_SYN + 3) * 53412) / 127;   /* Q15 */
+        uint32_t off = (uint32_t)P7(t, P_SYN + 4) << 25;
         uint32_t inc[4], inv[4];
         for (int k = 0; k < 4; k++) {
-            inc[k] = inc_of(pitch + iv[k] * 64 + ((k & 1) ? dt : -dt) * (k + 1) / 2);
+            int32_t iv = k ? T_ENS_PCH[P7(t, P_SYN + k - 1)] : 0;
+            inc[k] = iv == ENS_OFF ? 0 : inc_of(base + iv);
             inv[k] = 0xFFFFFFFFu / (inc[k] | 1);
         }
+        int chrl = P7(t, P_SYN + 5), chrw = P7(t, P_SYN + 6);
+        int32_t dry = 32768 - (chrl * 27197) / 127, wet = (chrl * 27853) / 127;    /* Q15 */
+        uint32_t linc = T_ENS_CINC[chrw];
+        int32_t swing = (int32_t)T_ENS_CDEP[chrw];                                  /* half-rate samples, Q8 */
+        int16_t *cm = ens_mem[ti];
         for (int i = 0; i < M2K_SUB; i++) {
             int32_t s = 0;
             for (int k = 0; k < 4; k++) {
-                int32_t v = blep_saw(t->ph[k], inc[k], inv[k]);
-                if (shp) v -= (blep_saw(t->ph[k] + (uint32_t)pw, inc[k], inv[k]) * shp) >> 7;
-                s += k ? (v * lev) >> 15 : v;
+                if (!inc[k]) continue;
+                s += (blep_saw(t->ph[k], inc[k], inv[k]) * wa + blep_saw(t->ph[k] + off, inc[k], inv[k]) * wb) >> 15;
                 t->ph[k] += inc[k];
             }
-            s = (s * 13000) >> 15;
-            if (sub) {                 /* the phase wraps: unsigned, as a signed overflow is undefined */
-                s += (((uint32_t)t->ms[5] & 0x80000000u) ? sub : -sub) >> 1;
-                t->ms[5] = (int32_t)((uint32_t)t->ms[5] + (inc[0] >> 1));
+            s = (s * ENS_GAIN) >> 15;
+            /* the line runs at half rate, always written (a CHRL turned up finds it full): a pair's mean */
+            t->ms[0] += s;
+            if (i & 1) { cm[t->ph[5]++ & (ENS_LEN - 1)] = (int16_t)sat16(t->ms[0] >> 1); t->ms[0] = 0; }
+            t->ph[4] += linc;
+            if (chrl) {
+                int32_t tri = (int32_t)(t->ph[4] >> 16) - 32768;
+                tri = tri < 0 ? -tri : tri;                                         /* 0 .. 32768 */
+                int32_t d8 = (2 << 8) + swing + (int32_t)(((int64_t)swing * (2 * tri - 32768)) >> 15);
+                int32_t pos = (int32_t)((t->ph[5] << 8) + ((uint32_t)(i & 1) << 7)) - d8;
+                uint32_t j = (uint32_t)pos >> 8;
+                int32_t f = pos & 255;
+                int32_t y = (cm[j & (ENS_LEN - 1)] * (256 - f) + cm[(j + 1) & (ENS_LEN - 1)] * f) >> 8;
+                s = (int32_t)(((int64_t)s * dry + (int64_t)y * wet) >> 15);
             }
             o[i] = (int16_t)sat16(s);
         }

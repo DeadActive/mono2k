@@ -321,7 +321,7 @@ static const uint8_t MACH_DEF[M_COUNT][8] = {
     /* FM+STAT  */ {14, 60, 60, 26, 30, 50, 0, 0},
     /* FM+DYN   */ {42, 80, 45, 38, 40, 35, 20, 96},
     /* SWAV-SAW */ {0, 0, 0, 0, 0, 0, 0, 64},     /* the Monomachine's init: the base saw alone */
-    /* SWAV-ENS */ {21, 36, 61, 30, 0, 64, 90, 0},
+    /* SWAV-ENS */ {85, 100, 120, 0, 64, 0, 64, 64},   /* +4 +7 +11 (the Monomachine's: all OFF, 62) */
     /* DIGI-WAV */ {40, 64, 64, 0, 0, 70, 0, 0},
     /* VOX-6    */ {10, 80, 60, 64, 10, 70, 20, 20},
 };
@@ -400,6 +400,7 @@ void m2k_init(uint32_t seed)
     m_set(&bus, 0, sizeof bus);
     m_set(&sq, 0, sizeof sq);
     m_set(dl_mem, 0x7F, sizeof dl_mem);          /* mu-law silence: 0xFF and 0x7F both decode to ~0 */
+    m_set(ens_mem, 0, sizeof ens_mem);
     m_set(gl_buf, 0, sizeof gl_buf);
     m_set(tp_buf, 0, sizeof tp_buf);
     m_set(cb_buf, 0, sizeof cb_buf);

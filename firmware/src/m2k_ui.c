@@ -14,7 +14,7 @@ enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOWL, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
     K_BPM, K_SWNG, K_LEN, K_PCT, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD,
-    K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR
+    K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -75,8 +75,8 @@ static const mi_t MI[M_COUNT] = {
      {{"UNIL", "UNISON LEVEL", K_NUM}, {"UNIW", "UNISON WIDTH", K_NUM}, {"UNIX", "EXTENDED UNISON", K_NUM}, {"DRFT", "DRIFT", K_NUM},
       {"SUBX", "SQUARE SUB", K_NUM}, {"SUB1", "SINE SUB -1", K_NUM}, {"SUB2", "SINE SUB -2", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
     {"SWAV-ENS", "SWV", "CHORD", "SYNTH", {2, 1, 3},
-     {{"INT1", "INTERVAL 1", K_INT25}, {"INT2", "INTERVAL 2", K_INT25}, {"INT3", "INTERVAL 3", K_INT25}, {"DTUN", "DETUNE", K_NUM},
-      {"SHPE", "SAW TO PULSE", K_NUM}, {"PW", "PULSE WIDTH", K_NUM}, {"LEV", "CHORD LEVEL", K_NUM}, {"SUB", "SUB OSC", K_NUM}}},
+     {{"PCH2", "PITCH 2", K_PCH}, {"PCH3", "PITCH 3", K_PCH}, {"PCH4", "PITCH 4", K_PCH}, {"WAVE", "SAW TO PULSE", K_NUM},
+      {"PW", "PULSE WIDTH", K_NUM}, {"CHRL", "CHORUS LEVEL", K_NUM}, {"CHRW", "CHORUS WIDTH", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
     {"DIGI-WAV", "DGW", "DIGITAL", "SYNTH", {3, 3, 4},
      {{"WAVE", "WAVE", K_WAVE}, {"SCAN", "SCAN BY ENV", K_BI}, {"STIM", "SCAN TIME", K_DECT}, {"SYNC", "HARD SYNC", K_NUM},
       {"BITS", "WAVE BITS", K_NUM}, {"DTUN", "OSC 2 DETUNE", K_BI}, {"MIX2", "OSC 2 LEVEL", K_NUM}, {"STEP", "PHASE STEPS", K_NUM}}},
@@ -177,6 +177,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_BI: s_int(out, v - 64); break;
     case K_FINE: s_int(out, ((v - 64) * 100) / 64); *unit = "CENT"; break;
     case K_TUN2: s_int(out, ((v - 64) * 25) / 8); *unit = "CENT"; break;     /* +-2 semitones, 3.125 c a step */
+    case K_PCH: s_cpy(out, T_ENS_PNAME[T_ENS_PIDX[v & 127]]); break;            /* SWAV-ENS's intervals, the just as 5:4 */
     case K_TIME: case K_HOLD: case K_DECT: case K_ATIM: case K_AHLD: case K_ADEC: case K_AREL: {
         int k = pi->kind;
         if ((k == K_HOLD || k == K_DECT || k == K_AHLD || k == K_ADEC) && v == 127) { s_cpy(out, "INF"); break; }

@@ -16,7 +16,7 @@ of a few cycles lands off centre): those are flagged, not counted as errors.
 | Cause | Measured | Where | Status |
 |---|---|---|---|
 | The bus's tape flutter took a quarter of the delay swing at 11x the wow's rate: ±58 c at TAPE 50, ±25 c at 22-24, ±10-12 c at 8-12 (±172 c at 127) | sine through the bus, per-cycle pitch | A01 A02 A03 A07 A08 A11 A12 | **fixed**: ±10.7 c at 127, ±4 c at 50; the wow (the "worn tape") kept. Self-test fails before |
-| SWAV-ENS's DTUN spreads the voices by -dt/2, +dt, -1.5 dt, +2 dt (dt = DTUN/2 in 1/64 semitone): at DTUN 50-70 the chord's voices sit -4..-52, +23..+54, -36..-79 and +57..+81 c off | held and in context, each voice | every SWAV-ENS chord: A01 A02 A03 A07 A09 A11 A12 A13 | **open**: SWAVE-ENS is the next machine (Phase 2): its detune is to be measured on the Monomachine and rebuilt before the new bank |
+| SWAV-ENS's DTUN spreads the voices by -dt/2, +dt, -1.5 dt, +2 dt (dt = DTUN/2 in 1/64 semitone): at DTUN 50-70 the chord's voices sit -4..-52, +23..+54, -36..-79 and +57..+81 c off | held and in context, each voice | every SWAV-ENS chord: A01 A02 A03 A07 A09 A11 A12 A13 | **fixed**: SWAV-ENS rebuilt on the Monomachine's page (no DTUN there; its chorus is a moving copy, off in the converted parts) |
 | GND-SIN's TUNE moved a semitone a step | | | fixed in fe73fa5; no demo used it |
 
 No other tune scaling is wrong: PTCH (semitones, shown as SEMI), SID DTN2 (whole semitones, shown so), SID and FM
@@ -36,8 +36,11 @@ pages and their locks (self-test; a PTCH shift in the v4 path and a note shift i
   within 0 c median, 5.8 c worst; without the resonance -4.4 / -4.5 c; open +0.3 / -0.1 c (`chain_sidbend14`,
   regress.py `bend`). The instrument's, then; on short bass notes, audible.
 - **SWAV-ENS acceptance**: this bank is kept as `tools/ref/fixtures/bank_a_ea69d53.bin` (16 packed patterns, replayed
-  bit-identically); `tools/demo_pitch.py --accept-ens` fails all eight ENS parts today (in context worst A12 T2
-  -116 c, A09 T5 +97 c) and is the rebuild's acceptance test.
+  bit-identically). SWAV-ENS was rebuilt on the Monomachine's page (format 7); the bank's eight parts, converted, are
+  rendered on both instruments as held chords and as their own trigs (`tools/ref/chain_ensacc.spec`), each voice
+  against the Monomachine's (regress.py `ens_accept`): all within 0.5 c (the worst in context before, A12 T2 -116 c
+  and A09 T5 +97 c, now 0.5 and 0.2 c); three stabs of ~0.1 s cannot resolve their clusters and are INFO. On the old
+  engine the group scores 0 of 13.
 - **Resonant cutoffs ringing off the key.** The filter follows the note in steps of a tone and a half, so a resonant
   LP rings at a fixed interval over every note: +15 st (A04 A05 A13 A16), +18 st (A06: an octave and a tritone),
   +6 st at Q 46 (A09: a tritone, the strongest), +21 st on A07's pad. Off the key on 18-55 of each line's trigs.

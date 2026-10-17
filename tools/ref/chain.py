@@ -340,6 +340,28 @@ def ens19():
     return out
 
 
+def ens20():
+    out = ["# SWAVE-ENS for the regression suite: every line sends the whole page (PCH2 PCH3 PCH4 WAVE PW CHRL CHRW TUNE)."
+           " Each PCH group's first and last value (PW 64: the voices at their notes), WAVE x PW, TUNE, one to four"
+           " voices, the chorus by CHRL and by CHRW; a C4, DIST 48, the filter open"]
+    ens = 14
+    page = {48: 62, 49: 62, 50: 62, 51: 0, 52: 64, 53: 0, 54: 64, 55: 64}     # PCH 62: OFF (0-1 is an octave down)
+    def ln(name, gate=1.2, **kw):
+        cc = dict(page)
+        cc.update({{"pch2": 48, "pch3": 49, "pch4": 50, "wave": 51, "pw": 52, "chrl": 53, "chrw": 54, "tune": 55}[k]: v for k, v in kw.items()})
+        return line(name, ens, 60, {60: 48, **cc}, gate=gate, tail=0.05)
+    firsts = [0, 2, 6, 10, 14, 18, 22, 26, 30, 33, 37, 41, 45, 49, 53, 57, 61, 64, 68, 72, 76, 80, 84, 88, 92, 95, 99,
+              103, 107, 111, 115, 119, 123, 128]
+    vals = sorted({v for a, b in zip(firsts, firsts[1:]) for v in (a, b - 1)})
+    out += [ln(f"e20_pch2_{v:03d}", pch2=v) for v in vals]
+    out += [ln(f"e20_w{w:03d}_p{p:03d}", wave=w, pw=p) for w in (0, 32, 64, 96, 127) for p in (0, 16, 32, 48, 64, 96, 127)]
+    out += [ln(f"e20_tune_{v:03d}", tune=v) for v in (0, 32, 63, 64, 65, 96, 127)]
+    out += [ln("e20_v2", pch2=100), ln("e20_v3", pch2=100, pch3=72), ln("e20_v4", pch2=100, pch3=72, pch4=124)]
+    out += [ln(f"e20_chrl_{v:03d}", gate=4.0, chrl=v) for v in (0, 16, 32, 64, 96, 127)]
+    out += [ln(f"e20_chrw_{v:03d}", gate=4.0, chrl=127, chrw=v) for v in (0, 64, 127)]
+    return out
+
+
 def order11():
     out = ["# is a render alone? One run, in this order: a resonant C3 sine fresh, the same again, again with the Q moved,"
            " a long tail after the gate (REL 0), another machine between, fresh again, another note; then a decaying"
@@ -366,7 +388,7 @@ if __name__ == "__main__":
                 fh.write("\n".join(f()) + "\n")
     elif sys.argv[1] == "specs3":
         d = sys.argv[2]
-        for name, f in (("clip3", clip3), ("map3", map3), ("fenv4", fenv4), ("ftime5", ftime5), ("res6", res6), ("hres8", hres8), ("drive10", drive10), ("order11", order11), ("drive12", drive12), ("tune13", tune13), ("sidbend14", sidbend14), ("ens15", ens15), ("ens16", ens16), ("ens17", ens17), ("ens18", ens18), ("ens19", ens19)):
+        for name, f in (("clip3", clip3), ("map3", map3), ("fenv4", fenv4), ("ftime5", ftime5), ("res6", res6), ("hres8", hres8), ("drive10", drive10), ("order11", order11), ("drive12", drive12), ("tune13", tune13), ("sidbend14", sidbend14), ("ens15", ens15), ("ens16", ens16), ("ens17", ens17), ("ens18", ens18), ("ens19", ens19), ("ens20", ens20)):
             with open(os.path.join(d, f"chain_{name}.spec"), "w") as fh:
                 fh.write("\n".join(f()) + "\n")
     elif sys.argv[1] == "specs2":

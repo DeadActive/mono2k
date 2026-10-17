@@ -24,12 +24,12 @@ from chain_anal import harm, psd
 REF_JSON = os.path.join(HERE, "regress_ref.json")
 GAPS_JSON = os.path.join(HERE, "regress_gaps.json")
 SPECS = ["chain_levels", "chain_dist2", "chain_filt2", "chain_map3", "chain_clip3", "chain_eq2", "chain_srr2",
-         "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14"]
+         "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14", "chain_ens20", "chain_ensacc"]
 MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2": "mm_cfilt2", "chain_map3": "mm_cmap3",
           "chain_clip3": "mm_cclip3", "chain_eq2": "mm_ceq2", "chain_srr2": "mm_csrr2", "chain_delay": "mm_cdelay",
           "chain_delay2": "mm_cdelay2", "chain_ftime5": "mm_cftime5", "chain_res6": "mm_cres6",
           "chain_drive12": "mm_cdrive12", "chain_tune13": "mm_ctune13",
-          "chain_sidbend14": "mm_csidbend14"}
+          "chain_sidbend14": "mm_csidbend14", "chain_ens20": "mm_cens20", "chain_ensacc": "mm_censacc"}
 
 
 def db(v):
@@ -93,6 +93,44 @@ def m_bend_c(x, a, ld):                  # a short note's pitch over its audible
     k = np.nonzero(sm > sm.max() * 0.03)[0]
     sp, df = D.spectrum(seg[k[0]:k[-1]])
     return [D.comb(sp, df, f0_of(a["note"]))[0]]
+
+
+def m_ens_voice(x, a, ld):               # SWAV-ENS: the interval PCH2 adds over the root alone, cents (NaN: none)
+    from ens15 import spec as espec, voices as evoices, peak_c as epeak, F0 as EF0
+    ref, df = espec(ld(a["ref"])[:, 0])
+    sp, _ = espec(x[:, 0])
+    v = evoices(sp, df, ref, 1)
+    if not v or v[0][2] < epeak(ref, df, EF0)[1] - 40:
+        return [float("nan")]
+    return [float(100 * v[0][0] + v[0][1] - epeak(ref, df, EF0)[0])]
+
+
+def m_c3_partials(x, a, ld):             # level, then partials 1..6 of C3 (a voice is two saws an octave down), dB,
+    from ens15 import spec as espec, peak_c as epeak, F0 as EF0      # floored at -75 (a cancelled one is cancelled)
+    sp, df = espec(x[:, 0])
+    lv = 20 * np.log10(np.sqrt(np.mean(x[int(0.3 * SR):int(1.1 * SR), 0] ** 2)) + 1e-12)
+    return [max(-75.0, float(lv))] + [max(-75.0, float(epeak(sp, df, k * EF0 / 2, 20)[1])) for k in range(1, 7)]
+
+
+def m_chorus_mix(x, a, ld):              # the dry line's power and the moving copy's at partial 8, dB
+    from ens15 import spec as espec, F0 as EF0
+    sp, df = espec(x[:, 0], 0.3, 3.9, 4)
+    fr = np.arange(len(sp)) * df
+    cents = 1200 * np.log2(np.maximum(fr, 1) / (8 * EF0))
+    p = sp ** 2
+    dry = p[np.abs(cents - 0.5) < 0.8].sum()
+    tot = p[np.abs(cents) < 25].sum()
+    return [max(-70.0, db(np.sqrt(dry))), max(-70.0, db(np.sqrt(max(tot - dry, 1e-30))))]   # -70: no copy
+
+
+def m_lr_corr(x, a, ld):                 # the channels' correlation over the held note
+    s = x[int(0.3 * SR):int(3.9 * SR)]
+    return [float(np.corrcoef(s[:, 0], s[:, 1])[0, 1])]
+
+
+def m_ens_voices(x, a, ld):              # each voice of a SWAV-ENS chord, cents from its intended pitch (ens_voices.py)
+    import ens_voices as EV
+    return EV.measure(x, EV.intended(a["note"], {int(k): v for k, v in a["cc"].items()}))
 
 
 def m_thd(x, a, ld):
@@ -228,7 +266,9 @@ def _resfit(f, ratio, fc, hp):
 
 METRICS = {"res_fit": m_res_fit, "rms": m_rms, "h1": m_h1, "h1_rel": m_h1_rel, "harm": m_harm, "thd": m_thd, "peak_hz": m_peak_hz,
            "res_db": m_res_db, "resp_at": m_resp_at, "srr_image": m_srr_image, "level_at": m_level_at, "echo_ms": m_echo_ms,
-           "echoes": m_echoes, "echo_bands": m_echo_bands, "fenv_ms": m_fenv_ms, "tone_rel": m_tone_rel, "pitch_c": m_pitch_c, "bend_c": m_bend_c}
+           "echoes": m_echoes, "echo_bands": m_echo_bands, "fenv_ms": m_fenv_ms, "tone_rel": m_tone_rel, "pitch_c": m_pitch_c, "bend_c": m_bend_c,
+           "ens_voice": m_ens_voice, "c3_partials": m_c3_partials, "chorus_mix": m_chorus_mix, "lr_corr": m_lr_corr,
+           "ens_voices": m_ens_voices}
 
 
 # ------------------------------------------------------------------------------------------------------ cases
@@ -327,6 +367,33 @@ def cases():
             add("tune", "chain_tune13", f"t13_{kind}_{t:03d}", "tone_rel", {"ref": f"t13_{kind}_064"}, 1.0)
         for t in (32, 48, 80, 95):
             add("tune", "chain_tune13", f"t13_{kind}_{t:03d}", "pitch_c", {"note": 60}, 1.0)
+    firsts = [0, 2, 6, 10, 14, 18, 22, 26, 30, 33, 37, 41, 45, 49, 53, 57, 61, 64, 68, 72, 76, 80, 84, 88, 92, 95, 99,
+              103, 107, 111, 115, 119, 123, 128]                 # SWAV-ENS (chain_ens20): each PCH group's ends
+    for v in sorted({v for a, b in zip(firsts, firsts[1:]) for v in (a, b - 1)}):
+        add("ens", "chain_ens20", f"e20_pch2_{v:03d}", "ens_voice", {"ref": "e20_pch2_061"}, 1.0)
+    for w in (0, 32, 64, 96, 127):                                  # WAVE x PW: the level and C3's partials
+        for p in (0, 16, 32, 48, 64, 96, 127):
+            add("ens", "chain_ens20", f"e20_w{w:03d}_p{p:03d}", "c3_partials", {}, [1.5] + [3.0] * 6,
+                xfail="WAVE 127 at PW 0 / 127: the reference keeps a residue -66 / -63 dB where the two saws cancel"
+                if w == 127 and p in (0, 127) else None)
+    for v in (0, 32, 63, 64, 65, 96, 127):
+        add("ens", "chain_ens20", f"e20_tune_{v:03d}", "pitch_c", {"note": 60}, 1.0)
+    for n in ("e20_v2", "e20_v3", "e20_v4"):                        # no level shared between the voices
+        add("ens", "chain_ens20", n, "rms", {}, 0.5)
+    for v in (0, 16, 32, 64, 96, 127):                              # the chorus, mono here: its mix by CHRL
+        add("ens", "chain_ens20", f"e20_chrl_{v:03d}", "chorus_mix", {}, 1.5)
+    for v in (0, 64, 127):                                           # CHRW: the mix holds; the stereo is the gap
+        add("ens", "chain_ens20", f"e20_chrw_{v:03d}", "chorus_mix", {}, 1.5,
+            xfail="CHRW 0: the reference's copy moves faster (~0.66 Hz) and stands 2 dB further off the dry line" if v == 0 else None)
+        add("ens", "chain_ens20", f"e20_chrw_{v:03d}", "lr_corr", {}, 0.02,
+            xfail=None if v == 0 else "CHRW widens the reference's chorus across the stereo (L/R 0.96 / 0.78); MONO2K's is mono")
+    # SWAV-ENS's acceptance: bank A's eight parts (ea69d53, converted to format 7), each voice against the
+    # Monomachine's, held and as the part's own trig; a stab of ~0.1 s cannot resolve a cluster's voices: INFO
+    import ens_voices as EV
+    for name, (note, cc) in EV.spec_lines(os.path.join(HERE, "chain_ensacc.spec")).items():
+        stab = name.endswith("_trig") and any(k in name for k in ("a01_t4", "a07_t4", "a13_t4"))
+        add("ens_accept", "chain_ensacc", name, "ens_voices", {"note": note, "cc": {str(k): cc[k] for k in (48, 49, 50, 55)}},
+            3.0 if name.endswith("_held") else 5.0, info=stab)
     for kind, tol in (("res", 6.0), ("nores", 1.5), ("open", 1.5)):   # a resonant sweep bends a short note flat:
         for n in (45, 43, 41, 40, 52, 48, 57, 55):                    # the Monomachine's too (chain_sidbend14)
             add("bend", "chain_sidbend14", f"s14_{kind}_n{n}", "bend_c", {"note": n}, tol)

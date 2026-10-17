@@ -10,12 +10,8 @@
 #   notes    each melodic track's pitch classes against the pattern's declared key; voices sounding together a
 #            semitone or a tritone apart, on different tracks
 #   .venv/bin/python tools/demo_pitch.py build/pitch [--steps]
-# The SWAV-ENS acceptance (the machine's rebuild): bank A as it stood at ea69d53 is kept as a fixture, and every
-# SWAV-ENS part in it must hold its chord: each voice of the held chord within 5 c, the trigs' median within 5 c, the
-# worst trig within 20 c (at ea69d53: A12 T2 -116 c, A09 T5 +97 c). Should the Monomachine's SWAVE-ENS turn out to
-# detune that far itself at the same DTUN, the criterion becomes its measured voices, within 3 c.
-#   build/host/m2k_host build/pitch_fix --pitch tools/ref/fixtures/bank_a_ea69d53.bin
-#   .venv/bin/python tools/demo_pitch.py build/pitch_fix --accept-ens
+# SWAV-ENS's acceptance is regress.py's ens_accept: bank A's parts as they stood (tools/ref/fixtures), converted,
+# each voice against the Monomachine's (tools/ref/chain_ensacc.spec, ens_voices.py)
 import math, os, sys
 import numpy as np
 
@@ -32,6 +28,14 @@ KEYS = {1: ("D", "minor"), 2: ("F", "minor"), 3: ("F", "major"), 4: ("A", "minor
         11: ("A", "major"), 12: ("C", "major"), 13: ("G", "minor"), 14: ("C", "minor"), 15: ("D", "dorian"),
         16: ("F#", "minor")}
 MODES = {"major": [0, 2, 4, 5, 7, 9, 11], "minor": [0, 2, 3, 5, 7, 8, 10], "dorian": [0, 2, 3, 5, 7, 9, 10]}
+def _table(name):
+    import re
+    h = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "firmware", "gen", "m2k_tables.h")).read()
+    body = h[h.index(name + "["):]
+    return [int(v) for v in re.findall(r"-?\d+", body[body.index("{") + 1:body.index("}")])]
+
+
+ENS_PCH = _table("T_ENS_PCH")                      # 1/64 semitone; -32768 off
 LPQ = [(0, .74), (8, .95), (16, 1.6), (24, 2.6), (32, 4.5), (40, 7.5), (48, 12.5), (56, 19), (64, 27.5)]
 HPQ = [(0, .80), (8, 1.03), (16, 1.43), (24, 1.9), (32, 3.5), (40, 5.6), (48, 8.7), (56, 15.6), (64, 30)]
 
@@ -67,8 +71,9 @@ def voices(m, e):
         return [n + (k[P_SYN] - 64) * 2 / 64]
     if m == M_SAW:
         return [n + (k[P_SYN + 7] - 64) * 2 / 64]
-    if m == M_ENS:
-        return [n] + [n + (k[P_SYN + i] * 25 >> 7) for i in range(3)]
+    if m == M_ENS:                     # the Monomachine's page (format 7): PCH2..4 off its table, TUNE on all
+        n += (k[P_SYN + 7] - 64) * 2 / 64
+        return [n] + [n + ENS_PCH[k[P_SYN + i]] / 64 for i in range(3) if ENS_PCH[k[P_SYN + i]] != -32768]
     return [n]
 
 
@@ -159,29 +164,8 @@ def ring(m, e):
     return out
 
 
-def accept_ens(d):
-    bad = 0
-    for p in range(1, 17):
-        for t in range(1, 7):
-            head, ev = events(os.path.join(d, f"p{p:02d}_t{t}.txt"))
-            if head["machine"] != M_ENS or not ev:
-                continue
-            x = load(os.path.join(d, f"p{p:02d}_t{t}.wav"))[:, 0]
-            res = [r for r in (measure(x, ev, i, len(x), M_ENS) for i in range(len(ev))) if r]
-            c = np.array([r["cents"] for r in res])
-            h = held(d, p, t, M_ENS, res[0]["step"])
-            worst = float(c[np.argmax(np.abs(c))])
-            ok = abs(np.median(c)) <= 5 and abs(worst) <= 20 and h is not None and max(abs(v) for v in h[1]) <= 5
-            bad += not ok
-            print(f"{'PASS' if ok else 'FAIL'}  A{p:02d} T{t} SWAV-ENS: median {np.median(c):+6.1f} c, worst {worst:+6.1f} c,"
-                  f" held voices {' '.join(f'{v:+.0f}' for v in h[1]) if h else '-'} c")
-    return 1 if bad else 0
-
-
 def main():
     d = sys.argv[1]
-    if "--accept-ens" in sys.argv:
-        sys.exit(accept_ens(d))
     show_steps = "--steps" in sys.argv
     for p in range(1, 17):
         key, mode = KEYS[p]

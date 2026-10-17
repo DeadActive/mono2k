@@ -280,6 +280,47 @@ def lim(x):
     return math.copysign(y, x)
 out.append(arr("T_LIM", "int16_t", [round(32767 * lim((i - 128) / 32.0)) for i in range(257)]))
 
+# SWAVE-ENS's interval table, measured on the Monomachine's OS (tools/ref/chain_ens16.spec, every PCH value; 0-1 read
+# against all three PCH sent: chain_ens20): 0-1 an octave down, 61-63 OFF (the default), 32 intervals, each over 3-4 values: equal tempered, and the just 3/2 4/3 5/4 6/5 beside their
+# neighbours. (first value, cents, name); a voice's offset in 1/64 semitone, ENS_OFF when off
+J = {702: 1200 * math.log2(3 / 2), 498: 1200 * math.log2(4 / 3), 386: 1200 * math.log2(5 / 4), 316: 1200 * math.log2(6 / 5)}
+def jc(c):
+    return math.copysign(J[abs(c)], c) if abs(c) in J else c
+ENS_PCH = [(0, -1200), (2, -1100), (6, -1000), (10, -900), (14, -800), (18, -702), (22, -700), (26, -600), (30, -500),
+           (33, -498), (37, -400), (41, -386), (45, -316), (49, -300), (53, -200), (57, -100), (61, None), (64, 100),
+           (68, 200), (72, 300), (76, 316), (80, 386), (84, 400), (88, 498), (92, 500), (95, 600), (99, 700),
+           (103, 702), (107, 800), (111, 900), (115, 1000), (119, 1100), (123, 1200)]
+def ens_entry(v):
+    return max(i for i, (a, _) in enumerate(ENS_PCH) if a <= v)
+JN = {702: "3:2", 498: "4:3", 386: "5:4", 316: "6:5"}
+def ens_name(c):
+    if c is None:
+        return "OFF"
+    if abs(c) in JN:
+        return ("+" if c > 0 else "-") + JN[abs(c)]
+    return "%+d" % (c // 100)
+out.append("#define ENS_OFF (-32768)\n")
+out.append(arr("T_ENS_PCH", "int16_t", [-32768 if ENS_PCH[ens_entry(v)][1] is None else round(jc(ENS_PCH[ens_entry(v)][1]) * 64 / 100)
+                                        for v in range(128)], 16))
+out.append(arr("T_ENS_PIDX", "uint8_t", [ens_entry(v) for v in range(128)], 32))
+out.append("static const char *const T_ENS_PNAME[%d] = {%s};\n" % (len(ENS_PCH), ", ".join('"%s"' % ens_name(c) for _, c in ENS_PCH)))
+# an equal-tempered interval, -11..+12 semitones, to the PCH value in the middle of its group (the conversion's)
+def ens_et(semi):
+    i = next(k for k, (_, c) in enumerate(ENS_PCH) if c == semi * 100)
+    lo, hi = ENS_PCH[i][0], (ENS_PCH[i + 1][0] if i + 1 < len(ENS_PCH) else 128) - 1
+    return (lo + hi) // 2
+out.append(arr("T_ENS_ET", "uint8_t", [ens_et(k) for k in list(range(-11, 0)) + list(range(1, 13))], 24))
+# the chorus (measured, chain_ens16 / 18 / 19): a copy whose pitch travels a triangle, mixed in by CHRL (dry
+# 1 - 0.83 x, wet 0.85 x, x = CHRL / 127); CHRW from +-13.5 c at 0.66 Hz to +-18 c at 0.2 Hz. As a delay line read
+# at half rate: the triangle's swing A = (2^(c / 1200) - 1) / (4 r) seconds; per CHRW the LFO's increment a sample
+# (Q32) and the swing in half-rate samples (Q8)
+def chr_rate(w):
+    return 0.66 * (0.2 / 0.66) ** (w / 127)
+def chr_cents(w):
+    return 13.5 + 4.5 * w / 127
+out.append(arr("T_ENS_CINC", "uint32_t", [round(2 ** 32 * chr_rate(w) / SR) for w in range(128)], 8))
+out.append(arr("T_ENS_CDEP", "uint32_t", [round(256 * SR / 2 * (2 ** (chr_cents(w) / 1200) - 1) / (4 * chr_rate(w))) for w in range(128)], 8))
+
 # FM ratios (Q8) and their names; inharmonic ones for the metallic sounds
 ratios = [0.25, 0.5, 0.75, 1.0, 1.41, 1.5, 2.0, 2.5, 2.76, 3.0, 3.5, 4.0, 4.24, 5.0, 5.4, 6.0,
           7.0, 7.07, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 15.7, 16.0, 18.0, 20.0, 24.0, 32.0]

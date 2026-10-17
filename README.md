@@ -89,6 +89,13 @@ Done so far, all measured on OS 1.32B:
   within a few percent from 0 to 127.
 - **SWAV-SAW** on SWAVE-SAW's page: the unison pairs' detune and levels, the square and sine subs, within 0.2 c and
   0.5 dB (`tools/ref/swave_saw*.spec`).
+- **SWAV-ENS** on SWAVE-ENS's page (`tools/ref/chain_ens15..20.spec`, `ensacc`): PCH2–4 off its interval table (−12
+  to +12 semitones, 61–63 OFF, the just 3/2 4/3 5/4 6/5 beside their equal-tempered neighbours: all 66 group ends
+  within 0.4 c); a voice two saws an octave under its note, the second PW/128 of a period on, WAVE fading their sum
+  out and their difference in at 0.63 (levels within 0.8 dB over WAVE × PW); no level shared between the voices
+  (0.4 dB); TUNE ±2 semitones (0.7 c); the chorus a copy whose pitch travels a triangle, CHRL its mix (within 1.5 dB).
+  Bank A's chords, converted, against the Monomachine's voice by voice: within 0.5 c. MONO2K's chorus is mono, where
+  the Monomachine's widens the stereo by CHRW (a known gap).
 - **The track chain** (`tools/ref/chain.py` writes the specs, `chain_anal.py` reads them), in the Monomachine's order:
   - VOL and LEV squared; PAN cos / sin; the track clips per channel after the pan, just under full scale at LEV 127.
     MONO2K matches within 0.02 dB.
@@ -126,7 +133,9 @@ Done so far, all measured on OS 1.32B:
 
 Patterns saved before are moved onto each new scale as they load (version 1: the envelope; 5: the chain, each old
 setting to the one giving the same Hz, dB or time, the filter placed against the note each track plays most; 6:
-GND-SIN's TUNE, which moved a semitone a step, kept to the semitone within the new ±2). The
+GND-SIN's TUNE, which moved a semitone a step, kept to the semitone within the new ±2; 7: SWAV-ENS's page, each
+old interval folded into −11..+12 by octaves, one folding to 0 to +12, keeping every chord's notes; its DTUN (a fixed
+spread, not the chorus's moving copy), shape, level and sub have no counterpart and reset). The
 DigiPro waves and BeatBox samples are the OS's data and are not copied: DIGI-WAV plays MONO2K's own waves.
 
 ## Credits and licence
