@@ -70,12 +70,13 @@ static void delay_block(int ti, const int32_t *in, int32_t *L, int32_t *R)
         }
         int32_t l, r;
         if (dual) {                    /* sum and difference: the echo crosses sides on every pass */
-            t->dacc[0] += ((x * (gl + gr)) >> 15) + ((e[0] * fb) >> 15);
-            t->dacc[1] += ((x * (gl - gr)) >> 15) - ((e[1] * fb) >> 15);
+            /* the echo comes off its filters past 16 bits and DFB runs to 1.75: its product takes 64 bits */
+            t->dacc[0] += ((x * (gl + gr)) >> 15) + (int32_t)(((int64_t)e[0] * fb) >> 15);
+            t->dacc[1] += ((x * (gl - gr)) >> 15) - (int32_t)(((int64_t)e[1] * fb) >> 15);
             l = (e[0] - e[1]) >> 1;
             r = (e[0] + e[1]) >> 1;
         } else {
-            t->dacc[0] += x + ((e[0] * fb) >> 15);
+            t->dacc[0] += x + (int32_t)(((int64_t)e[0] * fb) >> 15);
             l = (e[0] * gl) >> 15;
             r = (e[0] * gr) >> 15;
         }

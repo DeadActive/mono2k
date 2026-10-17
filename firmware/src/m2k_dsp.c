@@ -59,8 +59,8 @@ static inline void zsvf_tick(zsvf_t *f, int32_t v0, int32_t *lp, int32_t *bp, in
     int64_t p1 = (int64_t)f->a1 * f->s1 + (int64_t)f->a2 * v3 + f->r1;
     int64_t p2 = (int64_t)f->a2 * f->s1 + (int64_t)f->a3 * v3 + f->r2;
     int32_t v1 = (int32_t)(p1 >> 30), d2 = (int32_t)(p2 >> 30);
-    f->r1 = p1 - ((int64_t)v1 << 30);
-    f->r2 = p2 - ((int64_t)d2 << 30);
+    f->r1 = p1 - (int64_t)v1 * (1LL << 30);                    /* a multiply: shifting a negative left is undefined */
+    f->r2 = p2 - (int64_t)d2 * (1LL << 30);
     int32_t v2 = f->s2 + d2;
     f->s1 = CLAMP(2 * v1 - f->s1, -ZS_MAX, ZS_MAX);
     f->s2 = CLAMP(2 * v2 - f->s2, -ZS_MAX, ZS_MAX);
@@ -73,7 +73,7 @@ static inline int32_t zop_lp(zop_t *f, int32_t x)
 {
     int64_t p = (int64_t)(x - f->s) * f->G + f->r;
     int32_t v = (int32_t)(p >> 24);
-    f->r = p - ((int64_t)v << 24);
+    f->r = p - (int64_t)v * (1LL << 24);
     int32_t y = v + f->s;
     f->s = CLAMP(y + v, -ZS_MAX, ZS_MAX);
     return y;
@@ -309,7 +309,7 @@ static void mach_block(int ti, int m, int32_t pitch)
             if (w2 & 2) v2 &= (int32_t)(t->ph[1] >> 20);
             if (w2 & 4) v2 &= (int32_t)(t->ph[1] >> 20) >= pw ? 0xFFF : 0;
             if (w2 & 8) v2 &= t->ms[1];
-            int32_t s1 = (v1 - 2048) << 4, s2 = (v2 - 2048) << 4;
+            int32_t s1 = (v1 - 2048) * 16, s2 = (v2 - 2048) * 16;
             o[i] = (int16_t)sat16(s1 + (((s2 - s1) * mix) >> 7));
         }
         break;
@@ -426,7 +426,10 @@ static void mach_block(int ti, int m, int32_t pitch)
                 t->ph[k] += inc[k];
             }
             s = (s * 13000) >> 15;
-            if (sub) { s += ((t->ms[5] & 0x80000000) ? sub : -sub) >> 1; t->ms[5] += (int32_t)(inc[0] >> 1); }
+            if (sub) {                 /* the phase wraps: unsigned, as a signed overflow is undefined */
+                s += (((uint32_t)t->ms[5] & 0x80000000u) ? sub : -sub) >> 1;
+                t->ms[5] = (int32_t)((uint32_t)t->ms[5] + (inc[0] >> 1));
+            }
             o[i] = (int16_t)sat16(s);
         }
         break;
@@ -462,7 +465,7 @@ static void mach_block(int ti, int m, int32_t pitch)
             }
             t->ph[0] += sinc;
             t->ph[1] += inc2;
-            if (bits < 16) s = (s >> (16 - bits)) << (16 - bits);
+            if (bits < 16) s = (s >> (16 - bits)) * (1 << (16 - bits));     /* a multiply: no left shift of a negative */
             o[i] = (int16_t)sat16(s);
         }
         break;
@@ -796,7 +799,7 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
             if (t->srr_acc >= 65536u) { t->srr_acc -= 65536u; t->srr_prev = t->srr_hold; t->srr_hold = s; }
             s = t->srr_prev + (int32_t)(((int64_t)(t->srr_hold - t->srr_prev) * (int32_t)t->srr_acc) >> 16);
         }
-        if (bits < 16) s = (sat16(s) >> (16 - bits)) << (16 - bits);
+        if (bits < 16) s = (sat16(s) >> (16 - bits)) * (1 << (16 - bits));
         int32_t l = (int32_t)CLAMP(((int64_t)s * gl) >> 15, -T_CLIP, T_CLIP), r = (int32_t)CLAMP(((int64_t)s * gr) >> 15, -T_CLIP, T_CLIP);
         int32_t as = l < 0 ? -l : l, ar = r < 0 ? -r : r;
         if (ar > as) as = ar;

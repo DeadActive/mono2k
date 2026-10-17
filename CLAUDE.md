@@ -25,6 +25,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   each trig's pitch against its note, held notes, resonant rings against the key, semitone clashes; run it on
   every new demo (docs/bank-a-diagnosis.md).
 - Web: `sh web/build.sh`, serve `web/` (`.claude/launch.json`: mono2k-web on port 8742).
+- Checks: `sh tools/check.sh` (~4 min): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core
+  built for armv7m soft float calls no float helper and no 64-bit division (flash / RAM printed); the self-test,
+  every screen, bank A and every reference spec under ASan + UBSan, clean.
 - Calibration (README, Calibration): `tools/ref/mm_ref` (gearmulator, the user's OS image at a path, never in the repo;
   it logs to stdout, so send stdout to /dev/null) against `host/m2k_ref.c`, same specs in `tools/ref/*.spec`.
   Pattern format: 2 amp ATK/HOLD/DEC/REL on the measured curve; 4 SWAV-SAW's page; 5 the track chain on the
@@ -37,9 +40,11 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   size is held in `tools/ref/regress_gaps.json` (`regress.py gaps`; it only narrows unless `--widen`, a decision the
   diff shows): a gap that grows past it plus the tolerance FAILs, and XPASS fails too (re-mark the case PASS). Every
   DSP fix gets a case that failed before it. `m2k_host --selftest` covers the pattern formats.
-- The Monomachine's renders in one `mm_ref` run are not independent: its oscillator keeps feeding the filter between
-  notes (the amp envelope comes after the filter and the drive), so a line inherits the last one's resonance; another
-  machine between them resets it (`chain_order11`). Split slow-building renders, or put a GND-NOIS line before each.
+- The Monomachine's renders in one `mm_ref` run were not independent: its oscillator keeps feeding the filter between
+  notes (the amp envelope comes after the filter and the drive), so a line inherited the last one's resonance; another
+  machine assigned does not reset it, a note played on it does (`chain_order11`). `mm_ref` now plays a short GND-NOIS
+  note (GND-SIN for a noise line) before every line, always. References captured before (`regress_ref.json`, up to
+  `chain_tune13`) were rendered without it: steady measurements are unaffected, slow build-ups are (`hp_drive`: INFO).
 - `reference/candidate_waves/` holds third-party waves of unverified provenance: git-ignored, never committed, never in
   web/ or the firmware.
 

@@ -640,7 +640,7 @@ static void glo_combo(int b)
             clipb.kind = 2;
             clipb.machine = p->machine[ui.trk];
             m_cpy(clipb.kit, p->kit[ui.trk], P_COUNT);
-            char o[8] = {'T', (char)('1' + ui.trk), ' ', 0};
+            char o[12] = {'T', (char)('1' + ui.trk), ' ', 0};       /* "T6 SOUND": 9 bytes */
             s_cpy(o + 3, "SOUND");
             toast("COPY", o);
         }
@@ -654,7 +654,7 @@ static void glo_combo(int b)
             p->machine[ui.trk] = clipb.machine;
             m_cpy(p->kit[ui.trk], clipb.kit, P_COUNT);
             m_cpy(trk[ui.trk].eff, clipb.kit, P_COUNT);
-            char o[8] = {'T', (char)('1' + ui.trk), ' ', 0};
+            char o[12] = {'T', (char)('1' + ui.trk), ' ', 0};       /* "T6 SOUND": 9 bytes */
             s_cpy(o + 3, "SOUND");
             toast("PASTE", o);
             ui.card_t = ui.now | 1u;

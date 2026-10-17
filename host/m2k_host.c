@@ -130,15 +130,50 @@ static int analyze(const char *out)
 /* each track of bank A alone, two loops, and every trig it plays: the frame, the note the engine was given, the
  * track's parameters as they stood; then its most played note held on its kit (tools/demo_pitch.py measures each
  * against its note). The factory is rebuilt between tracks, so the held note's kit change does not stay */
+/* a bank of 16 patterns as packed blobs (each: its length, two bytes LE, then pat_pack's bytes): written from bank A,
+ * read back over bank A after every m2k_init, so a bank kept as a fixture plays on today's engine (converted on load) */
+static uint8_t bank_fix[16 * BLOB_MAX];
+static int bank_len;
+
+static int bank_export(const char *path)
+{
+    static uint8_t bl[BLOB_MAX];
+    FILE *f = fopen(path, "wb");
+    if (!f) { perror(path); return 1; }
+    m2k_init(2000);
+    for (int p = 0; p < 16; p++) {
+        int n = pat_pack(&pat[p], bl);
+        uint8_t h[2] = {(uint8_t)n, (uint8_t)(n >> 8)};
+        fwrite(h, 1, 2, f);
+        fwrite(bl, 1, (size_t)n, f);
+    }
+    fclose(f);
+    printf("bank A: 16 patterns into %s\n", path);
+    return 0;
+}
+
+static int bank_load(void)
+{
+    int o = 0;
+    for (int p = 0; p < 16 && o + 2 <= bank_len; p++) {
+        int n = bank_fix[o] | (bank_fix[o + 1] << 8);
+        if (o + 2 + n > bank_len || !pat_unpack(&pat[p], bank_fix + o + 2, n)) return 0;
+        o += 2 + n;
+    }
+    return 1;
+}
+
 static int pitch_dump(const char *out)
 {
     char path[512];
     for (int p = 0; p < 16; p++) {
         m2k_init(2000);
+        if (bank_len && !bank_load()) { fprintf(stderr, "the bank fixture does not load\n"); return 1; }
         int steps = pat[p].glob[G_LEN] < 1 ? 1 : pat[p].glob[G_LEN] > 64 ? 64 : pat[p].glob[G_LEN];
         int frames = (int)(2.0 * steps * M2K_SR * 15.0 / (30 + pat[p].glob[G_TMPO]) + M2K_SR) / 16 * 16;
         for (int t = 0; t < M2K_TRACKS; t++) {
             m2k_init(2000);
+            if (bank_len) bank_load();
             cur_pat = p;
             sq.queued = (uint8_t)p;
             pat[p].mute = (uint8_t)(~(1 << t) & 0x3F);
@@ -172,6 +207,7 @@ static int pitch_dump(const char *out)
                     note = pat[p].step[t][s].note & 127;
                 }
             m2k_init(2000);
+            if (bank_len) bank_load();
             cur_pat = p;
             int held = (int)(1.5 * M2K_SR) / 16 * 16;
             pat[p].kit[t][P_HOLD] = 127;
@@ -201,7 +237,7 @@ static void tape_pitch(double *wow_c, double *flut_c)
     pat[16].kit[0][P_DEC] = 127;
     pat[16].glob[G_TAPE] = 127;
     m2k_midi(0x90, 84, 100);
-    const int frames = 5 * M2K_SR;
+    const int frames = 5 * M2K_SR / 16 * 16;                   /* whole blocks: the render writes 16 at a time */
     int16_t *b = malloc((size_t)frames * 4);
     for (int f = 0; f < frames; f += 16) m2k_render(b + 2 * f, 16);
     static double hz[8000];
@@ -313,6 +349,48 @@ static int selftest(void)
                         moved += c.lock[i].val != pat[d].lock[i].val;
             }
         CHECK(moved == 0, "format: versions 4 and 5 move no demo's notes, PTCH, machine page or their locks");
+    }
+    /* the clipboard, a sound: track 6's copied with GLO + REC on its page, pasted onto track 1 with GLO + PLAY */
+    {
+        m2k_init(7);
+        uint32_t now = 100000;
+        #define TAP_B(bb) do { m2k_button(bb, 1); m2k_frame(now += 20); m2k_button(bb, 0); m2k_frame(now += 20); } while (0)
+        #define GLO_B(bb) do { m2k_button(B_GLO, 1); m2k_frame(now += 20); TAP_B(bb); m2k_button(B_GLO, 0); m2k_frame(now += 20); } while (0)
+        cur_pat = 0;
+        m2k_track(5);
+        TAP_B(B_EDIT);                                           /* a track's page: the sound, not the pattern */
+        GLO_B(B_REC);
+        CHECK(!strcmp(ui.toast, "COPY") && !strcmp(ui.toast2, "T6 SOUND"), "clipboard: track 6's sound copied (T6 SOUND)");
+        m2k_track(0);
+        TAP_B(B_EDIT);
+        GLO_B(B_PLAY);
+        CHECK(!strcmp(ui.toast, "PASTE") && !strcmp(ui.toast2, "T1 SOUND") && pat[0].machine[0] == pat[0].machine[5] &&
+              !memcmp(pat[0].kit[0], pat[0].kit[5], P_COUNT), "clipboard: pasted onto track 1, machine and kit");
+        #undef GLO_B
+        #undef TAP_B
+        m2k_init(7);                                             /* the paste is not saved: the tests after start clean */
+    }
+    /* every value's text fits the smallest buffer it is written to (12 bytes), on every page and machine */
+    {
+        int longest = 0;
+        char buf[64];
+        const char *u;
+        const pi_t *sets[] = {PI_COMMON, PI_LFO, PI_MOD, PI_GLOB, PI_SET};
+        const int counts[] = {P_LFO - 8, 8, 4, G_COUNT, 3};
+        for (int m = 0; m < M_COUNT + 5; m++) {
+            const pi_t *tab = m < M_COUNT ? MI[m].syn : sets[m - M_COUNT];
+            int cnt = m < M_COUNT ? 8 : counts[m - M_COUNT];
+            for (int i = 0; i < cnt; i++)
+                for (int t = 0; t < M2K_TRACKS; t++)
+                    for (int v = 0; v < 128; v++) {
+                        memset(buf, 0, sizeof buf);
+                        fmt(&tab[i], t, v, buf, &u);
+                        int n = (int)strlen(buf) + 1;
+                        if (n > longest) longest = n;
+                    }
+        }
+        printf("     the longest value text: %d bytes\n", longest);
+        CHECK(longest <= 12, "ui: every value's text fits in 12 bytes");
     }
     /* the sequencer's keys, as a hand plays them: pages, the length, step entry */
     {
@@ -434,7 +512,16 @@ int main(int argc, char **argv)
     const char *out = argc > 1 ? argv[1] : "build/host";
     char path[512];
     if (argc > 2 && !strcmp(argv[2], "--analyze")) return analyze(out);
-    if (argc > 2 && !strcmp(argv[2], "--pitch")) return pitch_dump(out);
+    if (argc > 2 && !strcmp(argv[2], "--pitch")) {           /* [FIXTURE]: a bank kept with --export-bank */
+        if (argc > 3) {
+            FILE *f = fopen(argv[3], "rb");
+            if (!f) { perror(argv[3]); return 1; }
+            bank_len = (int)fread(bank_fix, 1, sizeof bank_fix, f);
+            fclose(f);
+        }
+        return pitch_dump(out);
+    }
+    if (argc > 2 && !strcmp(argv[2], "--export-bank")) return bank_export(out);
     /* 1: the three factory patterns, 12 s each */
     for (int p = 0; p < 3; p++) {
         m2k_init(2000);
@@ -443,7 +530,7 @@ int main(int argc, char **argv)
         lockmap_build();
         for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[p].kit[t], P_COUNT);
         seq_play(1);
-        int frames = M2K_SR * 12;
+        int frames = M2K_SR * 12 / 128 * 128;                    /* whole blocks */
         int16_t *buf = malloc((size_t)frames * 4);
         clock_t c0 = clock();
         for (int f = 0; f < frames; f += 128) m2k_render(buf + 2 * f, 128);
