@@ -102,7 +102,7 @@ static int analyze(const char *out)
     char path[512];
     int bad = 0;
     printf("pattern   mix pk/rms   T1        T2        T3        T4        T5        T6     (rms dB, crest)\n");
-    for (int p = 0; p < 15; p++) {             /* bank A: the demos */
+    for (int p = 0; p < 16; p++) {             /* bank A: the demos */
         double pk, rms;
         double sec = 10.0;
         int frames = (int)(M2K_SR * sec) / 128 * 128;
@@ -133,14 +133,14 @@ static int selftest(void)
 {
     int fails = 0;
     m2k_init(7);
-    CHECK(!strcmp(pat[0].name, "LATEX") && !strcmp(pat[16].name, "INIT"), "factory: A01 LATEX, B01 INIT");
+    CHECK(!strcmp(pat[0].name, "DEEP") && !strcmp(pat[16].name, "INIT"), "factory: A01 DEEP, B01 INIT");
     CHECK(!strcmp(m2k_project_name(0), "DEMO") && !strcmp(m2k_project_name(1), "P2"), "projects: DEMO, P2");
     printf("     DEMO packed: %u bytes for 64 patterns (A01 %d bytes, B01 %d)\n", proj[0].used, proj[0].len[0], proj[0].len[16]);
     /* the pattern formats: older ones convert once, on their path; today's loads unchanged */
     {
-        /* A01 LATEX's T1 is written DIST 34, VOL 112 on the version-4 chain: the factory converts it once */
-        CHECK(pat[0].kit[0][P_DIST] == T_V5_DIST[34] && pat[0].kit[0][P_VOL] == T_V5_VOL[112],
-              "format: a factory demo is converted once (A01 T1 DIST, VOL)");
+        /* the demos are written on today's chain: none is converted (A01 T4's DTIM 48 would become 127) */
+        CHECK(pat[0].kit[3][P_DTIM] == 48 && pat[0].kit[0][P_DSND] == 64 && pat[0].kit[0][P_DIST] == 64,
+              "format: the factory is written on today's chain, not converted");
         static m2k_pattern_t a, b, c;
         static uint8_t bl[BLOB_MAX], bl2[BLOB_MAX];
         /* a version-4 pattern: the old blank kit on two tracks, a few old settings, locks, trigs on one note */
@@ -180,6 +180,47 @@ static int selftest(void)
         n = pat_pack(&pat[0], bl);
         CHECK(pat_unpack(&c, bl, n) && !memcmp(pat[0].kit, c.kit, sizeof c.kit), "format: a saved demo reloads as it was");
     }
+    /* the sequencer's keys, as a hand plays them: pages, the length, step entry */
+    {
+        uint32_t now = 100000;
+        #define TAP_B(bb) do { m2k_button(bb, 1); m2k_frame(now += 20); m2k_button(bb, 0); m2k_frame(now += 20); } while (0)
+        int kp[4], kw0 = -1, kw1 = -1, kw2 = -1;
+        for (int k = 0; k < M2K_KEYS; k++) {
+            if (ui.kb[k] >= 6 && ui.kb[k] < 10) kp[ui.kb[k] - 6] = k;
+            if (ui.kw[k] == 0) kw0 = k;
+            if (ui.kw[k] == 2) kw1 = k;
+            if (ui.kw[k] == 4) kw2 = k;
+        }
+        m2k_pattern(16);                                         /* B01 INIT, 16 steps */
+        m2k_frame(now);
+        TAP_B(B_SEQ);                                            /* GRID */
+        m2k_key(kp[3], 1); m2k_frame(now += 50); m2k_key(kp[3], 0); m2k_frame(now += 50);
+        CHECK(ui.spage == 0 && seq_len() == 16, "grid: P4 past a 16-step pattern's end keeps the steps in view");
+        m2k_pattern_t keep = pat[16];
+        m2k_key(kp[1], 1);
+        for (int i = 0; i < 40; i++) m2k_frame(now += 20);       /* held 0.8 s */
+        m2k_key(kp[1], 0); m2k_frame(now += 20);
+        int same = 1;
+        for (int t = 0; t < M2K_TRACKS; t++) for (int st = 0; st < 16; st++)
+            if (memcmp(&pat[16].step[t][st + 16], &keep.step[t][st], sizeof keep.step[t][st])) same = 0;
+        CHECK(seq_len() == 32 && ui.spage == 1 && same, "grid: holding P2 makes the pattern 32 steps, the beat going on");
+        pat[16] = keep;
+        TAP_B(B_SEQ);                                            /* KEYS */
+        TAP_B(B_REC);                                            /* stopped: step entry */
+        int c0 = ui.cursor;
+        m2k_key(kw0, 1); m2k_key(kw0, 0);
+        m2k_key(kw2, 1); m2k_key(kw2, 0);
+        m2k_button(B_GLO, 1); m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0); m2k_button(B_GLO, 0);
+        m2k_key(kw1, 1); m2k_key(kw1, 0);
+        m2k_step_t *sp = pat[16].step[ui.trk];
+        CHECK(sp[c0].note == 53 + kw0 && sp[c0 + 1].note == 53 + kw2 && !(sp[c0 + 2].flags & ST_TRIG) &&
+              sp[c0 + 3].note == 53 + kw1 && (sp[c0 + 3].flags & ST_TRIG), "keys: step entry writes notes, GLO + OCT+ a rest");
+        TAP_B(B_REC);
+        pat[16] = keep;
+        m2k_pattern(0);
+        m2k_frame(now += 20);
+        #undef TAP_B
+    }
     /* edit, reload */
     int v0 = pat[0].kit[0][P_DEC];
     pat[0].kit[0][P_DEC] = 3;
@@ -209,7 +250,7 @@ static int selftest(void)
     project_load(1);
     CHECK(pat[5].kit[2][P_VOL] != 1, "load project discards unsaved work");
     project_load(0);
-    CHECK(!strcmp(pat[1].name, "PVC"), "load DEMO again");
+    CHECK(!strcmp(pat[1].name, "JUNGLE"), "load DEMO again");
     /* the store, out and back */
     pat[3].kit[1][P_PAN] = 17;
     int n = m2k_store_pack();
@@ -230,6 +271,25 @@ static int selftest(void)
     }
     CHECK(project_save(2) == 0, "a project too big for an image is refused, not corrupted");
     CHECK(!strcmp(m2k_project_name(2), "P3"), "the refused slot is untouched");
+    /* a store saved before today's demos: the slots still holding the old ones take the new, the owner's stay */
+    {
+        m2k_init(11);
+        m2k_pattern_t keep2 = pat[2];
+        s_cpy(pat[2].name, "SPU RM");                        /* an old demo, as shipped */
+        s_cpy(pat[3].name, "MYSONG");                        /* the owner's */
+        pattern_init_blank(&pat[15]);
+        pat[15].step[0][0].flags = ST_TRIG;                  /* A16 INIT, but written in: the owner's */
+        project_save(0);
+        int n = m2k_store_pack();
+        memmove(store_buf + 7, store_buf + 8, (size_t)n - 8);  /* as a store before the factory's revision was kept */
+        store_buf[4] = 1;
+        m2k_init(12);
+        CHECK(m2k_store_unpack(n - 1) == 1, "store: one saved before today's demos loads");
+        CHECK(!strcmp(pat[2].name, keep2.name) && !memcmp(pat[2].kit, keep2.kit, sizeof keep2.kit),
+              "store: an old demo left in its slot becomes today's");
+        CHECK(!strcmp(pat[3].name, "MYSONG") && !strcmp(pat[15].name, "INIT") && (pat[15].step[0][0].flags & ST_TRIG),
+              "store: the owner's patterns are kept");
+    }
     printf("%s (%d failed)\n", fails ? "SELFTEST FAILED" : "selftest passed", fails);
     return fails != 0;
 }

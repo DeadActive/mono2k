@@ -60,12 +60,13 @@
   <div class="keys">
     <h3 class="label">Keys</h3>
     <dl>
-      <dt><kbd>Z</kbd>–<kbd>M</kbd> <kbd>Q</kbd>–<kbd>O</kbd></dt><dd>The 16 lower keys: notes, or the steps in GRID.</dd>
-      <dt><kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>2</kbd>…<kbd>9</kbd></dt><dd>The 11 upper keys: notes, or in GRID tracks 1–6, pages 1–4, mute.</dd>
+      <dt><kbd>Z</kbd>–<kbd>M</kbd> <kbd>Q</kbd>–<kbd>O</kbd></dt><dd>The 16 lower keys: notes, or the steps in GRID (a new step takes the last note played).</dd>
+      <dt><kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>2</kbd>…<kbd>9</kbd></dt><dd>The 11 upper keys: notes, or in GRID tracks 1–6, pages 1–4 (held: the pattern ends there), mute.</dd>
       <dt>Step + knob</dt><dd>A parameter lock.</dd>
       <dt>Step + <kbd>[</kbd> <kbd>]</kbd></dt><dd>Its condition: chance, 1:2 … 4:4, 1ST, PRE, FILL.</dd>
       <dt>Step + <kbd>-</kbd> <kbd>=</kbd></dt><dd>Its ratchet, 1–4 hits.</dd>
-      <dt>Step + <kbd>;</kbd> <kbd>'</kbd></dt><dd>Its note.</dd>
+      <dt>Step + <kbd>;</kbd> <kbd>'</kbd></dt><dd>Its note, a semitone a click.</dd>
+      <dt><kbd>Enter</kbd> REC, stopped</dt><dd>Step entry: each note played is the next step. <kbd>G</kbd> + <kbd>=</kbd> a rest, <kbd>G</kbd> + <kbd>-</kbd> back.</dd>
       <dt>Step + <kbd>,</kbd> <kbd>.</kbd></dt><dd>Accent, slide.</dd>
     </dl>
   </div>
@@ -80,7 +81,7 @@
       <dt><kbd>K</kbd> ARP</dt><dd>The track's arpeggiator.</dd>
       <dt><kbd>G</kbd> GLO</dt><dd>Tempo, lofi bus, SPU reverb, settings. Held: the editing functions.</dd>
       <dt><kbd>1</kbd> HOME</dt><dd>The pattern in six lanes.</dd>
-      <dt><kbd>A</kbd> SEQ</dt><dd>The keys play, or set the 16 steps (GRID).</dd>
+      <dt><kbd>A</kbd> SEQ</dt><dd>The keys play, or set the steps (GRID), sixteen at a time.</dd>
       <dt><kbd>Space</kbd> PLAY <kbd>Enter</kbd> REC</dt><dd>REC held: FILL.</dd>
       <dt><kbd>\</kbd> SAVE</dt><dd>Keeps the pattern; held, the project.</dd>
     </dl>
@@ -153,6 +154,6 @@
   <span class="label">MONO2K</span><span class="label">Six mono machines</span><span class="label">FM-1</span><span class="label r">2026</span>
 </footer>
 
-<script src="app.js?v=35"></script>
+<script src="app.js?v=37"></script>
 </body>
 </html>

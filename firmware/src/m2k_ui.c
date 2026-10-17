@@ -298,6 +298,8 @@ static struct {
     uint8_t btn[B_COUNT], glo_used, keys[M2K_KEYS];
     uint32_t rec_t0, save_t0;
     uint8_t save_fired, proj_sel;
+    uint8_t pkey, pfired, cursor;      /* a page key held in GRID (+1), its hold done; step entry's step */
+    uint32_t pkey_t0;
     uint32_t load_t;
     /* the focus */
     uint8_t focus;
@@ -466,6 +468,72 @@ static void held_remove(int s)
     ui.nheld = (uint8_t)j;
 }
 
+/* a page key in GRID: the page, or why it is empty; tapped again, the view follows the playhead */
+static void page_key(int pg)
+{
+    char a[16], o[24], *e;
+    e = s_cpy(a, "PAGE "); s_int(e, pg + 1);
+    if (pg * 16 >= seq_len()) {
+        e = s_cpy(o, "PAST THE END, HOLD: ");
+        s_int(e, (pg + 1) * 16);
+        toast(a, o);
+        return;
+    }
+    if (pg == ui.spage && !ui.follow) { ui.follow = 1; toast(a, "FOLLOWS THE PLAY"); return; }
+    ui.spage = (uint8_t)pg;
+    ui.follow = 0;
+    e = s_cpy(o, "STEPS "); e = s_int(e, pg * 16 + 1); e = s_cpy(e, "-"); s_int(e, pg * 16 + 16);
+    toast(a, o);
+}
+
+/* a page key held: the pattern's length ends with that page; new steps take the pattern so far, so it goes on */
+static void page_length(int pg)
+{
+    m2k_pattern_t *p = &pat[cur_pat];
+    int old = seq_len(), len = (pg + 1) * 16;
+    if (len > old) {
+        for (int t = 0; t < M2K_TRACKS; t++)
+            for (int s = old; s < len; s++) { p->step[t][s] = p->step[t][s % old]; lock_clear_step(t, s); }
+        for (int i = 0; i < M2K_LOCKS; i++) {
+            m2k_lock_t l = p->lock[i];
+            if (l.trk >= M2K_TRACKS || l.step >= old) continue;
+            for (int s = l.step + old; s < len; s += old) lock_set(l.trk, s, l.param, l.val);
+        }
+    }
+    p->glob[G_LEN] = (uint8_t)len;
+    ui.spage = (uint8_t)pg;
+    ui.follow = 0;
+    char o[16], *e = s_cpy(o, "LENGTH ");
+    s_int(e, len);
+    toast(o, len > old ? "THE STEPS GO ON" : "STEPS PAST IT KEPT");
+}
+
+/* step entry: REC armed while stopped, the keys playing: each note is the next step */
+static int step_entry(void) { return sq.rec && !sq.playing && !ui.grid; }
+
+static void entry_show(const char *what)
+{
+    char o[16], *e = s_cpy(o, "STEP ");
+    s_int(e, ui.cursor + 1);
+    toast(o, what);
+    ui.spage = (uint8_t)(ui.cursor / 16);
+    ui.follow = 0;
+}
+
+static void entry_write(int note)
+{
+    m2k_step_t *st = &pat[cur_pat].step[ui.trk][ui.cursor];
+    st->flags = ST_TRIG;
+    st->note = (uint8_t)note;
+    st->cond = C_ALWAYS;
+    st->rtrg = 0;
+    lock_clear_step(ui.trk, ui.cursor);
+    char n[8];
+    s_note(n, note);
+    entry_show(n);
+    ui.cursor = (uint8_t)((ui.cursor + 1) % seq_len());
+}
+
 void m2k_key(int k, int down)
 {
     if (k < 0 || k >= M2K_KEYS) return;
@@ -479,15 +547,26 @@ void m2k_key(int k, int down)
     if (!ui.grid) {
         int note = 53 + k + 12 * ui.oct;
         sq.ktrk = ui.trk;
-        if (down) { live_on(note, 100); ui.note[ui.trk] = (uint8_t)note; }
-        else live_off(note);
+        if (down) {
+            live_on(note, 100);
+            ui.note[ui.trk] = (uint8_t)note;
+            if (step_entry()) entry_write(note);
+        } else live_off(note);
         return;
     }
     if (b >= 0) {
+        if (b >= 6 && b < 10) {        /* P1..P4: a tap shows the page, a hold makes the pattern end there */
+            if (down) { page_key(b - 6); ui.pkey = (uint8_t)(b - 5); ui.pkey_t0 = ui.now | 1u; ui.pfired = 0; }
+            else if (ui.pkey == b - 5) ui.pkey = 0;
+            return;
+        }
         if (!down) return;
         if (b < M2K_TRACKS) { if (b != ui.trk) { ui.trk = (uint8_t)b; sq.ktrk = ui.trk; start_trans_dir(190, 1); } }
-        else if (b < 10) { ui.spage = (uint8_t)(b - 6); ui.follow = 0; }
-        else p->mute ^= (uint8_t)(1u << ui.trk);
+        else {
+            p->mute ^= (uint8_t)(1u << ui.trk);
+            char o[4] = {'T', (char)('1' + ui.trk), 0, 0};
+            toast((p->mute >> ui.trk) & 1 ? "MUTED" : "UNMUTED", o);
+        }
         return;
     }
     int s = ui.spage * 16 + w;
@@ -630,7 +709,14 @@ void m2k_button(int b, int down)
     }
     if (b == B_REC) {                  /* a tap arms recording; held, it is FILL */
         if (down) { ui.rec_t0 = ui.now | 1u; return; }
-        if (ui.now - ui.rec_t0 < 300) sq.rec ^= 1;
+        if (ui.now - ui.rec_t0 < 300) {
+            sq.rec ^= 1;
+            if (sq.rec && !sq.playing) {   /* stopped: step entry from the page in view */
+                ui.cursor = (uint8_t)(ui.spage * 16 < seq_len() ? ui.spage * 16 : 0);
+                if (ui.grid) toast("REC", "SEQ: KEYS WRITE STEPS");
+                else toast("STEP ENTRY", "KEYS WRITE STEPS");
+            }
+        }
         ui.rec_t0 = 0;
         sq.fill = 0;
         return;
@@ -653,12 +739,26 @@ void m2k_button(int b, int down)
     case B_SEQ:
         ui.grid ^= 1;
         ui.nheld = 0;
+        if (ui.spage * 16 >= seq_len()) ui.spage = 0;
         toast(ui.grid ? "GRID" : "KEYS", ui.grid ? "STEPS ON THE KEYS" : "PLAY THE TRACK");
         start_trans(250);
         break;
     case B_PLAY: seq_play(!sq.playing); break;
     case B_OCTD: case B_OCTU: {
         int d = b == B_OCTU ? 1 : -1;
+        if (ui.btn[B_GLO] && step_entry()) {   /* GLO + OCT+ leaves a rest, GLO + OCT- goes back a step */
+            ui.glo_used = 1;
+            if (d > 0) {
+                pat[cur_pat].step[ui.trk][ui.cursor].flags = 0;
+                lock_clear_step(ui.trk, ui.cursor);
+                ui.cursor = (uint8_t)((ui.cursor + 1) % seq_len());
+                entry_show("REST");
+            } else {
+                ui.cursor = (uint8_t)((ui.cursor + seq_len() - 1) % seq_len());
+                entry_show("BACK");
+            }
+            break;
+        }
         if (ui.grid && ui.nheld) held_step_edit(0, d);
         else if (ui.grid) { ui.spage = (uint8_t)CLAMP(ui.spage + d, 0, 3); ui.follow = 0; }
         else { ui.oct = (int8_t)CLAMP(ui.oct + d, -3, 3); char o[8]; char *e = s_cpy(o, "OCT "); if (ui.oct > 0) *e++ = '+'; s_int(e, ui.oct); toast(o, 0); }
@@ -682,6 +782,8 @@ static void select_pattern(int n)
     }
     cur_pat = n;
     sq.queued = (uint8_t)n;
+    if (ui.spage * 16 >= seq_len()) ui.spage = 0;     /* a page this pattern does not reach shows nothing: its first */
+    ui.follow = 1;
     lockmap_build();
     for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[n].kit[t], P_COUNT);
     toast(a, pat[n].name);
@@ -1301,6 +1403,7 @@ static void step_cell(int x, int y, int w, int h, int t, int s)
                 if ((i == 0 || j == 0 || i == w - 1 || j == h - 1) && !((x + i + y + j) & 1)) px(x + i, y + j, 1);
     }
     if (playing) frame(x - 1, y - 1, w + 2, h + 2, 2);
+    if (step_entry() && t == ui.trk && s == ui.cursor && ((ui.now >> 8) & 1)) frame(x - 1, y - 1, w + 2, h + 2, 1);
     if (held && ((ui.now >> 7) & 1)) rect(x, y, w, h, 2);
 }
 
@@ -1433,6 +1536,7 @@ static void step_card(void)
     text(&F_S, 4, FOCUS_Y + 2, o, 1, 1);
     s_note(o, st.note);
     big_value(2, FOCUS_Y + 16, GX - 6, o, 64, 1000);
+    text(&F_S, 4, 90, "TRACK: NOTE", 1, 1);       /* the TRACK knob turns a held step's note */
     int x = 4;
     x += tag(x, 102, COND_N[st.cond], st.cond != C_ALWAYS) + 3;
     char r[4] = {'X', (char)('0' + (st.rtrg ? st.rtrg : 1)), 0, 0};
@@ -1546,6 +1650,7 @@ const uint8_t *m2k_frame(uint32_t ms)
     ui.lfo_w = (uint8_t)((ui.lfo_w + 1) % 88);
     if (sq.playing && ui.follow && !ui.nheld) ui.spage = (uint8_t)(play_step() / 16);
     if (ui.rec_t0 && ui.btn[B_REC] && ms - ui.rec_t0 >= 300) sq.fill = 1;
+    if (ui.pkey && !ui.pfired && ms - ui.pkey_t0 >= 600) { ui.pfired = 1; page_length(ui.pkey - 1); }
     if (ui.save_t0 && ui.btn[B_SAVE] && !ui.save_fired && ms - ui.save_t0 >= 700) {
         int slot = ui.page == PG_GLO && ui.sub == 3 ? ui.proj_sel : cur_proj;
         ui.save_fired = 1;

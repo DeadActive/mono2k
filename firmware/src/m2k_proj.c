@@ -299,13 +299,43 @@ uint8_t *m2k_store_buf(int *max)
     return store_buf;
 }
 
+/* the factory's revision: a store saved before it carries the demos it replaced. 1: the bank rewritten on the
+ * Monomachine's chain (version 5) */
+#define FACTORY_REV 1
+static const char *const OLD_DEMO[16] = {"LATEX", "PVC", "SPU RM", "ELECTRO", "GLITCH", "CHROME", "ACID", "2STEP", "GROOVE",
+                                         "HYPRPOP", "DUB", "CHIP", "HARDGRV", "IDM", "DUBSTEP", "INIT"};
+
+static int name_is(const char *a, const char *b)
+{
+    for (int i = 0; i < 8; i++) { if (a[i] != b[i]) return 0; if (!a[i]) return 1; }
+    return 1;
+}
+
+/* a saved image of the DEMO project: a bank-A slot still holding the demo it shipped with (by its name; A16 only
+ * while it is the blank INIT) takes today's demo, built in pat[] by the caller. Anything else is the owner's: kept */
+static void refresh_demos(m2k_img_t *im)
+{
+    static m2k_pattern_t old POOL;
+    for (int i = 0; i < 16; i++) {
+        if (!im->len[i] || !pat_unpack(&old, im->data + img_off(im, i), im->len[i]) || !name_is(old.name, OLD_DEMO[i])) continue;
+        if (i == 15) {
+            int trigs = 0;
+            for (int t = 0; t < M2K_TRACKS; t++) for (int s = 0; s < M2K_STEPS; s++) trigs += old.step[t][s].flags & ST_TRIG;
+            if (trigs) continue;
+        }
+        int n = pat_pack(&pat[i], blob);
+        img_put(im, i, blob, n);
+    }
+}
+
 int m2k_store_pack(void)
 {
     int n = 0;
     store_buf[n++] = 'M'; store_buf[n++] = '2'; store_buf[n++] = 'K'; store_buf[n++] = '2';
-    store_buf[n++] = 1;
+    store_buf[n++] = 2;                /* 2: the factory's revision follows the open pattern */
     store_buf[n++] = (uint8_t)cur_proj;
     store_buf[n++] = (uint8_t)cur_pat;
+    store_buf[n++] = FACTORY_REV;
     m_cpy(store_buf + n, store_.set, S_COUNT); n += S_COUNT;
     static m2k_img_t w POOL;
     if (!img_pack_all(&w, "WORK")) return 0;
@@ -317,8 +347,8 @@ int m2k_store_pack(void)
 int m2k_store_unpack(int len)
 {
     const uint8_t *o = store_buf;
-    if (len < 7 + S_COUNT || o[0] != 'M' || o[1] != '2' || o[2] != 'K' || o[3] != '2' || o[4] != 1) return 0;
-    int n = 7;
+    if (len < 8 + S_COUNT || o[0] != 'M' || o[1] != '2' || o[2] != 'K' || o[3] != '2' || o[4] < 1 || o[4] > 2) return 0;
+    int n = o[4] == 2 ? 8 : 7, rev = o[4] == 2 ? o[7] : 0;
     uint8_t set[S_COUNT];
     m_cpy(set, o + n, S_COUNT); n += S_COUNT;
     static m2k_img_t w POOL;
@@ -329,6 +359,11 @@ int m2k_store_unpack(int len)
         r = deser_img(&proj[k], o + n, len - n);
         if (r < 0) { projects_factory(); return 0; }
         n += r;
+    }
+    if (rev < FACTORY_REV && name_is(proj[0].name, "DEMO")) {      /* today's demos, where the old ones still are */
+        factory();
+        refresh_demos(&proj[0]);
+        if (o[5] == 0) refresh_demos(&w);
     }
     img_unpack_all(&w);
     m_cpy(store_.set, set, S_COUNT);

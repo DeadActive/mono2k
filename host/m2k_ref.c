@@ -62,7 +62,7 @@ int main(int argc, char **argv)
         m2k_init(1234);
         uint32_t ms = 0;
         for (int i = 0; i < 200; i++) m2k_frame(ms += 16);   /* past the splash */
-        m2k_pattern(15);                                       /* A16, the blank pattern */
+        m2k_pattern(16);                                       /* B01, a blank pattern */
         m2k_pattern_t *p = &pat[cur_pat];
         p->machine[0] = (uint8_t)m;
         m_cpy(p->kit[0], MACH_DEF[m], 8);

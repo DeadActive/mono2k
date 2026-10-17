@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* MONO2K's factory patterns: fifteen sound designs to show what six mono machines can do, and one empty one.
+/* MONO2K's factory patterns: sixteen sound designs in bank A to show what six mono machines can do (the blank kit
+ * fills the other banks).
  * Each pattern is a whole song part: its six machines and every parameter, its bus, its tempo, its steps.
  * Steps are written as a grid, one character a step ('|' and ' ' only separate):
  *   .  rest          x  trig        X  accent        s  slide         S  accent + slide
@@ -113,26 +114,15 @@ static void chain_v4(m2k_pattern_t *p)
     }
 }
 
-/* the first demos were voiced on MONO2K's first envelope curve and its quiet reverb: their ATK HOLD DEC REL move
- * onto the Monomachine's times as they are set (amp_v1_val), and their reverb sends come down a little, so the
- * space they were written with is now heard. The later demos (pat_now) are written on today's scales. */
-static int fac_v1;
-static uint8_t fac_val(int prm, int v)
-{
-    if (!fac_v1) return (uint8_t)v;
-    if (prm == P_SPU) return (uint8_t)(v * 3 / 4);
-    return amp_v1_val(prm, v);
-}
-
 static void lk(m2k_pattern_t *p, int t, int s, int prm, int v)
 {
     for (int i = 0; i < M2K_LOCKS; i++)
-        if (p->lock[i].trk == 0xFF) { p->lock[i] = (m2k_lock_t){(uint8_t)t, (uint8_t)s, (uint8_t)prm, fac_val(prm, v)}; return; }
+        if (p->lock[i].trk == 0xFF) { p->lock[i] = (m2k_lock_t){(uint8_t)t, (uint8_t)s, (uint8_t)prm, (uint8_t)v}; return; }
 }
 
 static void set(m2k_pattern_t *p, int t, const uint8_t *pv, int n)   /* (param, value) pairs */
 {
-    for (int i = 0; i + 1 < n; i += 2) p->kit[t][pv[i]] = fac_val(pv[i], pv[i + 1]);
+    for (int i = 0; i + 1 < n; i += 2) p->kit[t][pv[i]] = pv[i + 1];
 }
 #define SET(p, t, ...) do { const uint8_t _v[] = {__VA_ARGS__}; set(p, t, _v, sizeof _v); } while (0)
 
@@ -149,8 +139,7 @@ static void lfo(m2k_pattern_t *p, int t, int l, int dest, int wave, int mult, in
     b[L_TRIG] = enc(trig, 5);
 }
 
-/* the demos are written on the chain they were voiced on (MONO2K's before version 5) and converted as old patterns are:
- * this is that chain's blank kit */
+/* the blank kit of MONO2K's chain before version 5: what an old pattern was written against (the self-test's) */
 static void kit_v4(m2k_pattern_t *p, int t, int m)
 {
     static const uint8_t D[] = {0, 0, 64, 64, 0, 100, 64, 0, 0, 127, 0, 0, 0, 64, 64, 64, 64, 64, 0, 12, 0, 50, 0, 110};
@@ -159,32 +148,24 @@ static void kit_v4(m2k_pattern_t *p, int t, int m)
     p->kit[t][P_LEVL] = 110;
 }
 
-static m2k_pattern_t *pat_new(int i, const char *name, int bpm, const uint8_t *machines)
-{
-    m2k_pattern_t *p = &pat[i];
-    fac_v1 = 1;
-    pat_init(p, name);
-    for (int t = 0; t < M2K_TRACKS; t++) {
-        kit_v4(p, t, machines[t]);
-        static const uint8_t AMP0[4] = {0, 0, 60, 30};          /* the blank kit the demos were voiced from */
-        for (int k = 0; k < 4; k++) p->kit[t][P_ATK + k] = amp_v1_val(P_ATK + k, AMP0[k]);
-    }
-    p->glob[G_TMPO] = (uint8_t)(bpm - 30);
-    p->glob[G_VERB] = 40;
-    return p;
-}
 #define MACHINES(...) (const uint8_t[]){__VA_ARGS__}
 
-/* a demo written on today's scales: the blank kit as it is, every track's envelope given */
-static m2k_pattern_t *pat_now(int i, const char *name, int bpm, const uint8_t *machines)
+/* a demo written on today's chain, the Monomachine's (version 5): DIST 64 clean, the filter's steps over the note
+ * (16 on it, 8 an octave), DTIM in 256ths of a note, DSND from 64 (below keeps the side, above ping-pongs) */
+static m2k_pattern_t *pat_v5(int i, const char *name, int bpm, const uint8_t *machines)
 {
     m2k_pattern_t *p = &pat[i];
-    fac_v1 = 0;
     pat_init(p, name);
-    for (int t = 0; t < M2K_TRACKS; t++) kit_v4(p, t, machines[t]);
+    for (int t = 0; t < M2K_TRACKS; t++) kit_default(p, t, machines[t]);
     p->glob[G_TMPO] = (uint8_t)(bpm - 30);
-    p->glob[G_VERB] = 60;
+    p->glob[G_VERB] = 50;
     return p;
+}
+
+/* every track's LEV scaled: the mix's level under the bus's knee */
+static void trim(m2k_pattern_t *p, int lev)
+{
+    for (int t = 0; t < M2K_TRACKS; t++) p->kit[t][P_LEVL] = (uint8_t)CLAMP(p->kit[t][P_LEVL] * lev / 100, 0, 127);
 }
 
 /* the modulation effect: 0 chorus, 1 flanger, 2 phaser; rate (0.1..10 Hz), depth, mix */
@@ -213,320 +194,424 @@ static void factory(void)
 {
     m2k_pattern_t *p;
 
-    /* A01 LATEX: rubber kick, a plastic squeak, a bass that hiccups (after SOPHIE's bounce) */
-    p = pat_new(0, "LATEX", 122, MACHINES(M_GSIN, M_FMD, M_GNOI, M_SID, M_VOX, M_ENS));
-    p->glob[G_TAPE] = 8; p->glob[G_GLCH] = 14; p->glob[G_GSIZ] = GSIZE(2); p->glob[G_VERB] = 72; p->glob[G_HISS] = 5; p->glob[G_DRIV] = 18;
-    SET(p, 0, SE, 78, SF, 38, SG, 50, SB, 12, P_DEC, 78, P_DIST, 34, P_VOL, 112);
-    BEAT(p, 0, "X.....x...x..?.2", 36);
-    lk(p, 0, 13, SE, 110);
-    SET(p, 1, SA, RATIO(10), SB, 80, SC, 45, SD, RATIO(9), SE, 40, SF, 35, SG, 20, SH, 96,
-        P_DEC, 62, P_LPQ, 76, P_WDTH, 70, P_FDEC, 52, P_WOF, 84, P_VOL, 96, P_DSND, 30, P_DTIM, 6, P_DFB, 60, P_SPU, 30, P_PAN, 52);
-    BEAT(p, 1, "..x.xs.X.Q..X..h", 67, 72, 75, 79, 72, 70, 67);
-    lk(p, 1, 7, SB, 127); lk(p, 1, 12, SH, 20); lk(p, 1, 15, SA, RATIO(17));
-    SET(p, 2, SA, 104, SC, 70, SD, 40, P_DEC, 54, P_BASE, 86, P_VOL, 84, P_PAN, 80);
-    BEAT(p, 2, "x.X.x.x?x.X.x.4?", 76);
-    lk(p, 2, 6, P_DEC, 70); lk(p, 2, 14, P_DEC, 74);
-    SET(p, 3, SA, SIDW(2), SD, SIDW(1), SE, 96, SG, MODE4(1), SH, 40, P_DEC, 74, P_WDTH, 58, P_LPQ, 54,
-        P_FDEC, 54, P_WOF, 84, P_VOL, 100, P_PORT, 20);
-    BEAT(p, 3, "x..x....X..s..x.", 36, 36, 39, 31, 36);
-    SET(p, 4, P_ATK, 4, P_HOLD, 20, P_DEC, 74, P_DSND, 64, P_DTIM, 12, P_DFB, 72, P_SPU, 50, P_VOL, 92, P_PAN, 40);
-    BEAT(p, 4, "....x.......X...", 67, 70);
-    lk(p, 4, 12, SA, VOWEL(5));
-    SET(p, 5, SA, SEMI(3), SB, SEMI(7), SC, SEMI(10), P_DEC, 78, P_WDTH, 82, P_LPQ, 30, P_FDEC, 56, P_WOF, 80,
-        P_SPU, 76, P_VOL, 78, P_PAN, 76);
-    BEAT(p, 5, "x.........x.....", 60, 63);
-    lfo(p, 1, 0, SB, 1, 0, 40, 90, 0);
-    MOD(p, 5, 0, 36, 80, 56);                  /* the chords, chorused */
+    /* A01 DEEP: dub techno in D minor: a minor-ninth stab whose filter breathes, thrown into a filtered ping-pong
+     * that keeps answering; a sub on the offbeats, a rim, hats in the shuffle, an FM drip far away */
+    p = pat_v5(0, "DEEP", 122, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_GSIN, M_FMS));
+    p->glob[G_LEN] = 64; p->glob[G_SWNG] = 16; p->glob[G_VERB] = 70; p->glob[G_DAMP] = 70; p->glob[G_HISS] = 16;
+    p->glob[G_TAPE] = 12;
+    SET(p, 0, SE, 70, SF, 30, SG, 20, SC, 30, P_DEC, 34, P_REL, 10, P_VOL, 127);
+    BEAT(p, 0, "x...x...x...x...|x...x...x...x..q|x...x...x...x...|x...x...x.x.x...", 36);
+    SET(p, 1, SA, 100, P_DEC, 22, P_REL, 10, P_BASE, 30, P_SPU, 30, P_VOL, 62, P_PAN, 52);
+    BEAT(p, 1, "..x...x...x...x.|..x...x...x...x.|..x...x...x...xq|..x...x.q.x...x.", 60);
+    SET(p, 2, SA, 80, SC, 50, SD, 60, P_DEC, 26, P_REL, 10, P_BASE, 18, P_SPU, 60, P_VOL, 72, P_PAN, 76);
+    BEAT(p, 2, "....x.......x...|....x.......x..q|....x.......x...|....x..q....x...", 60);
+    SET(p, 3, SA, SEMI(3), SB, SEMI(10), SC, SEMI(14), SD, 50, SE, 10, SG, 100, P_DEC, 40, P_REL, 20, P_GATE, 6,
+        P_WDTH, 34, P_LPQ, 30, P_WOF, 80, P_FDEC, 30, P_DTIM, 48, P_DSND, 96, P_DFB, 54, P_DBAS, 40, P_DWID, 36,
+        P_SPU, 70, P_VOL, 127, P_LEVL, 107);
+    BEAT(p, 3, "...x.....x....x.|...x.....x......|...x.....x....x.|...x.....x...x..", 50, 50, 50, 50, 50, 50, 50, 50, 50, 46, 46);
+    lk(p, 3, 57, SA, SEMI(4)); lk(p, 3, 57, SB, SEMI(7)); lk(p, 3, 57, SC, SEMI(11));   /* Bbmaj7 */
+    lk(p, 3, 61, SA, SEMI(4)); lk(p, 3, 61, SB, SEMI(7)); lk(p, 3, 61, SC, SEMI(11));
+    lfo(p, 3, 0, P_WDTH, 1, 0, 10, 72, 0);
+    SET(p, 4, SC, 20, SH, 10, P_HOLD, 127, P_DEC, 127, P_REL, 24, P_GATE, 24, P_WDTH, 24, P_VOL, 75);
+    BEAT(p, 4, "x......x..x.....|x......x..x.....|x......x..x.....|x......x..x..x..", 38, 38, 45, 38, 41, 38, 38, 38, 45, 38, 34, 34, 41);
+    SET(p, 5, SA, RATIO(9), SB, 40, SC, 40, SD, RATIO(15), SE, 20, SF, 20, SH, MODE4(0), P_DEC, 60, P_REL, 40,
+        P_GATE, 10, P_DTIM, 64, P_DSND, 100, P_DFB, 58, P_DBAS, 50, P_DWID, 40, P_SPU, 80, P_VOL, 77, P_PAN, 70);
+    BEAT(p, 5, "........x.......|..........x.....|........x.....x.|.........x......", 81, 77, 74, 84, 77);
+    trim(p, 83);
 
-    /* A02 PVC: hard plastic and metal */
-    p = pat_new(1, "PVC", 132, MACHINES(M_FMS, M_GSIN, M_WAV, M_GNOI, M_SAW, M_FMD));
-    p->glob[G_GLCH] = 40; p->glob[G_GSIZ] = GSIZE(2); p->glob[G_ADPC] = 30; p->glob[G_VERB] = 50; p->glob[G_DRIV] = 40;
-    SET(p, 0, SA, RATIO(4), SB, 100, SC, 50, SD, RATIO(26), SE, 70, SF, 40, SH, MODE4(0), P_DEC, 70, P_VOL, 100, P_PAN, 54);
-    BEAT(p, 0, "X..x..x..x..x..x", 60, 65, 70);
-    lk(p, 0, 3, SD, RATIO(29)); lk(p, 0, 9, SB, 127); lk(p, 0, 12, P_PTCH, 76);
-    SET(p, 1, SB, 40, SC, 70, SE, 60, SF, 52, P_DEC, 86, P_DIST, 60, P_VOL, 108);
-    BEAT(p, 1, "X......x..s.....", 33, 33, 45);
-    SET(p, 2, SA, WAVE(5), SB, 96, SC, 60, SD, 40, P_DEC, 76, P_DSND, 60, P_DTIM, 3, P_DFB, 96, P_VOL, 80);
-    BEAT(p, 2, "..x...x....X....", 84, 91, 86);
-    SET(p, 3, SA, 70, SG, 60, P_DEC, 70, P_BASE, 50, P_DIST, 30, P_VOL, 90);
-    BEAT(p, 3, "....X.......x..2", 60);
-    lk(p, 3, 15, SB, 90);
-    SET(p, 4, SA, 100, SB, 24, SC, 80, SF, 20, P_DEC, 70, P_WDTH, 64, P_LPQ, 90, P_FDEC, 46, P_WOF, 86, P_BITS, 50, P_VOL, 127, P_SPU, 30);
-    BEAT(p, 4, ".x...x..s....x..", 72, 75, 79, 77);
-    lk(p, 4, 5, P_SRR, 80); lk(p, 4, 13, P_XOR, 70);
-    SET(p, 5, SH, 127, SC, 70, SB, 110, P_DEC, 70, P_VOL, 70, P_PAN, 90, P_SPU, 60);
-    BEAT(p, 5, "..............x.", 84);
-    lk(p, 5, 14, SH, 0);
-    MOD(p, 4, 1, 20, 90, 50);                  /* the saw, flanged */
+    /* A02 JUNGLE: ambient jungle as the PlayStation knew it: a break chopped over three tracks (a tight kick, a snare
+     * with ghosts and rolls, hats that shuffle), a minor-ninth pad slow in the SPU's reverb, a long sub, a glass
+     * melody ping-ponging; the bus's 4-bit crunch on, for the SPU's grain */
+    p = pat_v5(1, "JUNGLE", 170, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_GSIN, M_WAV));
+    p->glob[G_LEN] = 64; p->glob[G_VERB] = 92; p->glob[G_DAMP] = 50; p->glob[G_ADPC] = 40; p->glob[G_TAPE] = 10;
+    p->glob[G_HISS] = 6; p->glob[G_GLCH] = 10; p->glob[G_GSIZ] = GSIZE(2);
+    SET(p, 0, SE, 80, SF, 22, SG, 40, SC, 20, P_DEC, 28, P_REL, 8, P_DIST, 66, P_VOL, 127);
+    BEAT(p, 0, "x.........x.....|..x.......x.....|x.........x.....|..x...x...x.....", 36);
+    SET(p, 1, SA, 76, SC, 40, SD, 50, SE, 40, SF, 20, SG, 30, P_DEC, 30, P_REL, 12, P_BASE, 20, P_EQG, 70,
+        P_SPU, 60, P_VOL, 95);
+    BEAT(p, 1, "....x..q.x..x..q|....x..q.x..x...|....x..q.x..x..q|....x..x.x..x.33", 60);
+    SET(p, 2, SA, 112, P_DEC, 12, P_REL, 6, P_BASE, 48, P_SPU, 30, P_VOL, 70, P_PAN, 44);
+    BEAT(p, 2, "x.xQx.x.xqxQx.x2|x.xQx.x.xqxQx.x.|x.xQx.x.xqxQx.x2|x.xQx.xQxqxQx2x4", 60);
+    SET(p, 3, SA, SEMI(3), SB, SEMI(10), SC, SEMI(14), SD, 70, SE, 30, SF, 50, SG, 105, SH, 20,
+        P_ATK, 84, P_HOLD, 127, P_DEC, 127, P_REL, 100, P_GATE, 127, P_WDTH, 36, P_LPQ, 20, P_WOF, 84, P_FATK, 90,
+        P_FDEC, 100, P_SPU, 110, P_VOL, 40);
+    BEAT(p, 3, "x...............|x...............|x...............|x...............", 53, 49, 46, 48);
+    lk(p, 3, 16, SA, SEMI(4)); lk(p, 3, 16, SB, SEMI(7)); lk(p, 3, 16, SC, SEMI(11));   /* Dbmaj7 */
+    lk(p, 3, 48, SA, SEMI(5)); lk(p, 3, 48, SB, SEMI(7)); lk(p, 3, 48, SC, SEMI(10));   /* C7sus4 */
+    MOD(p, 3, 0, 18, 100, 80);
+    SET(p, 4, SB, 4, SC, 20, SH, 20, P_HOLD, 127, P_DEC, 127, P_REL, 50, P_GATE, 100, P_WDTH, 24, P_VOL, 48);
+    BEAT(p, 4, "x.........x.....|x.........x.....|x.........x.....|x.........x.....", 41, 44, 37, 41, 34, 37, 36, 39);
+    SET(p, 5, SA, WAVE(6), SB, 70, SC, 60, SE, 20, SF, 68, SG, 60, P_DEC, 76, P_REL, 60, P_GATE, 20,
+        P_DTIM, 96, P_DSND, 94, P_DFB, 50, P_DWID, 80, P_SPU, 90, P_VOL, 62);
+    BEAT(p, 5, "x.....x.....x...|........x.......|x.....x.....x...|....x.......x...", 84, 80, 79, 75, 77, 80, 77, 72, 75, 72);
 
-    /* A03 SPU RM: slow, wide, wobbly */
-    p = pat_new(2, "SPU RM", 88, MACHINES(M_ENS, M_WAV, M_VOX, M_GSIN, M_GNOI, M_GSIN));
-    p->glob[G_TAPE] = 60; p->glob[G_ADPC] = 70; p->glob[G_VERB] = 112; p->glob[G_DAMP] = 70; p->glob[G_HISS] = 26; p->glob[G_LEN] = 32;
-    SET(p, 0, SA, SEMI(4), SB, SEMI(7), SC, SEMI(11), SD, 50, P_ATK, 70, P_HOLD, 127, P_DEC, 127, P_REL, 86,
-        P_WDTH, 60, P_SPU, 90, P_VOL, 80, P_GATE, 100);
-    BEAT(p, 0, "x...............|x...............", 57, 53);
-    lk(p, 0, 16, SB, SEMI(9));
-    SET(p, 1, SA, WAVE(8), SB, 90, SC, 90, SH, 80, P_DEC, 78, P_DSND, 80, P_DTIM, 24, P_DFB, 80, P_VOL, 70);
-    BEAT(p, 1, "..x....x....x...|.x....x....Q....", 76, 79, 81, 76, 84, 79);
-    SET(p, 2, SA, VOWEL(5), SB, 30, SC, 100, P_ATK, 50, P_HOLD, 127, P_DEC, 127, P_REL, 70, P_SPU, 100, P_VOL, 76, P_GATE, 60);
-    BEAT(p, 2, "........x.......|........x.......", 64, 62);
-    SET(p, 3, SC, 60, SE, 30, SF, 50, P_DEC, 94, P_VOL, 100);
-    BEAT(p, 3, "x...............|....x...........", 33, 29);
-    SET(p, 4, SA, 30, P_DEC, 66, P_VOL, 84, P_BITS, 70, P_SPU, 40);
-    BEAT(p, 4, "....x.......x...|....x.......x..q", 60);
-    SET(p, 5, SE, 0, SB, 20, P_ATK, 10, P_DEC, 72, P_VOL, 84, P_DSND, 90, P_DTIM, 16, P_DFB, 90, P_PAN, 90);
-    BEAT(p, 5, "......e.....q...|..........e.....", 96, 91);
-    MOD(p, 0, 0, 24, 100, 70);                 /* the pad, wide */
-    MOD(p, 1, 2, 18, 100, 64);                 /* the latex, phased */
+    trim(p, 90);
 
-    /* A04 ELECTRO: an 808 that hums, a clap that flams, a squelching bass, a robot, a laser */
-    p = pat_new(3, "ELECTRO", 128, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_SID, M_VOX, M_FMD));
-    p->glob[G_SWNG] = 10; p->glob[G_VERB] = 40; p->glob[G_DAMP] = 60; p->glob[G_DRIV] = 24; p->glob[G_GLCH] = 6;
-    SET(p, 0, SE, 70, SF, 46, SG, 30, P_DEC, 84, P_DIST, 20, P_VOL, 114);
-    BEAT(p, 0, "X.....x...x...?.", 33);
-    SET(p, 1, SA, 74, SC, 20, P_DEC, 70, P_BASE, 46, P_VOL, 98);
-    BEAT(p, 1, "....X.......3...", 60);
-    SET(p, 2, SA, 108, SC, 80, SD, 30, P_DEC, 56, P_BASE, 90, P_VOL, 80, P_PAN, 76);
-    BEAT(p, 2, "x.x?x.x.x.xqx.xX", 80);
-    lk(p, 2, 15, P_DEC, 76);
-    SET(p, 3, SA, SIDW(2), SB, 70, SC, 30, SD, SIDW(1), SE, 64, SF, 70, SG, MODE4(1), SH, 50,
-        P_HOLD, 20, P_DEC, 76, P_WDTH, 64, P_LPQ, 70, P_FDEC, 56, P_WOF, 84, P_VOL, 96);
-    BEAT(p, 3, "x..x..x.x..x.s..", 29, 29, 32, 29, 41, 36, 34);
-    SET(p, 4, SA, VOWEL(2), SB, 40, SC, 60, SE, 5, SF, 80, SG, 90, SH, 0, P_ATK, 2, P_HOLD, 40, P_DEC, 76,
-        P_DSND, 40, P_DTIM, 12, P_DFB, 50, P_VOL, 88, P_PAN, 52);
-    BEAT(p, 4, "..x.....x...x...", 60, 63, 67);
-    lk(p, 4, 8, SA, VOWEL(5));
-    SET(p, 5, SA, RATIO(15), SB, 100, SC, 50, SD, RATIO(3), SE, 20, SF, 40, SG, 30, SH, 120,
-        P_DEC, 70, P_DSND, 50, P_DTIM, 6, P_DFB, 70, P_PAN, 40, P_VOL, 76);
-    BEAT(p, 5, "..........h.....", 72);
+    /* A03 DAYDRM: chillwave in F, four bars round Fmaj7 Am7 Dm9 Bbmaj7: a detuned chord pad breathing through its
+     * filter, a warm sub line, a pulse arpeggio ping-ponging, an FM bell answering it; shaker and a soft kick */
+    p = pat_v5(2, "DAYDRM", 92, MACHINES(M_ENS, M_GSIN, M_SID, M_FMS, M_GNOI, M_GSIN));
+    p->glob[G_LEN] = 64; p->glob[G_SWNG] = 12; p->glob[G_VERB] = 74; p->glob[G_DAMP] = 64; p->glob[G_TAPE] = 22;
+    p->glob[G_HISS] = 8;
+    SET(p, 0, SA, SEMI(4), SB, SEMI(7), SC, SEMI(11), SD, 62, SE, 36, SF, 50, SG, 100, SH, 30,
+        P_ATK, 70, P_HOLD, 127, P_DEC, 127, P_REL, 92, P_GATE, 127, P_WDTH, 40, P_LPQ, 16, P_FATK, 84, P_FDEC, 92,
+        P_WOF, 82, P_SPU, 84, P_VOL, 109);
+    BEAT(p, 0, "x...............|x...............|x...............|x...............", 53, 57, 50, 46);
+    lk(p, 0, 16, SA, SEMI(3)); lk(p, 0, 16, SB, SEMI(7)); lk(p, 0, 16, SC, SEMI(10));   /* Am7 */
+    lk(p, 0, 32, SA, SEMI(3)); lk(p, 0, 32, SB, SEMI(10)); lk(p, 0, 32, SC, SEMI(14));  /* Dm9 */
+    MOD(p, 0, 0, 20, 90, 70);
+    SET(p, 1, SC, 30, SH, 30, SB, 6, SE, 10, SF, 20, SG, 10, P_HOLD, 127, P_DEC, 127, P_REL, 30, P_GATE, 40,
+        P_WDTH, 30, P_VOL, 77);
+    BEAT(p, 1, "x.....x...x...x.|x.....x...x...x.|x.....x...x...x.|x.....x...x...x.",
+         41, 41, 48, 41, 45, 45, 52, 43, 38, 38, 45, 41, 34, 34, 41, 45);
+    SET(p, 2, SA, SIDW(2), SB, 50, SC, 40, SD, SIDW(0), SE, 96, SF, 68, SG, MODE4(0), SH, 40,
+        P_DEC, 40, P_REL, 30, P_GATE, 12, P_WDTH, 44, P_LPQ, 30, P_WOF, 80, P_FDEC, 40,
+        P_DTIM, 48, P_DSND, 94, P_DFB, 40, P_DBAS, 20, P_DWID, 80, P_SPU, 40, P_VOL, 89);
+    BEAT(p, 2, "xxQxxxQxxxQxxxQx|xxQxxxQxxxQxxxQx|xxQxxxQxxxQxxxQx|xxQxxxQxxxQxxxQx",
+         65, 69, 72, 76, 77, 76, 72, 69, 65, 69, 72, 76, 79, 76, 72, 69,
+         69, 72, 76, 79, 81, 79, 76, 72, 69, 72, 76, 79, 84, 79, 76, 72,
+         62, 65, 69, 72, 76, 72, 69, 65, 62, 65, 69, 72, 74, 76, 72, 69,
+         58, 62, 65, 69, 70, 69, 65, 62, 58, 62, 65, 69, 74, 72, 69, 65);
+    SET(p, 3, SA, RATIO(10), SB, 50, SC, 60, SD, RATIO(8), SE, 30, SF, 40, SG, 10, SH, MODE4(0),
+        P_DEC, 84, P_REL, 70, P_GATE, 30, P_DTIM, 64, P_DSND, 42, P_DFB, 36, P_SPU, 70, P_VOL, 64, P_PAN, 82);
+    BEAT(p, 3, "x.....x...x.....|x.......x...x...|x...x.....x.....|x.......x...x...",
+         84, 81, 79, 76, 79, 81, 77, 76, 74, 74, 77, 72);
+    SET(p, 4, SA, 104, P_DEC, 18, P_REL, 10, P_BASE, 40, P_SPU, 30, P_VOL, 32, P_PAN, 40);
+    BEAT(p, 4, "xqXxxqXxxqXxxqXx|xqXxxqXxxqXxxqXx|xqXxxqXxxqXxxqXx|xqXxxqXxxqXxx3Xx", 60);
+    SET(p, 5, SE, 70, SF, 34, SG, 20, P_DEC, 50, P_REL, 20, P_SPU, 20, P_VOL, 73);
+    BEAT(p, 5, "x.......x.x.....|x.......x.......|x.......x.x.....|x.......x....?..", 36);
 
-    /* A05 GLITCH: ratchets, chances, digital noise; the bus repeats a third of the time */
-    p = pat_new(4, "GLITCH", 140, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_FMS, M_WAV, M_VOX));
-    p->glob[G_GLCH] = 90; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 40; p->glob[G_VERB] = 30; p->glob[G_DRIV] = 40;
-    SET(p, 0, SE, 90, SF, 34, SG, 70, SB, 30, P_DEC, 74, P_DIST, 40, P_VOL, 112);
-    BEAT(p, 0, "x..x..?.x.3..x.?", 36);
-    SET(p, 1, SA, 64, SB, 90, SG, 70, P_DEC, 70, P_BITS, 60, P_XOR, 30, P_VOL, 90);
-    BEAT(p, 1, "....x..2....x.4q", 60);
-    SET(p, 2, SA, 120, P_DEC, 50, P_BASE, 100, P_VOL, 70, P_PAN, 84);
-    BEAT(p, 2, "x?x?x?x?x?x?x?Qq", 84);
-    SET(p, 3, SA, RATIO(21), SB, 80, SC, 40, SD, RATIO(9), SE, 60, SF, 30, SG, 40, SH, MODE4(3), P_DEC, 62, P_VOL, 76, P_PAN, 90);
-    BEAT(p, 3, "x.?x..x?.x?.x..x", 84, 91, 79, 96, 88, 81);
-    lk(p, 3, 3, SA, RATIO(26)); lk(p, 3, 9, P_SRR, 90); lk(p, 3, 12, SA, RATIO(13)); lk(p, 3, 15, P_XOR, 90);
-    SET(p, 4, SA, WAVE(25), SB, 90, SC, 50, SD, 60, SE, 60, SH, 80, P_DEC, 74, P_WDTH, 80, P_LPQ, 40, P_VOL, 96);
-    BEAT(p, 4, "x...x.s.x..x.s..", 36, 36, 39, 34, 36, 43);
-    SET(p, 5, SA, VOWEL(0), SB, 127, SC, 50, SE, 30, SF, 90, P_DEC, 66, P_VOL, 80, P_PAN, 40);
-    BEAT(p, 5, "......3.......2.", 72, 67);
+    trim(p, 71);
 
-    /* A06 CHROME: inharmonic bells, folded kicks, scraped metal */
-    p = pat_new(5, "CHROME", 110, MACHINES(M_GSIN, M_FMS, M_GNOI, M_WAV, M_FMD, M_GNOI));
-    p->glob[G_VERB] = 80; p->glob[G_DAMP] = 30; p->glob[G_DRIV] = 30; p->glob[G_GLCH] = 10; p->glob[G_GSIZ] = GSIZE(1);
-    SET(p, 0, SE, 64, SF, 44, SB, 70, SH, 40, P_DEC, 80, P_DIST, 30, P_VOL, 110);
-    BEAT(p, 0, "x.......x.x.....", 34);
-    SET(p, 1, SA, RATIO(8), SB, 70, SC, 76, SD, RATIO(26), SE, 50, SF, 50, SG, 10, P_DEC, 86,
-        P_SPU, 60, P_DSND, 40, P_DTIM, 12, P_DFB, 60, P_VOL, 84);
-    BEAT(p, 1, "x...x..x...x.x..", 72, 79, 75, 84, 77);
-    SET(p, 2, SA, 100, SC, 127, SD, 90, P_DEC, 60, P_BASE, 80, P_VOL, 78, P_PAN, 82);
-    BEAT(p, 2, "x.xx.x.xx.x.x.xx", 79);
-    lk(p, 2, 7, P_DEC, 74); lk(p, 2, 15, P_DEC, 76);
-    SET(p, 3, SA, WAVE(20), SB, 100, SC, 70, SD, 40, P_DEC, 76, P_VOL, 80);
-    BEAT(p, 3, "..x...x...x...x.", 48, 51, 55, 51);
-    SET(p, 4, SA, RATIO(17), SB, 110, SC, 70, SG, 60, SH, 30, P_DEC, 74, P_BASE, 50, P_PAN, 30, P_VOL, 90);
-    BEAT(p, 4, "......x.......x.", 67, 62);
-    SET(p, 5, SA, 80, SC, 60, SG, 30, P_DEC, 72, P_BASE, 52, P_VOL, 92);
-    BEAT(p, 5, "....x.......x...", 60);
-    MOD(p, 1, 1, 14, 70, 44);                  /* the bells, a slow flange */
+    /* A04 ELECTRO: electro in A minor, i VI VII v: an 808 that hums, a clap, sixteenth hats opening at the bar's end,
+     * a SID bass that jumps octaves like a machine, a robot voice answering, a cold FM arpeggio over it all */
+    p = pat_v5(3, "ELECTRO", 128, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_SID, M_VOX, M_FMD));
+    p->glob[G_LEN] = 64; p->glob[G_SWNG] = 6; p->glob[G_VERB] = 50; p->glob[G_DAMP] = 60; p->glob[G_DRIV] = 16;
+    SET(p, 0, SE, 50, SF, 60, SG, 10, SC, 40, SH, 10, P_DEC, 70, P_REL, 30, P_VOL, 98);
+    BEAT(p, 0, "x.........x.x...|x......x..x.....|x.........x.x...|x......x..x...x.", 33);
+    SET(p, 1, SA, 70, SC, 20, P_DEC, 34, P_REL, 14, P_BASE, 18, P_EQG, 70, P_SPU, 50, P_VOL, 90);
+    BEAT(p, 1, "....x.......x...|....x.......x...|....x.......x...|....x.......x.xx", 60);
+    SET(p, 2, SA, 116, P_DEC, 12, P_REL, 6, P_BASE, 36, P_VOL, 50, P_PAN, 46);
+    BEAT(p, 2, "xxXxxxXxxxXxxxXx|xxXxxxXxxxXxxxXx|xxXxxxXxxxXxxxXx|xxXxxxXxxxXxxxXx", 60);
+    for (int st = 14; st < 64; st += 16) lk(p, 2, st, P_DEC, 40);
+    SET(p, 3, SA, SIDW(1), SB, 40, SC, 30, SD, SIDW(2), SE, 32, SF, 64, SG, MODE4(0), SH, 50, P_DEC, 34, P_REL, 10,
+        P_GATE, 10, P_WDTH, 26, P_LPQ, 50, P_WOF, 84, P_FDEC, 34, P_DIST, 72, P_VOL, 127, P_LEVL, 122);
+    BEAT(p, 3, "x..x..x.x..x.x..|x..x..x.x..x..x.|x..x..x.x..x.x..|x..x..x.x.xx.x.x",
+         45, 45, 57, 45, 48, 45, 52, 41, 41, 53, 41, 45, 41, 48, 43, 43, 55, 43, 47, 43, 50, 40, 40, 52, 40, 43, 40, 47, 52, 50);
+    SET(p, 4, SA, VOWEL(0), SB, 80, SC, 30, SD, 50, SF, 80, SG, 90, SH, 0, P_DEC, 44, P_REL, 20, P_GATE, 10,
+        P_DTIM, 32, P_DSND, 92, P_DFB, 30, P_SPU, 60, P_VOL, 127, P_LEVL, 127, P_PAN, 60);
+    BEAT(p, 4, ".......x.......x|.......x......x.|.......x.......x|.......x....x..x", 76, 72, 72, 69, 74, 71, 71, 67, 76);
+    SET(p, 5, SA, RATIO(6), SB, 50, SC, 30, SD, RATIO(3), SE, 20, SF, 40, SG, 20, SH, 64, P_DEC, 30, P_REL, 20,
+        P_GATE, 8, P_WDTH, 50, P_DTIM, 48, P_DSND, 34, P_DFB, 40, P_VOL, 103, P_PAN, 80);
+    BEAT(p, 5, "x.xx.xx.xx.xx.xx|x.xx.xx.xx.xx.xx|x.xx.xx.xx.xx.xx|x.xx.xx.xx.xx.xx",
+         69, 72, 76, 72, 81, 76, 72, 76, 69, 72, 76, 65, 69, 72, 69, 77, 72, 69, 72, 65, 69, 72,
+         67, 71, 74, 71, 79, 74, 71, 74, 67, 71, 74, 64, 67, 71, 67, 76, 71, 67, 71, 64, 67, 71);
+    trim(p, 47);
 
-    /* A07 ACID: a SID line through a screaming filter, slides and accents */
-    p = pat_new(6, "ACID", 132, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_SID, M_ENS, M_GNOI));
-    p->glob[G_ACNT] = 90; p->glob[G_DRIV] = 50; p->glob[G_VERB] = 30;
-    SET(p, 0, SE, 72, SF, 42, SG, 40, P_DEC, 80, P_VOL, 114);
-    BEAT(p, 0, "x...x...x...x...", 36);
-    SET(p, 1, SA, 76, P_DEC, 66, P_BASE, 50, P_VOL, 90);
-    BEAT(p, 1, "....x.......3...", 60);
-    SET(p, 2, SA, 112, P_DEC, 54, P_BASE, 96, P_VOL, 78);
-    BEAT(p, 2, "..x...x...x...x.", 80);
-    SET(p, 3, SA, SIDW(1), SD, SIDW(1), SE, 64, SF, 66, SG, MODE4(0), SH, 0, P_HOLD, 127, P_DEC, 127, P_REL, 30,
-        P_WDTH, 56, P_LPQ, 96, P_FDEC, 58, P_WOF, 88, P_DIST, 30, P_VOL, 52, P_GATE, 13);
-    BEAT(p, 3, "xXsx.xSx.xsXx.sx", 36, 48, 46, 36, 39, 43, 41, 36, 48, 44, 36, 39);
-    lfo(p, 3, 0, P_WDTH, 0, 0, 12, 84, 0);
-    SET(p, 4, SA, SEMI(3), SB, SEMI(7), SC, SEMI(10), P_DEC, 78, P_WDTH, 80, P_SPU, 50, P_DSND, 60, P_DTIM, 12, P_DFB, 60, P_VOL, 76);
-    BEAT(p, 4, "......h.........", 60);
-    SET(p, 5, SA, 118, P_DEC, 62, P_BASE, 100, P_VOL, 66, P_PAN, 84);
-    BEAT(p, 5, "x?x?x?x?x?x?x?x?", 84);
+    /* A05 GLITCH: glitch hop in C minor: a kick that stutters, a snare crushed to bits, pitched ticks scattered across
+     * the field, 8-bit chord chops in sixteenth echoes, a SID bass that slides, an FM lead that ratchets; the bus
+     * repeats in 32nds and crunches */
+    p = pat_v5(4, "GLITCH", 96, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_WAV, M_SID, M_FMS));
+    p->glob[G_LEN] = 64; p->glob[G_GLCH] = 60; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 30; p->glob[G_DRIV] = 20;
+    p->glob[G_VERB] = 50; p->glob[G_SWNG] = 20;
+    SET(p, 0, SE, 70, SF, 30, SG, 50, SC, 20, P_DEC, 40, P_REL, 10, P_DIST, 72, P_VOL, 127);
+    BEAT(p, 0, "x.......x.x..2..|x......x..x.....|x.......x.x..3..|x..x....x.x.4...", 36);
+    SET(p, 1, SA, 60, SG, 80, P_DEC, 38, P_REL, 14, P_BITS, 30, P_XOR, 20, P_SPU, 40, P_VOL, 107);
+    BEAT(p, 1, "....x.......x...|....x..q....x..2|....x.......x...|....x.4..x.3x..x", 60);
+    SET(p, 2, SA, 90, SB, 80, P_DEC, 18, P_REL, 8, P_BASE, 16, P_VOL, 85);
+    BEAT(p, 2, "x?x?2.x?xq3?x.x4|x?x?x.x?2q3?x.x?|x?x?2.x?xq3?x.x4|x?2?x.x?xq3?x4x?", 60);
+    lfo(p, 2, 0, P_PAN, 6, 3, 64, 100, 0);
+    SET(p, 3, SA, WAVE(26), SB, 64, SE, 40, SH, 60, P_DEC, 36, P_REL, 20, P_GATE, 8, P_WDTH, 48, P_LPQ, 30, P_WOF, 80,
+        P_FDEC, 30, P_DTIM, 16, P_DSND, 96, P_DFB, 40, P_SPU, 40, P_VOL, 92);
+    BEAT(p, 3, "x..x..x...x..x..|x..x..x...x.xx..|x..x..x...x..x..|x..x..x...xx.x.x",
+         60, 63, 67, 63, 60, 56, 60, 63, 60, 56, 63, 63, 67, 70, 67, 63, 58, 62, 65, 62, 58, 65, 70);
+    SET(p, 4, SA, SIDW(2), SB, 30, SC, 40, SD, SIDW(1), SE, 64, SF, 66, SG, MODE4(0), SH, 50, P_DEC, 36, P_REL, 10,
+        P_GATE, 12, P_PORT, 20, P_WDTH, 26, P_LPQ, 40, P_WOF, 82, P_FDEC, 30, P_DIST, 74, P_VOL, 126, P_LEVL, 103);
+    BEAT(p, 4, "x...x.s.x...x..x|x...x.s.x..xx...|x...x.s.x...x..x|x..xx.s.x.x.x...",
+         36, 36, 39, 36, 43, 48, 32, 32, 36, 32, 39, 44, 39, 39, 43, 39, 46, 51, 34, 34, 34, 38, 34, 41, 46);
+    SET(p, 5, SA, RATIO(9), SB, 50, SC, 50, SD, RATIO(6), SE, 30, SF, 30, SG, 10, SH, MODE4(0), P_DEC, 40, P_REL, 30,
+        P_GATE, 12, P_DTIM, 24, P_DSND, 96, P_DFB, 50, P_DWID, 90, P_SPU, 50, P_VOL, 73, P_PAN, 72);
+    BEAT(p, 5, "x..2..x..x.3....|x.....x.x.......|x..2..x..x.3....|x.....x.x..4....",
+         72, 75, 79, 77, 75, 72, 70, 72, 75, 79, 82, 74, 77, 70, 72);
+    trim(p, 52);
 
-    /* A08 2STEP: swung garage, a skipping kick, a chopped voice, organ chords */
-    p = pat_new(7, "2STEP", 134, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_GSIN, M_VOX, M_ENS));
-    p->glob[G_SWNG] = 60; p->glob[G_VERB] = 50; p->glob[G_DAMP] = 60; p->glob[G_TAPE] = 10;
-    SET(p, 0, SE, 60, SF, 44, SG, 30, P_DEC, 80, P_VOL, 112);
-    BEAT(p, 0, "x.........x..q..", 36);
-    SET(p, 1, SA, 70, P_DEC, 70, P_BASE, 48, P_VOL, 92);
-    BEAT(p, 1, "....x.......x...", 60);
-    SET(p, 2, SA, 120, P_DEC, 54, P_BASE, 90, P_VOL, 88, P_PAN, 80);
-    BEAT(p, 2, "x.xQx.xxx.x?x.xx", 84);
-    SET(p, 3, SE, 0, SC, 60, P_HOLD, 40, P_DEC, 92, P_VOL, 104, P_PORT, 30);
-    BEAT(p, 3, "x.....x...x.s...", 38, 38, 41, 33);
-    SET(p, 4, SA, VOWEL(1), SB, 90, SC, 50, SD, 80, SE, 20, SF, 80, SG, 30, SH, 30, P_DEC, 70, P_VOL, 86, P_PAN, 48);
-    BEAT(p, 4, "..x....x..x....3", 74, 72, 69, 74);
-    SET(p, 5, SA, SEMI(3), SB, SEMI(7), SC, SEMI(14), P_DEC, 74, P_WDTH, 90, P_DSND, 50, P_DTIM, 12, P_DFB, 50, P_VOL, 76);
-    BEAT(p, 5, "...x.....x..x...", 62, 60, 62);
-    MOD(p, 5, 0, 44, 64, 60);                  /* the organ, chorused */
-    SET(p, 5, P_VOL, 84);
+    /* A06 PRISM: melodic IDM in E dorian: an FM arpeggio of twelve notes turning against the sixteen-step bar, a
+     * slow detuned digital line under it, a SID bass that slides and syncopates, a voice calling and answering;
+     * kicks that never land the same, a crushed snare; the bus repeats in 32nds */
+    p = pat_v5(5, "PRISM", 104, MACHINES(M_GSIN, M_GNOI, M_FMS, M_WAV, M_SID, M_VOX));
+    p->glob[G_LEN] = 64; p->glob[G_GLCH] = 30; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 20; p->glob[G_VERB] = 70;
+    p->glob[G_DAMP] = 50; p->glob[G_DRIV] = 10;
+    SET(p, 0, SE, 80, SF, 24, SG, 40, SC, 10, P_DEC, 32, P_REL, 8, P_DIST, 70, P_VOL, 127);
+    BEAT(p, 0, "x..x....x.?..x..|x.....x..x..x...|x..x....x.?...x.|x.....x..x..3...", 36);
+    SET(p, 1, SA, 72, SC, 30, SG, 60, P_DEC, 42, P_REL, 16, P_BITS, 40, P_SPU, 40, P_VOL, 103, P_PAN, 58);
+    BEAT(p, 1, "....x.......x..2|....x..q....x...|....x.......x.2.|....x..x....x.4x", 60);
+    SET(p, 2, SA, RATIO(6), SB, 60, SC, 40, SD, RATIO(13), SE, 26, SF, 16, SG, 8, SH, MODE4(0),
+        P_DEC, 48, P_REL, 30, P_GATE, 10, P_DTIM, 40, P_DSND, 96, P_DFB, 46, P_DWID, 80, P_SPU, 50, P_VOL, 57);
+    BEAT(p, 2, "xx.xx.xx.xx.xx.x|xx.xx.xx.xx.xx.x|xx.xx.xx.xx.xx.x|xx.xx.xx.xx.x?.x",
+         76, 79, 83, 86, 85, 83, 81, 78, 76, 83, 79, 81);
+    SET(p, 3, SA, WAVE(5), SB, 84, SC, 80, SF, 70, SG, 90, P_ATK, 60, P_HOLD, 127, P_DEC, 127, P_REL, 84,
+        P_GATE, 127, P_WDTH, 40, P_LPQ, 20, P_SPU, 90, P_VOL, 51);
+    BEAT(p, 3, "x...............|x...............|x...............|x.......x.......", 64, 62, 60, 59, 62);
+    MOD(p, 3, 0, 16, 100, 80);
+    SET(p, 4, SA, SIDW(2), SB, 30, SC, 50, SD, SIDW(1), SE, 64, SF, 67, SG, MODE4(0), SH, 60,
+        P_DEC, 40, P_REL, 20, P_GATE, 20, P_PORT, 30, P_WDTH, 28, P_LPQ, 50, P_WOF, 82, P_FDEC, 40, P_DIST, 72,
+        P_VOL, 117);
+    BEAT(p, 4, "x..x..s...x.x...|x..x..s...x.x...|x..x..s...x.x...|x..x..s...x.x...",
+         40, 40, 52, 43, 45, 38, 38, 50, 45, 47, 36, 36, 48, 43, 45, 35, 35, 47, 42, 43);
+    SET(p, 5, SA, VOWEL(0), SB, 94, SC, 60, SE, 20, SF, 70, SG, 40, SH, 50, P_ATK, 30, P_HOLD, 127, P_DEC, 127,
+        P_REL, 60, P_GATE, 40, P_DTIM, 64, P_DSND, 30, P_DFB, 40, P_SPU, 90, P_VOL, 83, P_PAN, 50);
+    BEAT(p, 5, "................|....x.....x...x.|................|x.....x...x.....", 71, 69, 67, 76, 74, 71);
 
-    /* A09 GROOVE: rolling techno: a round kick, a flammed clap, shuffled hats through a phaser, a bass on the
-     * off-sixteenths, FM congas, a chord stab into the delay */
-    p = pat_now(8, "GROOVE", 126, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_SID, M_FMS, M_ENS));
-    p->glob[G_SWNG] = 24; p->glob[G_VERB] = 64; p->glob[G_DAMP] = 50; p->glob[G_DRIV] = 22; p->glob[G_TAPE] = 6;
-    p->glob[G_GLCH] = 6; p->glob[G_GSIZ] = GSIZE(2);
-    SET(p, 0, SE, 66, SF, 38, SG, 36, SC, 30, P_DEC, 32, P_REL, 10, P_DIST, 18, P_VOL, 114);
-    BEAT(p, 0, "X...x...x...x...", 36);
-    SET(p, 1, SA, 72, SC, 24, P_DEC, 22, P_REL, 14, P_BASE, 40, P_SPU, 44, P_VOL, 92, P_PAN, 58);
-    BEAT(p, 1, "....x.......2...", 60);
-    SET(p, 2, SA, 112, SG, 10, P_DEC, 4, P_REL, 4, P_BASE, 84, P_VOL, 90, P_PAN, 74);
-    MOD(p, 2, 2, 30, 90, 70);
-    BEAT(p, 2, "x.X.x.Xxx.X.x.X?", 84);
-    lk(p, 2, 2, P_DEC, 18); lk(p, 2, 6, P_DEC, 18); lk(p, 2, 10, P_DEC, 22); lk(p, 2, 14, P_DEC, 18);
-    SET(p, 3, SA, SIDW(1), SB, 64, SC, 30, SD, SIDW(2), SE, 32, SH, 50, P_DEC, 16, P_REL, 8, P_WDTH, 36, P_LPQ, 64,
-        P_FDEC, 46, P_WOF, 92, P_DIST, 20, P_VOL, 96);
-    BEAT(p, 3, ".xx..xx..xS..x.x", 33, 45, 33, 33, 36, 33, 45, 33);
-    lfo(p, 3, 0, P_WDTH, 1, 0, 32, 84, 0);
-    SET(p, 4, SA, RATIO(3), SB, 70, SC, 30, SD, RATIO(6), SE, 30, SF, 20, SH, MODE4(0), P_DEC, 14, P_REL, 8,
-        P_DSND, 30, P_DTIM, 12, P_DFB, 40, P_VOL, 78, P_PAN, 40);
-    BEAT(p, 4, "..x..x....x..xx.", 64, 67, 60, 64, 69);
-    SET(p, 5, SA, SEMI(3), SB, SEMI(7), SC, SEMI(10), SD, 40, SE, 40, P_DEC, 24, P_REL, 20, P_WDTH, 50, P_LPQ, 30,
-        P_DSND, 60, P_DTIM, 12, P_DFB, 70, P_SPU, 40, P_VOL, 70, P_PAN, 82);
-    MOD(p, 5, 0, 40, 70, 60);
-    BEAT(p, 5, "......x.......x.", 57, 55);
+    trim(p, 57);
 
-    /* A10 HYPRPOP: a hard bouncy kick, plastic bass, major chords, chipmunk squeaks */
-    p = pat_new(9, "HYPRPOP", 150, MACHINES(M_GSIN, M_FMD, M_GNOI, M_ENS, M_FMS, M_VOX));
-    p->glob[G_VERB] = 60; p->glob[G_DAMP] = 40; p->glob[G_DRIV] = 30; p->glob[G_GLCH] = 10; p->glob[G_GSIZ] = GSIZE(1);
-    SET(p, 0, SE, 100, SF, 30, SG, 60, P_DEC, 74, P_DIST, 50, P_VOL, 114);
-    BEAT(p, 0, "x..x..x...x..x..", 36);
-    SET(p, 1, SA, RATIO(6), SB, 70, SC, 50, SH, 96, P_DEC, 70, P_VOL, 96, P_PORT, 20);
-    BEAT(p, 1, "x.sx..x.sx..x.s.", 36, 43, 48, 46, 36, 43, 41, 39);
-    SET(p, 2, SA, 72, P_DEC, 64, P_BASE, 50, P_VOL, 90);
-    BEAT(p, 2, "....2.......2...", 60);
-    SET(p, 3, SA, SEMI(4), SB, SEMI(7), SC, SEMI(12), SD, 60, P_HOLD, 30, P_DEC, 78, P_WDTH, 100, P_SPU, 60, P_VOL, 74);
-    BEAT(p, 3, "x.....x.....x...", 64, 67, 62);
-    SET(p, 4, SA, RATIO(11), SB, 60, SC, 40, P_DEC, 74, P_DSND, 70, P_DTIM, 6, P_DFB, 60, P_VOL, 70, P_PAN, 84);
-    BEAT(p, 4, "x.xx.x.xx.x.x.xx", 76, 79, 83, 88, 83, 79);
-    SET(p, 5, SA, VOWEL(3), SB, 100, SC, 40, SD, 100, P_PTCH, 76, P_DEC, 70, P_VOL, 100, P_PAN, 44);
-    BEAT(p, 5, "......x.......x.", 79, 84);
-    MOD(p, 3, 0, 40, 70, 50);                  /* the chords, chorused */
+    /* A07 FOG: deep dub techno in F minor, all haze: one minor-ninth chord thrown into a three-eighths echo that
+     * barely lets go, its filter drifting; a sub, hats and a shaker in the shuffle, a voice far off; tape and hiss */
+    p = pat_v5(6, "FOG", 116, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_GSIN, M_VOX));
+    p->glob[G_LEN] = 64; p->glob[G_HISS] = 30; p->glob[G_TAPE] = 24; p->glob[G_VERB] = 80; p->glob[G_DAMP] = 80;
+    p->glob[G_SWNG] = 20;
+    SET(p, 0, SE, 60, SF, 36, SC, 40, SG, 10, P_DEC, 40, P_REL, 12, P_VOL, 126);
+    BEAT(p, 0, "x...x...x...x...|x...x...x...x..q|x...x...x...x...|x...x...x.q.x...", 36);
+    SET(p, 1, SA, 90, P_DEC, 26, P_REL, 12, P_BASE, 28, P_SPU, 50, P_VOL, 59, P_PAN, 56);
+    BEAT(p, 1, "..x...x...x...x.|..x..qx...x...x.|..x...x...x..qx.|..x...x...x...xq", 60);
+    SET(p, 2, SA, 110, P_DEC, 10, P_REL, 6, P_BASE, 38, P_VOL, 63, P_PAN, 80);
+    BEAT(p, 2, "qxqxqxqxqxqxqxqx|qxqxqxqxqxqxqxqx|qxqxqxqxqxqxqxqx|qxqxqxqxqxqxqxqx", 60);
+    SET(p, 3, SA, SEMI(3), SB, SEMI(10), SC, SEMI(14), SD, 40, SE, 10, SG, 100, SH, 10, P_DEC, 50, P_REL, 30,
+        P_GATE, 8, P_WDTH, 30, P_LPQ, 36, P_WOF, 80, P_FDEC, 40, P_DTIM, 96, P_DSND, 98, P_DFB, 60, P_DBAS, 44,
+        P_DWID, 30, P_SPU, 90, P_VOL, 104);
+    BEAT(p, 3, "x.....x.........|...x.......x....|x.....x.........|...x.....x......", 53, 53, 53, 53, 53, 53, 53, 51);
+    lk(p, 3, 57, SA, SEMI(4)); lk(p, 3, 57, SB, SEMI(7)); lk(p, 3, 57, SC, SEMI(11));   /* Ebmaj7 */
+    lfo(p, 3, 0, P_WDTH, 0, 0, 6, 74, 0);
+    SET(p, 4, SC, 30, SH, 10, P_HOLD, 127, P_DEC, 127, P_REL, 30, P_GATE, 60, P_WDTH, 22, P_VOL, 72);
+    BEAT(p, 4, "x.......x.......|x.......x.....x.|x.......x.......|x.......x...x...", 41, 41, 41, 41, 44, 41, 41, 41, 39, 39);
+    SET(p, 5, SA, VOWEL(5), SB, 70, SC, 80, SE, 60, SF, 60, SG, 30, SH, 30, P_ATK, 70, P_HOLD, 127, P_DEC, 127,
+        P_REL, 90, P_GATE, 127, P_SPU, 110, P_VOL, 85);
+    BEAT(p, 5, "x...............|................|x...............|........x.......", 68, 65, 63);
+    trim(p, 71);
 
-    /* A11 DUB: dub techno: a deep soft kick, a rim in the delay, shakers, the chord stab: chorused, filtered by a
-     * slow LFO, into a long dark echo and the reverb; a sub under it, blips of FM in the echo, tape and dust */
-    p = pat_now(10, "DUB", 118, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_GSIN, M_FMS));
-    p->glob[G_LEN] = 32; p->glob[G_TAPE] = 40; p->glob[G_VERB] = 92; p->glob[G_DAMP] = 84; p->glob[G_HISS] = 22;
-    p->glob[G_DRIV] = 12; p->glob[G_SWNG] = 12;
-    SET(p, 0, SE, 48, SF, 46, SG, 8, SC, 70, P_DEC, 36, P_REL, 14, P_VOL, 110);
-    BEAT(p, 0, "x...x...x...x...|x...x...x...x...", 36);
-    SET(p, 1, SA, 96, SC, 60, SD, 40, P_DEC, 6, P_REL, 4, P_BASE, 70, P_DSND, 90, P_DTIM, 12, P_DFB, 96,
-        P_DBAS, 40, P_DWID, 40, P_SPU, 50, P_VOL, 72, P_PAN, 40);
-    BEAT(p, 1, "...x..x....x..x.|...x..x.....x..q", 72);
-    SET(p, 2, SA, 116, SG, 0, P_DEC, 4, P_REL, 6, P_BASE, 82, P_VOL, 80, P_PAN, 84);
-    MOD(p, 2, 2, 20, 100, 60);
-    BEAT(p, 2, "xqx?xqx?xqx?xqx?|xqx?xqx?xqx?xqxx", 84);
-    SET(p, 3, SA, SEMI(3), SB, SEMI(7), SC, SEMI(10), SD, 34, SE, 30, P_DEC, 26, P_REL, 22, P_WDTH, 40, P_LPQ, 46,
-        P_DSND, 110, P_DTIM, 12, P_DFB, 104, P_DBAS, 30, P_DWID, 50, P_SPU, 70, P_VOL, 80, P_PAN, 60);
-    MOD(p, 3, 0, 30, 80, 64);
-    BEAT(p, 3, "..x.....x..x....|..x.....x.....x.", 57, 57, 57, 55);
-    lfo(p, 3, 0, P_WDTH, 1, 0, 16, 96, 0);
-    SET(p, 4, SE, 0, SC, 60, P_HOLD, 6, P_DEC, 40, P_REL, 20, P_VOL, 78);
-    BEAT(p, 4, "x.......x.x.....|x.......x.....x.", 33, 33, 36, 33, 31);
-    SET(p, 5, SA, RATIO(9), SB, 60, SC, 30, SD, RATIO(3), SE, 40, P_DEC, 12, P_REL, 10, P_DSND, 100, P_DTIM, 24,
-        P_DFB, 90, P_SPU, 60, P_VOL, 64, P_PAN, 90);
-    BEAT(p, 5, "......e.....q...|.........e....q.", 81, 76, 84);
+    /* A08 LIQUID: liquid jungle in D-flat at 174: an electric-piano arpeggio through Dbmaj9 Bbm9 Gbmaj7 Absus, a
+     * low saw sliding under it, a voice singing the melody into the reverb; a rolling break; the SPU's crunch */
+    p = pat_v5(7, "LIQUID", 174, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_FMS, M_SAW, M_VOX));
+    p->glob[G_LEN] = 64; p->glob[G_ADPC] = 30; p->glob[G_VERB] = 90; p->glob[G_DAMP] = 60; p->glob[G_TAPE] = 8;
+    SET(p, 0, SE, 80, SF, 22, SG, 40, SC, 20, P_DEC, 28, P_REL, 8, P_DIST, 66, P_VOL, 127);
+    BEAT(p, 0, "x.........x.....|..x.......x.....|x.........x.....|..x.....x.x.....", 36);
+    SET(p, 1, SA, 80, SC, 30, SD, 50, SE, 30, SF, 20, SG, 20, P_DEC, 30, P_REL, 12, P_BASE, 20, P_EQG, 70,
+        P_SPU, 70, P_VOL, 88);
+    BEAT(p, 1, "....x.......x...|....x..q....x..q|....x.......x...|....x..q.x..x.2x", 60);
+    SET(p, 2, SA, 120, P_DEC, 18, P_REL, 8, P_BASE, 36, P_VOL, 66, P_PAN, 40);
+    BEAT(p, 2, "x.x.x.x.x.x.x.x.|x.xqx.x.x.xqx.x.|x.x.x.x.x.x.x.x.|x.xqx.x.x.xqx.xq", 60);
+    SET(p, 3, SA, RATIO(3), SB, 40, SC, 50, SD, RATIO(15), SE, 16, SF, 10, SH, MODE4(0), P_DEC, 56, P_REL, 40,
+        P_GATE, 14, P_SPU, 70, P_VOL, 50);
+    BEAT(p, 3, "x.x.x.x.x.x.x.x.|x.x.x.x.x.x.x.x.|x.x.x.x.x.x.x.x.|x.x.x.x.x.x.x.x.",
+         61, 65, 68, 72, 75, 72, 68, 65, 58, 61, 65, 68, 72, 68, 65, 61, 54, 58, 61, 65, 70, 65, 61, 58,
+         56, 61, 63, 66, 68, 66, 63, 61);
+    MOD(p, 3, 0, 30, 60, 60);
+    SET(p, 4, SA, 80, SB, 40, SD, 20, SF, 60, SH, 64, P_HOLD, 127, P_DEC, 127, P_REL, 30, P_GATE, 100, P_PORT, 30,
+        P_WDTH, 18, P_LPQ, 10, P_DIST, 70, P_VOL, 127, P_LEVL, 119);
+    BEAT(p, 4, "x.......s.......|x.......s.......|x.......s.......|x.......s...s...", 37, 37, 34, 34, 30, 30, 32, 32, 35);
+    SET(p, 5, SA, VOWEL(0), SB, 80, SC, 70, SE, 40, SF, 70, SG, 20, SH, 50, P_ATK, 40, P_HOLD, 127, P_DEC, 127,
+        P_REL, 70, P_GATE, 40, P_DTIM, 96, P_DSND, 94, P_DFB, 44, P_SPU, 110, P_VOL, 61, P_PAN, 50);
+    BEAT(p, 5, "x.......x...x...|x...............|x.......x...x...|x......x........", 77, 75, 72, 73, 77, 80, 77, 75, 73);
+    trim(p, 87);
 
-    /* A12 CHIP: 8-bit drums, SID arps, a square lead with vibrato */
-    p = pat_new(11, "CHIP", 150, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_SID, M_SID, M_SID));
-    p->glob[G_ADPC] = 30; p->glob[G_VERB] = 20;
-    SET(p, 0, SE, 80, SF, 36, P_DEC, 74, P_BITS, 90, P_VOL, 110);
-    BEAT(p, 0, "x...x...x...x.x.", 36);
-    SET(p, 1, SB, 80, SG, 110, SA, 80, P_DEC, 70, P_VOL, 88);
-    BEAT(p, 1, "....x.......x..x", 60);
-    SET(p, 2, SG, 127, SA, 120, P_DEC, 54, P_VOL, 70);
-    BEAT(p, 2, "x.x.x.x.x.x.x.x.", 84);
-    SET(p, 3, SA, SIDW(2), SB, 32, SC, 60, SH, 0, P_HOLD, 10, P_DEC, 62, P_VOL, 70, P_PAN, 84);
-    BEAT(p, 3, "xxxxxxxxxxxxxxxx", 72, 76, 79, 84, 72, 76, 79, 84, 70, 74, 77, 82, 70, 74, 77, 82);
-    SET(p, 4, SA, SIDW(0), SH, 0, P_HOLD, 30, P_DEC, 74, P_VOL, 100);
-    BEAT(p, 4, "x.x.x.x.x.x.x.x.", 36, 36, 43, 43, 41, 41, 39, 39);
-    SET(p, 5, SA, SIDW(2), SB, 64, SH, 0, P_HOLD, 40, P_DEC, 80, P_VOL, 84, P_PAN, 44);
-    BEAT(p, 5, "x.x.x..xx.x.x...", 72, 74, 76, 79, 77, 76, 74, 72);
-    lfo(p, 5, 0, P_PTCH, 1, 2, 64, 66, 0);
+    /* A09 DREXC: deep-sea electro in E minor: an 808 kick long and low, a clap, a SID bass squelching and sliding,
+     * a dark string pad slow through Em C D Bm, an aquatic digital lead in dotted echoes */
+    p = pat_v5(8, "DREXC", 132, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_SID, M_ENS, M_WAV));
+    p->glob[G_LEN] = 64; p->glob[G_VERB] = 70; p->glob[G_DAMP] = 60; p->glob[G_DRIV] = 14; p->glob[G_SWNG] = 4;
+    SET(p, 0, SE, 50, SF, 60, SG, 10, SC, 40, SH, 10, P_DEC, 76, P_REL, 30, P_VOL, 91);
+    BEAT(p, 0, "x.....x...x.....|x.....x.......x.|x.....x...x.....|x.....x...x..x..", 28);
+    SET(p, 1, SA, 70, SC, 40, P_DEC, 30, P_REL, 12, P_BASE, 20, P_SPU, 60, P_VOL, 85);
+    BEAT(p, 1, "....x.......x...|....x.......x...|....x.......x...|....x.......x..x", 60);
+    SET(p, 2, SA, 118, P_DEC, 12, P_REL, 6, P_BASE, 36, P_VOL, 61, P_PAN, 54);
+    BEAT(p, 2, "x.x.xqx.x.x.xqx.|x.x.xqx.x.x.xqx.|x.x.xqx.x.x.xqx.|x.x.xqx.x.xxxqx.", 60);
+    SET(p, 3, SA, SIDW(1), SB, 40, SC, 20, SD, SIDW(1), SE, 64, SF, 68, SG, MODE4(0), SH, 60, P_DEC, 30, P_REL, 10,
+        P_GATE, 10, P_PORT, 16, P_WDTH, 20, P_LPQ, 70, P_WOF, 90, P_FDEC, 24, P_DIST, 76, P_VOL, 127, P_LEVL, 125);
+    BEAT(p, 3, "x.xs.x.xx.x.xs.x|x.xs.x.xx.x.xs.x|x.xs.x.xx.x.xs.x|x.xs.x.xx.xxxs.x",
+         40, 40, 52, 43, 40, 47, 40, 45, 52, 40, 36, 36, 48, 40, 36, 43, 36, 40, 48, 36,
+         38, 38, 50, 42, 38, 45, 38, 42, 50, 38, 35, 35, 47, 38, 35, 42, 35, 38, 47, 50, 52);
+    SET(p, 4, SA, SEMI(3), SB, SEMI(7), SC, SEMI(12), SD, 60, SE, 40, SG, 100, SH, 20, P_ATK, 80, P_HOLD, 127,
+        P_DEC, 127, P_REL, 96, P_GATE, 127, P_WDTH, 30, P_LPQ, 20, P_SPU, 90, P_VOL, 82);
+    BEAT(p, 4, "x...............|x...............|x...............|x...............", 52, 48, 50, 47);
+    lk(p, 4, 16, SA, SEMI(4)); lk(p, 4, 32, SA, SEMI(4));   /* C, D: major */
+    MOD(p, 4, 0, 16, 90, 70);
+    SET(p, 5, SA, WAVE(7), SB, 80, SC, 70, SF, 66, SG, 50, P_DEC, 60, P_REL, 40, P_GATE, 20, P_DTIM, 48, P_DSND, 96,
+        P_DFB, 46, P_DWID, 90, P_SPU, 60, P_VOL, 127, P_LEVL, 104, P_PAN, 72);
+    BEAT(p, 5, "x.....x.x.......|x.....x...x.....|x.....x.x.......|x...x...x...x...", 76, 79, 78, 76, 74, 71, 76, 79, 81, 79, 78, 76, 74);
+    trim(p, 50);
 
-    /* A13 HARDGRV: hardgroove techno: a driven kick, a rumble under it from the reverb, a metal ride, hats on a
-     * three-against-four, tribal toms, a clap, the bus pushed */
-    p = pat_now(12, "HARDGRV", 142, MACHINES(M_GSIN, M_GSIN, M_GNOI, M_GNOI, M_GSIN, M_GNOI));
-    p->glob[G_DRIV] = 64; p->glob[G_VERB] = 70; p->glob[G_DAMP] = 96; p->glob[G_GLCH] = 12; p->glob[G_GSIZ] = GSIZE(2);
-    p->glob[G_TAPE] = 4; p->glob[G_SWNG] = 8;
-    SET(p, 0, SE, 84, SF, 34, SG, 64, SB, 24, SC, 20, P_DEC, 30, P_REL, 8, P_DIST, 70, P_VOL, 112);
-    BEAT(p, 0, "X...X...X...X..q", 34);
-    SET(p, 1, SE, 30, SF, 40, SB, 60, P_DEC, 36, P_REL, 20, P_WDTH, 28, P_DIST, 60, P_SPU, 110, P_VOL, 58);
-    BEAT(p, 1, "..x...x...x...x.", 34);
-    SET(p, 2, SA, 96, SC, 120, SD, 70, P_DEC, 30, P_REL, 20, P_BASE, 70, P_VOL, 66, P_PAN, 82);
-    BEAT(p, 2, "..x...x...x...X.", 84);
-    SET(p, 3, SA, 122, SG, 40, P_DEC, 2, P_REL, 4, P_BASE, 100, P_VOL, 70, P_PAN, 46);
-    BEAT(p, 3, "XxxXxxXxxXxxXxXx", 84);
-    SET(p, 4, SE, 60, SF, 44, SG, 30, P_DEC, 24, P_REL, 10, P_DSND, 30, P_DTIM, 6, P_DFB, 40, P_VOL, 84, P_PAN, 30);
-    BEAT(p, 4, "..x..x.x..x..x.2", 45, 48, 52, 45, 50, 48);
-    SET(p, 5, SA, 70, SC, 30, P_DEC, 24, P_REL, 16, P_BASE, 46, P_DIST, 40, P_SPU, 70, P_VOL, 72);
-    BEAT(p, 5, "....x.......x.3.", 60);
-
-    /* A14 IDM: broken and kept moving: a kick that never lands the same, a crushed snare, hats in ratchets and
-     * chances, an FM bell arp, a scanned digital pad in a chorus, SID blips; the bus repeats and crunches */
-    p = pat_now(13, "IDM", 112, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_FMS, M_WAV, M_SID));
-    p->glob[G_GLCH] = 56; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 36; p->glob[G_VERB] = 70; p->glob[G_DAMP] = 40;
-    p->glob[G_DRIV] = 30; p->glob[G_LEN] = 32;
-    SET(p, 0, SE, 90, SF, 30, SG, 70, SB, 40, P_DEC, 26, P_REL, 6, P_DIST, 30, P_VOL, 110);
-    BEAT(p, 0, "x..x.?..x.2..x.?|x....x?.x..3.h..", 36);
-    lk(p, 0, 5, SE, 120); lk(p, 0, 13, SE, 50); lk(p, 0, 21, P_PTCH, 52);
-    SET(p, 1, SA, 70, SB, 60, SG, 90, P_DEC, 18, P_REL, 8, P_BITS, 50, P_XOR, 24, P_SPU, 40, P_VOL, 86, P_PAN, 56);
-    BEAT(p, 1, "....x..3.hx....4|....x.....x..2.k", 60);
-    SET(p, 2, SA, 118, SG, 60, P_DEC, 4, P_REL, 4, P_BASE, 78, P_VOL, 88);
-    BEAT(p, 2, "x?x.xq2.x?x.3qx.|x?x.4qx.x?2.xqx3", 84);
-    lfo(p, 2, 0, P_PAN, 6, 3, 64, 120, 0);
-    SET(p, 3, SA, RATIO(13), SB, 70, SC, 40, SD, RATIO(26), SE, 30, SF, 30, SH, MODE4(1), P_DEC, 16, P_REL, 14,
-        P_DSND, 50, P_DTIM, 6, P_DFB, 60, P_SPU, 40, P_VOL, 70, P_PAN, 76);
-    BEAT(p, 3, "x.xx.x.xx.x.x.xx|x.x.xx.x.xx.x?xx", 72, 79, 76, 84, 81, 72, 88, 79, 76, 91);
-    lfo(p, 3, 0, SB, 5, 2, 50, 100, 0);
-    SET(p, 4, SA, WAVE(7), SB, 90, SC, 70, SE, 40, SH, 60, P_ATK, 56, P_HOLD, 127, P_DEC, 127, P_REL, 50,
-        P_WDTH, 70, P_SPU, 80, P_VOL, 64, P_GATE, 110);
-    MOD(p, 4, 0, 20, 110, 80);
-    BEAT(p, 4, "x...............|........x.......", 60, 63);
-    SET(p, 5, SA, SIDW(2), SB, 30, SC, 60, SH, 0, P_DEC, 10, P_REL, 8, P_DSND, 70, P_DTIM, 9, P_DFB, 70, P_VOL, 60, P_PAN, 30);
-    BEAT(p, 5, "..e...q..2..e...|.q....e...2...q.", 96, 103, 91, 108, 98);
-
-    /* A15 DUBSTEP: half time at 140: the kick on one, a big snare on three, a supersaw growl wobbling on the
-     * eighths with a sub under it, a vowel that talks, hats that roll */
-    p = pat_now(14, "DUBSTEP", 140, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_SAW, M_GSIN, M_VOX));
-    p->glob[G_DRIV] = 50; p->glob[G_VERB] = 66; p->glob[G_DAMP] = 60; p->glob[G_GLCH] = 16; p->glob[G_GSIZ] = GSIZE(2);
-    p->glob[G_LEN] = 32;
-    SET(p, 0, SE, 92, SF, 32, SG, 60, SB, 20, P_DEC, 32, P_REL, 8, P_DIST, 40, P_VOL, 114);
-    BEAT(p, 0, "x.........x.....|x.......q.......", 34);
-    SET(p, 1, SA, 66, SC, 30, SE, 40, SF, 30, P_DEC, 30, P_REL, 20, P_BASE, 36, P_DIST, 50, P_SPU, 64, P_VOL, 104);
-    BEAT(p, 1, "........X.......|........X.......", 60);
-    SET(p, 2, SA, 116, P_DEC, 3, P_REL, 4, P_BASE, 96, P_VOL, 64, P_PAN, 78);
-    BEAT(p, 2, "..x...x.3.x...4.|..x...x...x.4.3.", 84);
-    SET(p, 3, SA, 120, SB, 40, SC, 100, SD, 10, SE, 80, P_HOLD, 127, P_DEC, 127, P_REL, 16,
-        P_WDTH, 40, P_LPQ, 84, P_DIST, 70, P_VOL, 53, P_GATE, 100);
-    BEAT(p, 3, "x.......x...s...|x.....x.....x...", 41, 41, 44, 41, 39, 44);
-    lfo(p, 3, 0, P_WDTH, 1, 3, 64, 120, 1);
-    lk(p, 3, 8, P_LFO + L_MULT, enc(4, 8)); lk(p, 3, 22, P_LFO + L_MULT, enc(4, 8)); lk(p, 3, 28, P_LFO + L_SPD, 96);
-    SET(p, 4, SE, 0, SC, 40, P_HOLD, 127, P_DEC, 127, P_REL, 14, P_VOL, 52, P_GATE, 100);
-    BEAT(p, 4, "x.......x...s...|x.....x.....x...", 29, 29, 32, 29, 27, 32);
-    SET(p, 5, SA, VOWEL(5), SB, 100, SC, 30, SF, 60, SG, 90, P_DEC, 20, P_REL, 12, P_DIST, 40, P_SPU, 50, P_VOL, 80, P_PAN, 56);
-    BEAT(p, 5, "....x.......x.x.|....x.......x...", 41, 44, 41, 39);
-    lfo(p, 5, 0, SA, 3, 3, 64, 110, 1);
-
-    /* A16: empty, to start from */
-    for (int i = 0; i < 15; i++) chain_v4(&pat[i]);    /* onto the Monomachine's chain, as an old pattern would go */
-
-    /* A16 INIT: the blank kit itself, on today's chain */
-    p = &pat[15];
-    pat_init(p, "INIT");
-    static const uint8_t M16[M2K_TRACKS] = {M_GSIN, M_GNOI, M_GNOI, M_SID, M_FMS, M_ENS};
-    for (int t = 0; t < M2K_TRACKS; t++) kit_default(p, t, M16[t]);
-    p->glob[G_TMPO] = 120 - 30;
+    /* A10 STUTTR: glitch in G minor: every line stutters, by ratchet and by chance: the kick, the crushed snare,
+     * hats that come and go, a SID arpeggio in sixteenth echoes, an FM bass, bit chords; the bus repeats in 64ths */
+    p = pat_v5(9, "STUTTR", 110, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_SID, M_FMD, M_WAV));
+    p->glob[G_LEN] = 64; p->glob[G_GLCH] = 90; p->glob[G_GSIZ] = GSIZE(0); p->glob[G_ADPC] = 50; p->glob[G_DRIV] = 24;
     p->glob[G_VERB] = 40;
+    SET(p, 0, SE, 70, SF, 26, SG, 50, SC, 20, P_DEC, 34, P_REL, 8, P_DIST, 74, P_VOL, 127);
+    BEAT(p, 0, "x..x..2.x..3....|x..x....x.x...4.|x..x..2.x..3....|x.x...x...x..4..", 36);
+    SET(p, 1, SA, 64, SG, 60, P_DEC, 38, P_REL, 14, P_BITS, 40, P_XOR, 30, P_SPU, 40, P_VOL, 97);
+    BEAT(p, 1, "....x...x..x.2..|....x.3.....x...|....x...x..x.2..|....x.....4.x.3x", 60);
+    SET(p, 2, SA, 104, P_DEC, 10, P_REL, 6, P_BASE, 36, P_VOL, 50);
+    BEAT(p, 2, "x?2?x?3?x?x?2?x4|x?2?x?3?x?x?2?x4|x?2?x?3?x?x?2?x4|x?2?x?3?x?x?2?44", 60);
+    lfo(p, 2, 0, P_PAN, 6, 3, 64, 100, 0);
+    SET(p, 3, SA, SIDW(2), SB, 50, SC, 50, SD, SIDW(0), SE, 96, SF, 64, SG, MODE4(0), SH, 40, P_DEC, 30, P_REL, 20,
+        P_GATE, 8, P_WDTH, 46, P_LPQ, 30, P_WOF, 80, P_FDEC, 30, P_DTIM, 16, P_DSND, 96, P_DFB, 40, P_VOL, 88,
+        P_PAN, 60);
+    BEAT(p, 3, "xx2xxqxx3xxqxx2x|xx2xxqxx3xxqxx2x|xx2xxqxx3xxqxx2x|xx2xxqxx3xxqxx4x",
+         67, 70, 74, 79, 74, 70, 67, 62, 67, 70, 74, 77, 74, 70, 67, 70, 63, 67, 70, 75, 70, 67, 63, 58, 63, 67, 70, 74, 70, 67, 63, 67,
+         60, 63, 67, 72, 67, 63, 60, 55, 60, 63, 67, 70, 67, 63, 60, 63, 62, 66, 69, 74, 69, 66, 62, 57, 62, 66, 69, 72, 69, 66, 62, 66);
+    SET(p, 4, SA, RATIO(3), SB, 50, SC, 30, SD, RATIO(6), SE, 30, SF, 20, SG, 30, SH, 70, P_DEC, 34, P_REL, 10,
+        P_GATE, 10, P_WDTH, 28, P_LPQ, 30, P_DIST, 72, P_VOL, 127, P_LEVL, 103);
+    BEAT(p, 4, "x.....x...x..x..|x.....x..x...x..|x.....x...x..x..|x.....x..x..xx.x",
+         43, 43, 50, 46, 39, 39, 46, 43, 36, 36, 43, 39, 38, 38, 45, 42, 45, 50);
+    SET(p, 5, SA, WAVE(25), SB, 64, SE, 50, SH, 70, P_DEC, 30, P_REL, 20, P_GATE, 6, P_WDTH, 50, P_LPQ, 20,
+        P_DTIM, 8, P_DSND, 96, P_DFB, 50, P_SPU, 50, P_VOL, 111);
+    BEAT(p, 5, "x...x.x.........|x...x.x.........|x...x.x.........|x...x.x...3...4.", 70, 74, 79, 67, 70, 75, 63, 67, 72, 66, 69, 74, 69, 74);
+    trim(p, 40);
+
+    /* A11 SYRUP: warm IDM in A, worn tape: a detuned pad through Amaj7 F#m9 Dmaj7 E6/9, a nostalgic bell melody
+     * in echoes, a soft sine bass; lazy drums, a bitten snare; the tape wobbles */
+    p = pat_v5(10, "SYRUP", 96, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_FMS, M_GSIN));
+    p->glob[G_LEN] = 64; p->glob[G_TAPE] = 50; p->glob[G_HISS] = 14; p->glob[G_VERB] = 70; p->glob[G_ADPC] = 10;
+    p->glob[G_SWNG] = 24; p->glob[G_DAMP] = 60;
+    SET(p, 0, SE, 60, SF, 34, SG, 20, SC, 30, P_DEC, 40, P_REL, 10, P_VOL, 127);
+    BEAT(p, 0, "x.......x.x.....|x......x..x.....|x.......x.x.....|x......x..x..q..", 36);
+    SET(p, 1, SA, 66, SC, 30, P_DEC, 30, P_REL, 14, P_BASE, 20, P_BITS, 20, P_SPU, 60, P_VOL, 127, P_LEVL, 103);
+    BEAT(p, 1, "....x.......x...|....x.......x..q|....x.......x...|....x..q....x...", 60);
+    SET(p, 2, SA, 96, P_DEC, 18, P_REL, 8, P_BASE, 32, P_VOL, 64, P_PAN, 58);
+    BEAT(p, 2, "x.x.x.xqx.x.x.xq|x.x.x.xqx.x.x.x.|x.x.x.xqx.x.x.xq|x.x.xqxqx.x.x.x.", 60);
+    SET(p, 3, SA, SEMI(4), SB, SEMI(7), SC, SEMI(11), SD, 70, SE, 20, SG, 100, SH, 20, P_ATK, 74, P_HOLD, 127,
+        P_DEC, 127, P_REL, 90, P_GATE, 127, P_WDTH, 34, P_LPQ, 16, P_SPU, 80, P_VOL, 66);
+    BEAT(p, 3, "x...............|x...............|x...............|x...............", 57, 54, 50, 52);
+    lk(p, 3, 16, SA, SEMI(3)); lk(p, 3, 16, SB, SEMI(10)); lk(p, 3, 16, SC, SEMI(14));   /* F#m9 */
+    lk(p, 3, 48, SB, SEMI(9)); lk(p, 3, 48, SC, SEMI(14));                                /* E6/9 */
+    MOD(p, 3, 0, 14, 100, 70);
+    SET(p, 4, SA, RATIO(10), SB, 40, SC, 60, SD, RATIO(8), SE, 24, SF, 40, SH, MODE4(0), P_DEC, 76, P_REL, 60,
+        P_GATE, 20, P_DTIM, 64, P_DSND, 40, P_DFB, 40, P_SPU, 70, P_VOL, 51, P_PAN, 70);
+    BEAT(p, 4, "x.....x...x.....|x.......x.......|x.....x...x.....|x...x...x.......", 76, 73, 71, 69, 66, 76, 78, 81, 80, 76, 71);
+    SET(p, 5, SB, 6, SC, 20, SH, 20, P_HOLD, 127, P_DEC, 127, P_REL, 30, P_GATE, 40, P_WDTH, 26, P_VOL, 64);
+    BEAT(p, 5, "x.....x...x.....|x.....x...x.....|x.....x...x.....|x.....x...x...x.", 45, 45, 52, 42, 42, 49, 38, 38, 45, 40, 40, 47, 44);
+    trim(p, 74);
+
+    /* A12 SPU: a PlayStation menu at night, C major: a big slow pad through Cmaj9 Am9 Fmaj7 G6, glass bells in
+     * eighths, a choir holding the chord tones, an FM pluck answering, a sub; a brush; the SPU's reverb and grain */
+    p = pat_v5(11, "SPU", 84, MACHINES(M_GNOI, M_ENS, M_WAV, M_VOX, M_FMS, M_GSIN));
+    p->glob[G_LEN] = 64; p->glob[G_ADPC] = 50; p->glob[G_VERB] = 110; p->glob[G_DAMP] = 40; p->glob[G_TAPE] = 10;
+    SET(p, 0, SA, 100, P_DEC, 18, P_REL, 8, P_BASE, 32, P_SPU, 60, P_VOL, 22, P_PAN, 40);
+    BEAT(p, 0, "x.q.x.q.x.q.x.qx|x.q.x.q.x.q.x.q.|x.q.x.q.x.q.x.qx|x.q.x.q.x.qxx.q.", 60);
+    SET(p, 1, SA, SEMI(4), SB, SEMI(11), SC, SEMI(14), SD, 60, SE, 30, SG, 100, SH, 10, P_ATK, 90, P_HOLD, 127,
+        P_DEC, 127, P_REL, 100, P_GATE, 127, P_WDTH, 36, P_LPQ, 10, P_WOF, 76, P_FATK, 100, P_FDEC, 100, P_SPU, 110,
+        P_VOL, 56);
+    BEAT(p, 1, "x...............|x...............|x...............|x...............", 48, 45, 53, 55);
+    lk(p, 1, 16, SA, SEMI(3)); lk(p, 1, 16, SB, SEMI(10));                                /* Am9 */
+    lk(p, 1, 32, SB, SEMI(7)); lk(p, 1, 32, SC, SEMI(11));                                /* Fmaj7 */
+    lk(p, 1, 48, SB, SEMI(7)); lk(p, 1, 48, SC, SEMI(9));                                 /* G6 */
+    MOD(p, 1, 0, 12, 100, 70);
+    SET(p, 2, SA, WAVE(5), SB, 70, SC, 50, SE, 30, SF, 66, SG, 60, P_DEC, 60, P_REL, 50, P_GATE, 10, P_DTIM, 96,
+        P_DSND, 94, P_DFB, 50, P_SPU, 100, P_VOL, 58, P_PAN, 70);
+    BEAT(p, 2, "x.x.x.x.x.x.x.x.|x.x.x.x.x.x.x.x.|x.x.x.x.x.x.x.x.|x.x.x.x.x.x.x.x.",
+         72, 76, 79, 83, 86, 83, 79, 76, 69, 72, 76, 79, 83, 79, 76, 72, 65, 69, 72, 76, 79, 76, 72, 69, 67, 71, 74, 76, 79, 76, 74, 71);
+    SET(p, 3, SA, VOWEL(6), SB, 64, SC, 80, SE, 50, SF, 60, SG, 20, SH, 40, P_ATK, 80, P_HOLD, 127, P_DEC, 127,
+        P_REL, 90, P_GATE, 127, P_SPU, 120, P_VOL, 46);
+    BEAT(p, 3, "x...............|x...............|x...............|x...............", 64, 64, 69, 67);
+    SET(p, 4, SA, RATIO(6), SB, 40, SC, 40, SD, RATIO(9), SE, 20, SF, 30, SH, MODE4(0), P_DEC, 56, P_REL, 40,
+        P_GATE, 10, P_DTIM, 64, P_DSND, 40, P_DFB, 40, P_SPU, 80, P_VOL, 86, P_PAN, 56);
+    BEAT(p, 4, "......x.......x.|..........x.....|......x.......x.|..........x...x.", 79, 76, 76, 81, 79, 74, 72);
+    SET(p, 5, SC, 30, SH, 10, P_HOLD, 127, P_DEC, 127, P_REL, 60, P_GATE, 127, P_WDTH, 22, P_VOL, 65);
+    BEAT(p, 5, "x...............|x...............|x...............|x.......x.......", 36, 33, 29, 31, 38);
+    trim(p, 87);
+
+    /* A13 GROOVE: dub techno that swings, G minor: a minor-ninth stab answering the kick, thrown into the echo,
+     * turning to Ebmaj7 at the end; a SID bass that walks, a pitched hand drum, hats opening, a clap */
+    p = pat_v5(12, "GROOVE", 124, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_SID, M_GNOI));
+    p->glob[G_LEN] = 64; p->glob[G_SWNG] = 30; p->glob[G_VERB] = 60; p->glob[G_DAMP] = 70; p->glob[G_HISS] = 10;
+    SET(p, 0, SE, 70, SF, 30, SG, 30, SC, 30, P_DEC, 36, P_REL, 10, P_VOL, 127);
+    BEAT(p, 0, "x...x...x...x...|x...x...x...x...|x...x...x...x...|x...x...x...x.x.", 36);
+    SET(p, 1, SA, 72, SC, 30, P_DEC, 30, P_REL, 14, P_BASE, 20, P_SPU, 60, P_VOL, 85, P_PAN, 60);
+    BEAT(p, 1, "....x.......x...|....x.......x..q|....x.......x...|....x..q....x.x.", 60);
+    SET(p, 2, SA, 104, P_DEC, 14, P_REL, 8, P_BASE, 34, P_VOL, 48, P_PAN, 52);
+    BEAT(p, 2, "xqXqxqXqxqXqxqXq|xqXqxqXqxqXqxqXq|xqXqxqXqxqXqxqXq|xqXqxqXqxqXqxqXx", 60);
+    for (int st = 2; st < 64; st += 4) lk(p, 2, st, P_DEC, 36);
+    SET(p, 3, SA, SEMI(3), SB, SEMI(10), SC, SEMI(14), SD, 50, SE, 10, SG, 100, P_DEC, 36, P_REL, 20, P_GATE, 6,
+        P_WDTH, 36, P_LPQ, 30, P_WOF, 82, P_FDEC, 28, P_DTIM, 48, P_DSND, 96, P_DFB, 50, P_DBAS, 40, P_DWID, 40,
+        P_SPU, 60, P_VOL, 127, P_LEVL, 105);
+    BEAT(p, 3, "..x.....x..x....|..x.....x..x..x.|..x.....x..x....|..x.....x..x.x..", 55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 51, 51, 51);
+    for (int st = 56; st < 64; st++) if (p->step[3][st].flags) { lk(p, 3, st, SA, SEMI(4)); lk(p, 3, st, SB, SEMI(7)); lk(p, 3, st, SC, SEMI(11)); }
+    lfo(p, 3, 0, P_WDTH, 0, 0, 8, 74, 0);
+    SET(p, 4, SA, SIDW(2), SB, 30, SC, 30, SD, SIDW(1), SE, 32, SF, 64, SG, MODE4(0), SH, 50, P_DEC, 34, P_REL, 10,
+        P_GATE, 10, P_PORT, 14, P_WDTH, 26, P_LPQ, 40, P_WOF, 82, P_FDEC, 30, P_DIST, 72, P_VOL, 126);
+    BEAT(p, 4, "x..x..x...x.x..x|x..x..x...x.x...|x..x..x...x.x..x|x..x..x...x.x.xs",
+         43, 43, 55, 43, 46, 50, 43, 43, 55, 46, 41, 43, 43, 55, 43, 46, 50, 39, 39, 51, 39, 43, 46, 41);
+    SET(p, 5, SA, 50, SB, 40, SC, 20, P_DEC, 32, P_REL, 12, P_BASE, 8, P_SPU, 40, P_VOL, 62, P_PAN, 80);
+    BEAT(p, 5, "...x..x....x.x..|...x..x....x..x.|...x..x....x.x..|...x..x.x..x.x.x", 60, 67, 63, 67, 60, 67, 63, 60, 60, 67, 63, 67, 60, 67, 63, 67, 60, 63);
+    trim(p, 70);
+
+    /* A14 ROBOT: cold electro in C minor: a SID sequence in sixteenths through Cm Ab Bb G, a robot singing, metal
+     * stabs in eighth echoes; an 808, a snare, metallic hats */
+    p = pat_v5(13, "ROBOT", 118, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_SID, M_VOX, M_FMS));
+    p->glob[G_LEN] = 64; p->glob[G_VERB] = 50; p->glob[G_DAMP] = 50; p->glob[G_DRIV] = 10;
+    SET(p, 0, SE, 46, SF, 56, SG, 10, SC, 40, P_DEC, 66, P_REL, 26, P_VOL, 119);
+    BEAT(p, 0, "x.......x.......|x.......x..x....|x.......x.......|x.......x..x..x.", 36);
+    SET(p, 1, SA, 76, SC, 50, SD, 40, P_DEC, 36, P_REL, 14, P_BASE, 24, P_EQG, 70, P_SPU, 40, P_VOL, 95);
+    BEAT(p, 1, "....x.......x...|....x.......x...|....x.......x...|....x.......x.xx", 60);
+    SET(p, 2, SA, 110, SC, 90, SD, 70, P_DEC, 12, P_REL, 6, P_BASE, 36, P_VOL, 65, P_PAN, 46);
+    BEAT(p, 2, "x.x.x.x.x.x.x.x.|x.x.x.x.x.x.x.x.|x.x.x.x.x.x.x.x.|x.x.x.x.x.x.xxxx", 60);
+    SET(p, 3, SA, SIDW(2), SB, 50, SC, 20, SD, SIDW(2), SE, 32, SF, 64, SG, MODE4(0), SH, 50, P_DEC, 26, P_REL, 8,
+        P_GATE, 8, P_WDTH, 30, P_LPQ, 30, P_WOF, 80, P_FDEC, 26, P_VOL, 127, P_LEVL, 108);
+    BEAT(p, 3, "xxxxxxxxxxxxxxxx|xxxxxxxxxxxxxxxx|xxxxxxxxxxxxxxxx|xxxxxxxxxxxxxxxx",
+         36, 36, 48, 36, 39, 36, 43, 36, 36, 36, 48, 36, 46, 36, 43, 39, 32, 32, 44, 32, 36, 32, 39, 32, 32, 32, 44, 32, 42, 32, 39, 36,
+         34, 34, 46, 34, 38, 34, 41, 34, 34, 34, 46, 34, 44, 34, 41, 38, 31, 31, 43, 31, 35, 31, 38, 31, 31, 31, 43, 31, 41, 31, 38, 35);
+    SET(p, 4, SA, VOWEL(2), SB, 64, SD, 40, SE, 0, SF, 90, SG, 100, SH, 0, P_ATK, 4, P_HOLD, 127, P_DEC, 127,
+        P_REL, 20, P_GATE, 24, P_DTIM, 64, P_DSND, 34, P_DFB, 30, P_SPU, 50, P_VOL, 127, P_LEVL, 127);
+    BEAT(p, 4, "x...x...x.x.....|x...x...x.......|x...x...x.x.....|x...x...x...x...", 72, 70, 67, 70, 68, 67, 63, 70, 72, 74, 75, 74, 71, 67, 74);
+    SET(p, 5, SA, RATIO(17), SB, 50, SC, 30, SD, RATIO(8), SE, 40, SF, 20, SG, 20, SH, MODE4(0), P_DEC, 30, P_REL, 16,
+        P_GATE, 6, P_WDTH, 60, P_DTIM, 32, P_DSND, 96, P_DFB, 30, P_SPU, 40, P_VOL, 127, P_LEVL, 125, P_PAN, 76);
+    BEAT(p, 5, "..x.....x.....x.|..x.....x.....x.|..x.....x.....x.|..x.....x...x.x.", 72, 75, 79, 68, 72, 75, 70, 74, 77, 71, 74, 79, 74);
+    trim(p, 45);
+
+    /* A15 BRAIN: an IDM break in D dorian: kicks on conditions so no two loops match, a snare that rolls, metal
+     * flickering; a seven-note FM arpeggio turning against a ten-note rhythm, a SID bass, a metal pad; repeats */
+    p = pat_v5(14, "BRAIN", 128, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_FMD, M_SID, M_WAV));
+    p->glob[G_LEN] = 64; p->glob[G_GLCH] = 50; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 20; p->glob[G_DRIV] = 20;
+    p->glob[G_VERB] = 60;
+    SET(p, 0, SE, 76, SF, 26, SG, 40, SC, 20, P_DEC, 30, P_REL, 8, P_DIST, 70, P_VOL, 127);
+    BEAT(p, 0, "x.h..x....x.pH..|x....h.x..x...k.|x.h..x....x.pH..|x..x..x...x.2.4.", 36);
+    SET(p, 1, SA, 62, SC, 40, SD, 60, SG, 50, P_DEC, 34, P_REL, 14, P_BITS, 30, P_SPU, 40, P_VOL, 100);
+    BEAT(p, 1, "....x..3....x..q|....x....2..x...|....x..3....x..q|...2x.....3.x.4x", 60);
+    SET(p, 2, SA, 90, SC, 110, SD, 90, P_DEC, 10, P_REL, 6, P_BASE, 32, P_VOL, 64);
+    BEAT(p, 2, "x?2qx.x?3.xqx?2x|x?2qx.x?3.xqx?2x|x?2qx.x?3.xqx?2x|x?2qx.x?3.xqx?44", 60);
+    lfo(p, 2, 0, P_PAN, 6, 3, 64, 100, 0);
+    SET(p, 3, SA, RATIO(6), SB, 60, SC, 30, SD, RATIO(11), SE, 30, SF, 20, SG, 20, SH, 80, P_DEC, 34, P_REL, 20,
+        P_GATE, 8, P_DTIM, 40, P_DSND, 96, P_DFB, 46, P_SPU, 50, P_VOL, 77, P_PAN, 62);
+    BEAT(p, 3, "x.xx.x.x.xx.x.x.|x.xx.x.x.xx.x.x.|x.xx.x.x.xx.x.x.|x.xx.x.x.xx.x?x?", 74, 77, 81, 84, 83, 81, 76);
+    SET(p, 4, SA, SIDW(1), SB, 40, SC, 30, SD, SIDW(2), SE, 32, SF, 64, SH, 50, P_DEC, 30, P_REL, 10, P_GATE, 10,
+        P_PORT, 20, P_WDTH, 24, P_LPQ, 50, P_WOF, 84, P_FDEC, 30, P_DIST, 74, P_VOL, 125);
+    BEAT(p, 4, "x..x....s.x..x..|x..x....s.x.....|x..x....s.x..x..|x..x....s.xx.x.x",
+         38, 38, 45, 41, 38, 36, 36, 43, 40, 38, 38, 45, 41, 38, 43, 43, 50, 47, 45, 43, 41);
+    SET(p, 5, SA, WAVE(19), SB, 90, SC, 90, SF, 70, SG, 90, P_ATK, 50, P_HOLD, 127, P_DEC, 127, P_REL, 80,
+        P_GATE, 127, P_WDTH, 38, P_LPQ, 20, P_SPU, 90, P_VOL, 66);
+    BEAT(p, 5, "x...............|x...............|x...............|x.......x.......", 62, 60, 65, 67, 64);
+    MOD(p, 5, 0, 16, 100, 60);
+    trim(p, 52);
+
+    /* A16 SHARDS: glitch in F# minor: a voice cut to shards, bit-crushed and ratcheting into sixteenth echoes; a
+     * SID bass sliding through F#m D A E, FM bells arpeggiating each chord, a slow digital pad; a stuttering kick,
+     * a crushed snare; the bus repeats in 32nds */
+    p = pat_v5(15, "SHARDS", 100, MACHINES(M_GSIN, M_GNOI, M_VOX, M_SID, M_FMS, M_WAV));
+    p->glob[G_LEN] = 64; p->glob[G_GLCH] = 70; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 40; p->glob[G_DRIV] = 16;
+    p->glob[G_VERB] = 60; p->glob[G_SWNG] = 10;
+    SET(p, 0, SE, 72, SF, 28, SG, 40, SC, 20, P_DEC, 34, P_REL, 8, P_DIST, 72, P_VOL, 127);
+    BEAT(p, 0, "x.....x.x.....2.|x..x....x.....x.|x.....x.x...3...|x..x..x.x..4....", 36);
+    SET(p, 1, SA, 66, SG, 70, P_DEC, 36, P_REL, 14, P_BITS, 36, P_XOR, 24, P_SPU, 40, P_VOL, 119);
+    BEAT(p, 1, "....x...q...x.2.|....x.....3.x...|....x...q...x.2.|..2.x.....4.x.3x", 60);
+    SET(p, 2, SA, VOWEL(1), SB, 100, SC, 10, SE, 10, SF, 70, SG, 60, SH, 0, P_DEC, 30, P_REL, 10, P_GATE, 6,
+        P_BITS, 30, P_DTIM, 16, P_DSND, 96, P_DFB, 50, P_SPU, 40, P_VOL, 125);
+    BEAT(p, 2, "x.2.x..x.3..x...|x.2.x..x....x.4.|x.2.x..x.3..x...|x.2.x..x.x..x.44", 66, 69, 71, 73, 76, 73, 71, 69);
+    SET(p, 3, SA, SIDW(2), SB, 30, SC, 40, SD, SIDW(1), SE, 64, SF, 66, SG, MODE4(0), SH, 50, P_DEC, 34, P_REL, 10,
+        P_GATE, 12, P_PORT, 20, P_WDTH, 26, P_LPQ, 46, P_WOF, 84, P_FDEC, 30, P_DIST, 74, P_VOL, 127, P_LEVL, 103);
+    BEAT(p, 3, "x..x..s...x.x...|x..x..s...x.....|x..x..s...x.x...|x..x..s...x.x.xs",
+         42, 42, 54, 45, 49, 38, 38, 50, 42, 45, 45, 57, 49, 52, 40, 40, 52, 44, 47, 52, 50);
+    SET(p, 4, SA, RATIO(10), SB, 50, SC, 50, SD, RATIO(8), SE, 30, SF, 30, SH, MODE4(0), P_DEC, 50, P_REL, 40,
+        P_GATE, 10, P_DTIM, 48, P_DSND, 34, P_DFB, 46, P_SPU, 70, P_VOL, 64, P_PAN, 72);
+    BEAT(p, 4, "..x...x...x...x.|..x...x...x...x.|..x...x...x...x.|..x...x...x.x.x.", 73, 78, 81, 76, 74, 78, 81, 78, 76, 81, 85, 81, 76, 80, 83, 80, 83);
+    SET(p, 5, SA, WAVE(8), SB, 80, SC, 80, SE, 30, SF, 70, SG, 80, P_ATK, 60, P_HOLD, 127, P_DEC, 127, P_REL, 84,
+        P_GATE, 127, P_WDTH, 36, P_LPQ, 20, P_SPU, 90, P_VOL, 57);
+    BEAT(p, 5, "x...............|x...............|x...............|x...............", 54, 50, 57, 52);
+    MOD(p, 5, 0, 16, 100, 70);
+    trim(p, 56);
 }
