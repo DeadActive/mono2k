@@ -5,7 +5,8 @@
 # two-poles, or a two-pole and two one-poles, over 0.3 .. 3.5 fc where it stands above -40 dB. From HPQ 32 up the
 # four-pole fits win at every Q (rms 1.5 against 1.9 dB, the noise's own spread ~1.5): a pole near the cutoff that
 # the resonant settings add, steepening the skirt (as a C3 sine an octave under a resonant cutoff confirms: 7.6-9.4 dB
-# under MONO2K's); at HPQ 0 it is not there.
+# under MONO2K's); at HPQ 0 it is not there. At C3 and C4 the passband over the peak disagrees, so the next
+# candidate is a table over HPQ x cutoff, not one pole per setting.
 #   .venv/bin/python tools/ref/hpfit.py
 import os, sys, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

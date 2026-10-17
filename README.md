@@ -118,7 +118,9 @@ Done so far, all measured on OS 1.32B:
   clips every unresonant drive (a square at the ceiling overshoots the two-pole; the Monomachine passes that); the
   pole alone, appearing from HPQ 24 (`tools/ref/hpfit.py`: four poles fit the resonant skirt on noise at C4), closes
   the passband an octave over a resonant cutoff at C3 but not at C4, where the Monomachine's is level: the shape, like
-  the Q, depends on the cutoff. The delay keeps half-rate
+  the Q, depends on the cutoff. The next candidate: the HP's Q and its skirt pole from a table over HPQ × cutoff (two
+  dimensions, an octave a column), fitted on resonant sweeps at several notes, and the saturation inside the
+  resonance. The delay keeps half-rate
   8-bit lines, so ping-pong past 0.37 s (and any delay past 0.74 s) slows the line's clock and darkens, where the
   Monomachine stays bright; SWAV-SAW's top harmonics at C7 are 2–6 dB short.
 

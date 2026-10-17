@@ -259,6 +259,52 @@ def sidbend14():
     return out
 
 
+def ens15():
+    out = ["# SWAVE-ENS (14) on its own page, one control at a time: a C4 held 1.5 s (3 s for CHRL / CHRW), DIST 48 (no clip"
+           " for four voices), the filter open. The page: PCH2 PCH3 PCH4 WAVE PW CHRL CHRW TUNE on CC 48..55. The default"
+           " first (no SYN controller sent); then each control swept with CHRL and CHRW at 0 unless they are the subject"]
+    ens = 14
+    base = {60: 48}
+    quiet = {53: 0, 54: 0}
+    out.append(line("e15_default", ens, 60, base, gate=1.5, tail=0.1))
+    out += [line(f"e15_pch2_{v:03d}", ens, 60, {**base, **quiet, 48: v}, gate=1.5, tail=0.1) for v in list(range(0, 128, 4)) + [127]]
+    out += [line(f"e15_pch3_{v:03d}", ens, 60, {**base, **quiet, 49: v}, gate=1.5, tail=0.1) for v in (8, 40, 64, 100, 127)]
+    out += [line(f"e15_pch4_{v:03d}", ens, 60, {**base, **quiet, 50: v}, gate=1.5, tail=0.1) for v in (8, 40, 64, 100, 127)]
+    out += [line(f"e15_wave_{v:03d}", ens, 60, {**base, **quiet, 51: v}, gate=1.5, tail=0.1) for v in list(range(0, 128, 8)) + [127]]
+    out += [line(f"e15_pw_{v:03d}", ens, 60, {**base, **quiet, 52: v}, gate=1.5, tail=0.1) for v in (0, 32, 64, 96, 127)]
+    out += [line(f"e15_chrl_{v:03d}", ens, 60, {**base, 54: 64, 53: v}, gate=3.0, tail=0.1) for v in (0, 16, 32, 64, 96, 127)]
+    out += [line(f"e15_chrw_{v:03d}", ens, 60, {**base, 53: 127, 54: v}, gate=3.0, tail=0.1) for v in (0, 32, 64, 96, 127)]
+    out += [line(f"e15_tune_{v:03d}", ens, 60, {**base, **quiet, 55: v}, gate=1.5, tail=0.1) for v in (0, 32, 63, 64, 65, 96, 127)]
+    return out
+
+
+def ens16():
+    out = ["# SWAVE-ENS, round two: every PCH2 value (CHRL 0, WAVE 0, PW 0), PW across at WAVE 0 and 127 (one voice), the"
+           " chorus resolved: CHRL across at CHRW 64 and CHRW across at CHRL 127, 4 s, one voice and a fifth"]
+    ens = 14
+    clean = {60: 48, 51: 0, 52: 0, 53: 0, 54: 0}
+    out += [line(f"e16_pch2_{v:03d}", ens, 60, {**clean, 48: v}, gate=1.2, tail=0.05) for v in range(128)]
+    for w in (0, 127):
+        out += [line(f"e16_pw_w{w:03d}_{v:03d}", ens, 60, {**clean, 51: w, 52: v}, gate=1.2, tail=0.05) for v in list(range(0, 128, 4)) + [127]]
+    out += [line(f"e16_chrl_{v:03d}", ens, 60, {**clean, 54: 64, 53: v}, gate=4.0, tail=0.05) for v in (0, 8, 16, 32, 48, 64, 80, 96, 112, 127)]
+    out += [line(f"e16_chrw_{v:03d}", ens, 60, {**clean, 53: 127, 54: v}, gate=4.0, tail=0.05) for v in (0, 16, 32, 48, 64, 80, 96, 112, 127)]
+    out.append(line("e16_chr_fifth", ens, 60, {**clean, 48: 100, 53: 127, 54: 64}, gate=4.0, tail=0.05))
+    return out
+
+
+def ens17():
+    out = ["# SWAVE-ENS, round three: what a voice is. The octave against the note (C3 C4 C5 at PW 64, WAVE 0: one saw, if"
+           " the two resets sit half a period apart), WAVE x PW on a grid at C4, PCH2 voices at PW 64, the chorus there"]
+    ens = 14
+    clean = {60: 48, 53: 0, 54: 0}
+    out += [line(f"e17_note{n}", ens, n, {**clean, 51: 0, 52: 64}, gate=1.2, tail=0.05) for n in (48, 60, 72)]
+    out += [line(f"e17_w{w:03d}_p{p:03d}", ens, 60, {**clean, 51: w, 52: p}, gate=1.2, tail=0.05)
+            for w in (0, 32, 64, 96, 127) for p in (0, 32, 64, 96, 127)]
+    out += [line(f"e17_pch2_{v:03d}", ens, 60, {**clean, 51: 0, 52: 64, 48: v}, gate=1.2, tail=0.05) for v in (4, 40, 64, 100, 124)]
+    out.append(line("e17_chorus", ens, 60, {60: 48, 51: 0, 52: 64, 53: 127, 54: 64}, gate=4.0, tail=0.05))
+    return out
+
+
 def order11():
     out = ["# is a render alone? One run, in this order: a resonant C3 sine fresh, the same again, again with the Q moved,"
            " a long tail after the gate (REL 0), another machine between, fresh again, another note; then a decaying"
@@ -285,7 +331,7 @@ if __name__ == "__main__":
                 fh.write("\n".join(f()) + "\n")
     elif sys.argv[1] == "specs3":
         d = sys.argv[2]
-        for name, f in (("clip3", clip3), ("map3", map3), ("fenv4", fenv4), ("ftime5", ftime5), ("res6", res6), ("hres8", hres8), ("drive10", drive10), ("order11", order11), ("drive12", drive12), ("tune13", tune13), ("sidbend14", sidbend14)):
+        for name, f in (("clip3", clip3), ("map3", map3), ("fenv4", fenv4), ("ftime5", ftime5), ("res6", res6), ("hres8", hres8), ("drive10", drive10), ("order11", order11), ("drive12", drive12), ("tune13", tune13), ("sidbend14", sidbend14), ("ens15", ens15), ("ens16", ens16), ("ens17", ens17)):
             with open(os.path.join(d, f"chain_{name}.spec"), "w") as fh:
                 fh.write("\n".join(f()) + "\n")
     elif sys.argv[1] == "specs2":

@@ -11,6 +11,7 @@
 #                 DIST 72 (h5 h7 2-3.7 dB short at 64)
 # but a clip on the HP's output breaks every unresonant drive case (dd_076..124: a square at the ceiling overshoots
 # the two-pole, and the Monomachine does not clip that): the Monomachine's limit sits inside the resonance.
+# Next candidate: the limit on the resonance itself, with the Q and the skirt from a HPQ x cutoff table.
 #   .venv/bin/python tools/ref/hpsat.py
 import os, sys, math
 import numpy as np
