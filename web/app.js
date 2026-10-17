@@ -707,7 +707,7 @@
       io.observe(el);
     });
     watch(".sec, .mgrid");
-    watch(".sec__n, .hero__sub > *, .sec__body .lede, .cols2 > p, .keys, .links > *", "rv-up");
+    watch(".sec__n, .hero__sub > *, .sec__body .lede, .cols2 > p, .keys", "rv-up");   /* not the foot: at the page's end it never scrolls far enough in */
     watch(".sec__body .display", "rv-wipe");
   }
 })();
