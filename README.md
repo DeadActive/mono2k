@@ -113,7 +113,12 @@ Done so far, all measured on OS 1.32B:
   Known gaps (`tools/ref/regress.py`, each held to its measured size): the Monomachine's HP saturates inside its
   resonance (from about −16 dBFS out at DIST 64, a square through a high-pass) where MONO2K's stays near clean, and
   falls 7–9 dB further an octave under a resonant cutoff; its Q moves with the cutoff (HPQ 96: ~230 at 8.4 kHz, ~160
-  at 4.2 kHz), MONO2K takes one value per setting; the delay keeps half-rate
+  at 4.2 kHz), MONO2K takes one value per setting. Tried and set aside: a clip on the two-pole's output with a one-pole
+  at the cutoff after it matches the saturated tone (`tools/ref/hpsat.py`: h1 within 0.7 dB, h3 h5 within 1 dB) but
+  clips every unresonant drive (a square at the ceiling overshoots the two-pole; the Monomachine passes that); the
+  pole alone, appearing from HPQ 24 (`tools/ref/hpfit.py`: four poles fit the resonant skirt on noise at C4), closes
+  the passband an octave over a resonant cutoff at C3 but not at C4, where the Monomachine's is level: the shape, like
+  the Q, depends on the cutoff. The delay keeps half-rate
   8-bit lines, so ping-pong past 0.37 s (and any delay past 0.74 s) slows the line's clock and darkens, where the
   Monomachine stays bright; SWAV-SAW's top harmonics at C7 are 2–6 dB short.
 
