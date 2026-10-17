@@ -1258,7 +1258,7 @@ static void picture(void)
                 int32_t s = sinp(ph + (uint32_t)i * (0xFFFFFFFFu / W) * 2) * 7 / 8;
                 if (fold) s = fold16((s * (256 + fold * 6)) >> 8);
                 if (xm) s = (int16_t)((uint16_t)s ^ (uint16_t)xm);
-                if (bits < 16) s = (s >> (16 - bits)) << (16 - bits);
+                if (bits < 16) s = (s >> (16 - bits)) * (1 << (16 - bits));   /* a multiply: no left shift of a negative */
                 acc += step;
                 if (acc >= 65536 || i == 0) { acc -= 65536; hold = s; }
                 if (srr) s = hold;
