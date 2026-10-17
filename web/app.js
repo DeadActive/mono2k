@@ -289,7 +289,6 @@
   function setPalette(i) {
     pal = i % PALETTES.length;
     try { localStorage.setItem("mono2k.palette2", String(pal)); } catch (e) { /* private mode */ }
-    $("palette").textContent = "Screen: " + PALETTES[pal].name;
     bezelDark = -1;
     if (lastFb) drawLcd(lastFb);
   }
@@ -315,7 +314,7 @@
       status("Saved in this browser.");
     } catch (e) { status("Could not save here (private window?)."); }
   };
-  const status = (s) => { $("status").textContent = s; };
+  const status = (s) => console.info("MONO2K:", s);   /* the page keeps no status line: messages go to the console */
 
   async function boot() {
     const r = await fetch("m2k.wasm?v=27");
@@ -397,70 +396,33 @@
 
   // ---------------------------------------------------------------------------------------------- readouts
   let machineNames = [];
-  /* the patterns: bank tabs, sixteen buttons; while playing, a click queues the pattern for the end of the bar */
-  let startPattern = -1, viewBank = 0, patNames = [], projNames = [], curPat = 0, queuedPat = 0, playingNow = 0, curProj = 0;
+  let startPattern = -1, patNames = [], projNames = [], curPat = 0, queuedPat = 0, playingNow = 0, curProj = 0;
   const label = (n) => "ABCD"[n >> 4] + String((n & 15) + 1).padStart(2, "0");
+  /* the patterns: the web shows bank A, the demos; the other banks are the FM-1's. While playing, a click queues
+   * the pattern for the end of the bar */
   function patterns() {
-    const banks = $("banks"), box = $("pats");
-    if (!banks.children.length) {
-      for (let b = 0; b < 4; b++) {
-        const t = document.createElement("button");
-        t.type = "button";
-        t.setAttribute("role", "tab");
-        t.textContent = "ABCD"[b];
-        t.addEventListener("click", () => { viewBank = b; patterns(); });
-        banks.appendChild(t);
-      }
+    const box = $("pats");
+    if (!box.children.length) {
       for (let i = 0; i < 16; i++) {
         const b = document.createElement("button");
         b.type = "button";
         b.addEventListener("click", () => {
-          const n = viewBank * 16 + i;
-          if (!running) { startPattern = n; start(); return; }
-          send({ t: "pattern", n });
+          if (!running) { startPattern = i; start(); return; }
+          send({ t: "pattern", n: i });
         });
         box.appendChild(b);
       }
     }
-    [...banks.children].forEach((t, b) => { t.className = b === viewBank ? "on" : ""; t.setAttribute("aria-selected", b === viewBank); });
-    [...box.children].forEach((b, i) => {
-      const n = viewBank * 16 + i;
+    [...box.children].forEach((b, n) => {
       b.innerHTML = `<b>${label(n)}</b>${patNames[n] || ""}`;
       b.className = n === curPat ? "on" : n === queuedPat && playingNow ? "q" : "";
     });
-    const sel = $("projsel");
-    if (sel.options.length !== projNames.length) {
-      sel.innerHTML = "";
-      projNames.forEach((_, k) => sel.add(new Option("", String(k))));
-    }
-    projNames.forEach((nm, k) => { sel.options[k].text = `P${k + 1} ${nm}${k === curProj ? " (open)" : ""}`; });
   }
   function namesFrom(x) {
     const nP = x.w_patterns(), nJ = x.w_projects();
     patNames = Array.from({ length: nP }, (_, i) => cstr(x, x.w_pat_name(i)));
     projNames = Array.from({ length: nJ }, (_, i) => cstr(x, x.w_project_name(i)));
   }
-  /* projects: load, save, as files */
-  $("projload").addEventListener("click", () => {
-    const k = +$("projsel").value;
-    if (!running) { status("Press Start first."); return; }
-    if (confirm(`Load P${k + 1} ${projNames[k] || ""}? Unsaved changes to the open project are lost.`)) { send({ t: "project", slot: k, save: 0 }); viewBank = 0; status(`P${k + 1} loaded.`); }
-  });
-  $("projsave").addEventListener("click", () => {
-    const k = +$("projsel").value;
-    if (!running) { status("Press Start first."); return; }
-    if (k === curProj || confirm(`Save the open project over P${k + 1} ${projNames[k] || ""}?`)) { send({ t: "project", slot: k, save: 1 }); status(`Saved as P${k + 1}.`); }
-  });
-  $("projexport").addEventListener("click", () => { if (running) send({ t: "export", slot: +$("projsel").value }); else status("Press Start first."); });
-  $("projimport").addEventListener("click", () => { if (running) $("projfile").click(); else status("Press Start first."); });
-  $("projfile").addEventListener("change", async (ev) => {
-    const f = ev.target.files[0];
-    ev.target.value = "";
-    if (!f) return;
-    const k = +$("projsel").value;
-    if (!confirm(`Replace P${k + 1} ${projNames[k] || ""} with ${f.name}?`)) return;
-    send({ t: "import", slot: k, bytes: await f.arrayBuffer() });
-  });
 
   const PAGES = ["HOME", "SYN", "AMP", "FILT", "FX", "LFO", "ARP", "GLO"];
   let lastInfo = "", knobKey = "", curTrk = 0;
@@ -508,7 +470,6 @@
       li.firstChild.setAttribute("aria-pressed", String(t === trk));
       li.lastChild.setAttribute("aria-pressed", String(!!muted));
     }
-    if (pat !== curPat) viewBank = pat >> 4;
     curPat = pat; queuedPat = I[12]; playingNow = I[4]; curProj = I[23];
     patterns();
     void PAGES;
@@ -697,19 +658,6 @@
   });
   window.addEventListener("blur", () => { for (const c of held) { const m = KEYMAP[c]; if (m[0] !== "e") press(m[0] + m[1], 0); } held.clear(); });
 
-  // MIDI in: notes on channels 1-6 play tracks 1-6; start, stop
-  $("midi").addEventListener("click", async () => {
-    if (!navigator.requestMIDIAccess) { status("This browser has no Web MIDI."); return; }
-    try {
-      const acc = await navigator.requestMIDIAccess();
-      const hook = () => { for (const i of acc.inputs.values()) i.onmidimessage = (e) => { const [s, a = 0, b = 0] = e.data; if (s >= 0x80 && s < 0xA0 || (s & 0xF0) === 0xB0 || s === 0xFA || s === 0xFC) send({ t: "midi", s, a, b }); }; };
-      hook();
-      acc.onstatechange = hook;
-      $("midi").setAttribute("aria-pressed", "true");
-      status(`MIDI: ${acc.inputs.size} input(s). Channels 1–6 are tracks 1–6, with the Monomachine's CC map.`);
-    } catch (e) { status("MIDI was not allowed."); }
-  });
-  $("palette").addEventListener("click", () => setPalette(pal + 1));
 
   /* the theme: Auto (the system's), Light, Dark; remembered */
   const THEMES = ["auto", "light", "dark"];
@@ -725,12 +673,6 @@
     redrawTheme();
   }
   $("theme").addEventListener("click", () => { theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]; applyTheme(); });
-  $("reset").addEventListener("click", () => {
-    try { localStorage.removeItem(STORE_KEY); } catch (e) { /* nothing saved */ }
-    send({ t: "reset", seed: (Math.random() * 4294967295) >>> 0 });
-    displayMode();
-    status("Back to the factory patterns.");
-  });
   $("start").addEventListener("click", start);
 
   // ----------------------------------------------------------------------------------------------- go

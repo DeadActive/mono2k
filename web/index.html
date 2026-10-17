@@ -9,7 +9,7 @@
 <title>MONO2K Emulator</title>
 <meta name="description" content="MONO2K: six mono machines, a 64-step sequencer with parameter locks and trig conditions, and a lofi bus, for the M-VAVE FM-1. Running in your browser.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
-<link rel="stylesheet" href="style.css?v=24">
+<link rel="stylesheet" href="style.css?v=26">
 </head>
 <body>
 <div class="rules" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
@@ -47,25 +47,7 @@
       <div><dt>Keys</dt><dd id="r-mode">PLAY</dd></div>
     </dl>
     <ol class="tracks" id="tracks"></ol>
-    <div class="bank">
-      <div class="banks" id="banks" role="tablist" aria-label="Banks"></div>
-      <div class="pats" id="pats" role="group" aria-label="Patterns"></div>
-    </div>
-    <div class="projrow">
-      <label class="label" for="projsel">Project</label>
-      <select id="projsel"></select>
-      <button type="button" id="projload">Load</button>
-      <button type="button" id="projsave">Save</button>
-      <button type="button" id="projexport">Export</button>
-      <button type="button" id="projimport">Import</button>
-      <input type="file" id="projfile" accept=".m2kp,application/octet-stream" hidden>
-    </div>
-    <div class="tools">
-      <button type="button" id="midi">MIDI in</button>
-      <button type="button" id="palette">Screen: Paper</button>
-      <button type="button" id="reset" title="Forget the patterns saved in this browser">Factory reset</button>
-    </div>
-    <p class="small" id="status">The real firmware core, compiled to WebAssembly. What you hear is what the FM-1 will play.</p>
+    <div class="pats" id="pats" role="group" aria-label="The demo patterns, bank A"></div>
   </aside>
 </section>
 
@@ -116,13 +98,13 @@
   </div>
 </section>
 
-<section class="sec" id="machines">
+<section class="sec inv" id="machines">
   <p class="sec__n">02</p>
   <div class="sec__body">
     <h2 class="display">Machines</h2>
     <p class="lede">Nine machines in six families, after what is published about the Monomachine's: written from scratch for MONO2K, integer only, to be tuned against the original by ear and by measurement. Point at a card and its mark turns, as on the screen.</p>
   </div>
-  <div class="mgrid inv" id="mgrid"></div>
+  <div class="mgrid" id="mgrid"></div>
 </section>
 
 <section class="sec" id="sequencer">
@@ -171,6 +153,6 @@
   <span class="label">MONO2K</span><span class="label">Six mono machines</span><span class="label">FM-1</span><span class="label r">2026</span>
 </footer>
 
-<script src="app.js?v=30"></script>
+<script src="app.js?v=31"></script>
 </body>
 </html>
