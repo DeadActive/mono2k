@@ -97,6 +97,21 @@ namespace
 		advance(_hw, g_rate);
 	}
 
+	// an FX machine assigned by MIDI hears nothing until its track's KIT > EDIT KIT TRACK page has been opened and
+	// closed once (found by measurement: before it the FX's output is digital silence, after it REVERB and RINGMOD
+	// carry the track before; the input chosen there, NEIBOR, is the default either way)
+	void fxInput(md::Hardware& _hw, uint8_t _track)
+	{
+		tap(_hw, static_cast<md::PanelControl>(static_cast<uint8_t>(md::PanelControl::Track1) + _track));
+		tap(_hw, md::PanelControl::Kit);
+		tap(_hw, md::PanelControl::Down);
+		tap(_hw, md::PanelControl::Enter);
+		advance(_hw, g_rate * 3 / 10);
+		tap(_hw, md::PanelControl::Exit);
+		tap(_hw, md::PanelControl::Exit);
+		advance(_hw, g_rate * 3 / 10);
+	}
+
 	std::unique_ptr<md::Hardware> boot(const char* _rom)
 	{
 		std::vector<uint8_t> rom;
@@ -340,6 +355,7 @@ namespace
 				unsigned track, machine;
 				require(static_cast<bool>(in >> track >> machine), "bad T line");
 				assign(*hw, static_cast<uint8_t>(track), static_cast<uint8_t>(machine));
+				if(machine >= 12 && machine <= 17 && machine != 14) fxInput(*hw, static_cast<uint8_t>(track));
 				std::string kv;
 				while(in >> kv)
 				{

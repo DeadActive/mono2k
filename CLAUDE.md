@@ -49,11 +49,15 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   the new parts where the old still stand (a demo whose name stays and whose settings change, as HAZE's after the DIST
   fix, takes them the same way). The reference renderer writes 32-bit float WAVs; `tools/ref/sweep.py`'s `load` reads
   both.
-- The FX machines (FX-CHORS, FX-RING, FX-DYNMX) cannot be measured: the emulator passes no neighbouring track into
-  any FX machine. They are MONO2K's own designs on the Monomachine's pages, held by the self-test; each reads the
-  previous track's `tout` (after its amp, before its VOL), so a track's order in `m2k_render` matters. `mm_ref ROM
-  panel DIR < SCRIPT` drives the OS's panel (tap / enc / chord / assign / midi / wait / shot / record) to find where
-  a setting lives; `Q track step` in a loop places the OS's own trigs (A01's demo trigs cleared first).
+- The FX machines: on the emulator an FX machine assigned by MIDI hears nothing until its track's KIT > EDIT KIT
+  TRACK page has been opened and closed once (`mm_ref`'s loop mode does it after a `T` line with an FX machine).
+  After it RINGMOD and REVERB carry the track before; THRU, CHORUS and DYNAMIX stay silent under every input (NEIBOR,
+  BUS AB / CD / EF) and every knob, so FX-CHORS and FX-DYNMX cannot be measured: MONO2K's own designs on the
+  Monomachine's pages, held by the self-test. FX-RING can be (two-track loops, the FX panned away from its source).
+  Each reads the previous track's `tout` (after its amp, before its VOL; the Monomachine's FX hear the VOL), so a
+  track's order in `m2k_render` matters. `mm_ref ROM panel DIR < SCRIPT` drives the OS's panel (tap / enc / chord /
+  assign / midi / wait / shot / record) to find where a setting lives; `Q track step` in a loop places the OS's own
+  trigs (A01's demo trigs cleared first).
 - Fidelity regressions: `.venv/bin/python tools/ref/regress.py check [GROUP ...]` renders MONO2K with the chain specs
   and compares against `tools/ref/regress_ref.json` (numbers measured from the Monomachine's output; `capture` rebuilds
   it from `build/ref/mm_c*`). PASS / FAIL, XFAIL for a known gap (with its reason), INFO not asserted. Each XFAIL's
