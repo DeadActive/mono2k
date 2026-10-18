@@ -23,6 +23,9 @@ static int machine_of(int mm)
     case 10: return M_FMD;
     case 11: return M_VOX;
     case 14: return M_ENS;
+    case 15: return M_FXC;
+    case 16: return M_FXD;
+    case 17: return M_FXR;
     default: return -1;
     }
 }

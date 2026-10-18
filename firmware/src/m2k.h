@@ -55,7 +55,7 @@ enum {
 };
 
 /* machines */
-enum { M_GSIN, M_GNOI, M_SID, M_FMS, M_FMD, M_SAW, M_ENS, M_WAV, M_VOX, M_FMP, M_PUL, M_COUNT };   /* new ones go last: patterns keep the number */
+enum { M_GSIN, M_GNOI, M_SID, M_FMS, M_FMD, M_SAW, M_ENS, M_WAV, M_VOX, M_FMP, M_PUL, M_FXC, M_FXR, M_FXD, M_COUNT };   /* new ones go last: patterns keep the number */
 
 typedef struct {
     uint8_t note;                 /* MIDI note */

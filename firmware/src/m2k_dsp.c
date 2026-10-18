@@ -138,6 +138,8 @@ static int16_t mod_mem[M2K_TRACKS][MOD_LEN] POOL;
 #define ENS_GAIN 7119                  /* a voice against the others' levels (calibrated: chain_ens20) */
 static int16_t ens_mem[M2K_TRACKS][ENS_LEN] POOL;
 static int16_t blk[M2K_TRACKS][M2K_SUB];      /* machine output of this block */
+static int16_t tout[M2K_TRACKS][M2K_SUB];     /* each track's output, after its amp, before its VOL: an FX machine's input */
+static int16_t bside[M2K_TRACKS][M2K_SUB];    /* FX-CHORUS's side (its width), added after the pan */
 
 /* a parameter with its modulation, 0..127*256 */
 static inline int32_t P8(const trk_t *t, int id)
@@ -194,6 +196,24 @@ static inline uint32_t fmd_at(int32_t v8)
     return T_FMDV[i] + (uint32_t)(((uint64_t)(T_FMDV[i + 1] - T_FMDV[i]) * (uint32_t)(v8 & 255)) >> 8);
 }
 
+/* log2 in Q8 of x (x >= 1), and 2^(y / 256) in Q16 (y may be negative) */
+static int32_t ilog2_q8(uint32_t x)
+{
+    if (!x) return 0;
+    int p = 31;
+    while (!(x >> p)) p--;
+    uint32_t m = p >= 8 ? (x >> (p - 8)) & 255 : (x << (8 - p)) & 255;
+    return p * 256 + T_LOG2M[m];
+}
+static uint32_t iexp2_q16(int32_t y)
+{
+    int32_t i = y >> 8;
+    uint32_t f = T_EXP2F[y & 255];
+    if (i >= 15) return 0x7FFFFFFFu;
+    if (i < -16) return 0;
+    return i >= 0 ? f << i : f >> -i;
+}
+
 static void mach_trig(trk_t *t, int m)
 {
     t->menv[0] = t->menv[1] = t->menv[2] = 1u << 30;
@@ -210,6 +230,9 @@ static void mach_trig(trk_t *t, int m)
         break;
     case M_SID:                        /* PWRS ON: the PW sweep starts again */
         if (t->eff[P_SYN + 2] >= 64) t->ms[4] = 0;
+        break;
+    case M_FXD:
+        t->ms[2] = t->ms[3] = 0;
         break;
     case M_PUL:                        /* the voices start together (the unison's beating says so) */
         t->ph[0] = t->ph[1] = t->ph[2] = 0;
@@ -574,6 +597,84 @@ static void mach_block(int ti, int m, int32_t pitch)
         }
         break;
     }
+    case M_FXC: case M_FXR: case M_FXD: {
+        /* the FX machines take the previous track's output (after its amp, before its VOL; the first track has none),
+         * INP its level (100 as it is). MONO2K's own designs on the Monomachine's pages: the emulator it is measured on
+         * passes no neighbour into its FX machines */
+        int32_t x[M2K_SUB];
+        int32_t inp = P7(t, P_SYN + 7) * 328;                                        /* Q15, 100: unity */
+        for (int i = 0; i < M2K_SUB; i++) x[i] = ti ? (tout[ti - 1][i] * inp) >> 15 : 0;
+        int32_t mix = P7(t, P_SYN + 3) * 258;                                        /* Q15 */
+        if (m == M_FXC) {          /* DEL DEP SPD MIX FB WID LP INP: two taps swept in opposite ways off one line, their
+                                    * mean the chorus, their difference its width, fed back through the first */
+            int16_t *ln = ens_mem[ti];
+            int32_t base = 22 + P7(t, P_SYN + 0) * 4, dep = (P7(t, P_SYN + 1) * (base < 400 ? base : 400)) >> 7;   /* to 12 ms, +-9 */
+            uint32_t linc = T_CHO_INC[P7(t, P_SYN + 2)];
+            int32_t fb = (PB8(t, P_SYN + 4) * 58) >> 8;                              /* Q15 of +-0.9, from Q8 steps */
+            int32_t wid = P7(t, P_SYN + 5) * 258, lp = T_FMLP[64 + (P7(t, P_SYN + 6) >> 1)];
+            for (int i = 0; i < M2K_SUB; i++) {
+                uint32_t p = t->ph[6] += linc;
+                int32_t tri = (int32_t)((p ^ (uint32_t)((int32_t)p >> 31)) >> 15) - 32768;   /* -32768 .. 32767 */
+                int32_t da = (base << 8) + ((dep * tri) >> 7), db = (base << 8) - ((dep * tri) >> 7);   /* Q8 samples */
+                uint32_t w = t->ph[5];
+                uint32_t ja = w - (uint32_t)(da >> 8), jb = w - (uint32_t)(db >> 8);
+                int32_t fa = da & 255, fb2 = db & 255;
+                int32_t a = (ln[ja & (ENS_LEN - 1)] * (256 - fa) + ln[(ja - 1) & (ENS_LEN - 1)] * fa) >> 8;
+                int32_t b = (ln[jb & (ENS_LEN - 1)] * (256 - fb2) + ln[(jb - 1) & (ENS_LEN - 1)] * fb2) >> 8;
+                ln[w & (ENS_LEN - 1)] = (int16_t)sat16(x[i] + ((a * fb) >> 15));
+                t->ph[5] = w + 1;
+                t->ms[2] += (int32_t)(((int64_t)(((a + b) >> 1) - t->ms[2]) * lp) >> 15);   /* the wet's lowpass */
+                t->ms[3] += (int32_t)(((int64_t)(((a - b) >> 1) - t->ms[3]) * lp) >> 15);
+                o[i] = (int16_t)sat16(x[i] + (int32_t)(((int64_t)(t->ms[2] - x[i]) * mix) >> 15));
+                bside[ti][i] = (int16_t)sat16((((t->ms[3] * wid) >> 15) * mix) >> 15);
+            }
+        } else if (m == M_FXR) {   /* WAVE EXT - MIX - - - INP: the input times a carrier on the track's note, sine to
+                                    * triangle to square to saw by WAVE; EXT takes the carrier from the track before the
+                                    * input instead */
+            uint32_t inc = inc_of(pitch);
+            int wv = P7(t, P_SYN + 0), ext = P7(t, P_SYN + 1) * 258;
+            int seg = wv < 43 ? 0 : wv < 86 ? 1 : 2;
+            int32_t f = ((wv - seg * 43) * 32768) / 42;
+            if (f > 32768) f = 32768;
+            for (int i = 0; i < M2K_SUB; i++) {
+                uint32_t ph = t->ph[0] += inc;
+                int32_t sn = sinp(ph), tr = (int32_t)((ph ^ (uint32_t)((int32_t)ph >> 31)) >> 15) - 32768;
+                int32_t sq = (int32_t)ph < 0 ? -32767 : 32767, sw = (int32_t)(ph >> 16) - 32768;
+                int32_t c0 = seg == 0 ? sn : seg == 1 ? tr : sq, c1 = seg == 0 ? tr : seg == 1 ? sq : sw;
+                int32_t c = c0 + (((c1 - c0) * f) >> 15);
+                if (ext) c += (int32_t)(((int64_t)((ti > 1 ? tout[ti - 2][i] : 0) - c) * ext) >> 15);
+                int32_t y = (x[i] * c) >> 15;
+                o[i] = (int16_t)sat16(x[i] + (int32_t)(((int64_t)(y - x[i]) * mix) >> 15));
+            }
+        } else {                   /* ATK REL THRS MIX RAT GAIN RMS INP: a compressor on the block's peak and its RMS
+                                    * (RMS's blend), followed in log2, over THRS's -60 .. 0 dB by RAT, GAIN made up */
+            uint32_t pk = 1;
+            uint64_t ms = 0;
+            for (int i = 0; i < M2K_SUB; i++) {
+                uint32_t a = (uint32_t)(x[i] < 0 ? -x[i] : x[i]);
+                if (a > pk) pk = a;
+                ms += (uint64_t)((int64_t)x[i] * x[i]);
+            }
+            int32_t lp = ilog2_q8(pk), lr = ilog2_q8((uint32_t)(ms >> 4) | 1) >> 1;        /* log2 of the peak, the RMS */
+            int rmsv = P7(t, P_SYN + 6);
+            int32_t lv = lp + (((lr - lp) * rmsv) >> 7);
+            int32_t *env = &t->ms[2];
+            if (*env == 0) *env = lv;
+            *env += (int32_t)(((int64_t)(lv - *env) * (lv > *env ? T_DYN_A[P7(t, P_SYN + 0)] : T_DYN_R[P7(t, P_SYN + 1)])) >> 15);
+            int32_t thr = 15 * 256 - ((127 - P7(t, P_SYN + 2)) * 2549) / 127;            /* -60 .. 0 dB of full, log2 Q8 */
+            int32_t over = *env - thr;
+            int32_t gl = over > 0 ? -((over * (int32_t)T_DYN_K[P7(t, P_SYN + 4)]) >> 8) : 0;
+            gl += (P7(t, P_SYN + 5) * 1020) / 127;                                         /* GAIN: up to +24 dB */
+            uint32_t g1 = iexp2_q16(gl), g0 = (uint32_t)t->ms[3] ? (uint32_t)t->ms[3] : g1;
+            for (int i = 0; i < M2K_SUB; i++) {
+                uint32_t g = g0 + (uint32_t)((((int64_t)g1 - g0) * i) >> 4);
+                int32_t y = (int32_t)(((int64_t)x[i] * g) >> 16);
+                o[i] = (int16_t)sat16(x[i] + (int32_t)(((int64_t)(y - x[i]) * mix) >> 15));
+            }
+            t->ms[3] = (int32_t)g1;
+        }
+        break;
+    }
     case M_ENS: {                      /* PCH2 PCH3 PCH4 WAVE PW CHRL CHRW TUNE */
         /* after the Monomachine's SWAVE-ENS, measured on its OS (tools/ref/chain_ens15..20): the root and up to three
          * voices off its interval table (equal tempered, and the just 3/2 4/3 5/4 6/5 beside them), no level shared
@@ -908,6 +1009,7 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     int m = pp->machine[ti];
     if (t->gate_left > 0 && --t->gate_left == 0) { t->gate = 0; t->gate_left = -1; }   /* the step's gate: hold and decay go on */
     env_block(t);
+    m_set(tout[ti], 0, sizeof tout[ti]);
     if (!t->sounding && t->astage == 0) {
         t->amp0 = t->amp1 = 0;
         t->peak = 0;
@@ -993,6 +1095,8 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
         int32_t a = t->amp0 + (((t->amp1 - t->amp0) * i) >> 4);
         s = (int32_t)(((int64_t)s * a) >> 15);
         if (mmix) s = mod_tick(t, mod_mem[ti], s, mtype, minc, mdep, mmix);
+        tout[ti][i] = (int16_t)sat16(s);                                  /* an FX machine's input: before VOL, so VOL 0
+                                                                           * keeps a track out of the mix and in the FX */
         s = (int32_t)(((int64_t)s * vol) >> 15);
         /* the track clips here, a channel at a time after the pan: one ceiling for both while the pan holds the
          * louder side at or under it */
@@ -1003,7 +1107,9 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
             s = t->srr_prev + (int32_t)(((int64_t)(t->srr_hold - t->srr_prev) * (int32_t)t->srr_acc) >> 16);
         }
         if (bits < 16) s = (sat16(s) >> (16 - bits)) * (1 << (16 - bits));
-        int32_t l = (int32_t)CLAMP(((int64_t)s * gl) >> 15, -T_CLIP, T_CLIP), r = (int32_t)CLAMP(((int64_t)s * gr) >> 15, -T_CLIP, T_CLIP);
+        int32_t sd = 0;
+        if (m == M_FXC) sd = (int32_t)(((int64_t)((((int64_t)bside[ti][i] * a) >> 15)) * vol) >> 15);
+        int32_t l = (int32_t)CLAMP((((int64_t)s * gl) >> 15) + sd, -T_CLIP, T_CLIP), r = (int32_t)CLAMP((((int64_t)s * gr) >> 15) - sd, -T_CLIP, T_CLIP);
         int32_t as = l < 0 ? -l : l, ar = r < 0 ? -r : r;
         if (ar > as) as = ar;
         if (as > pk) pk = as;

@@ -70,6 +70,28 @@ static const ev_t TOUR[] = {
     {18500, 'x', 0, 0, 0},
 };
 
+/* measure()'s render on the store as it stands (no init): a pattern built in place */
+static void fx_measure(int p, int mask, double sec, int16_t *keep, double *pk_db, double *rms_db)
+{
+    cur_pat = p;
+    sq.queued = (uint8_t)p;
+    pat[p].mute = (uint8_t)(~mask & 0x3F);
+    lockmap_build();
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[p].kit[t], P_COUNT);
+    seq_play(1);
+    int frames = (int)(M2K_SR * sec) / 128 * 128;
+    static int16_t buf[2 * 128];
+    double ss = 0;
+    int peak = 0;
+    for (int f = 0; f < frames; f += 128) {
+        m2k_render(buf, 128);
+        for (int i = 0; i < 256; i++) { int v = buf[i], a = v < 0 ? -v : v; if (a > peak) peak = a; ss += (double)v * v; }
+        if (keep) m_cpy(keep + 2 * f, buf, sizeof buf);
+    }
+    *pk_db = 20 * log10(peak / 32767.0 + 1e-9);
+    *rms_db = 10 * log10(ss / (frames * 2.0) / (32767.0 * 32767.0) + 1e-12);
+}
+
 /* render seconds of pattern p with the tracks in mask; peak and rms (dB). demo_dry: without the bus's drive (a
  * part balanced under the knee before the bank's master drive) */
 static int demo_dry;
@@ -629,6 +651,62 @@ static int selftest(void)
                 if (w2.lock[i].trk == 2 && w2.lock[i].step == 6) lf = 1;
             }
             CHECK(ok && lw && !lf, "format: version 10 -> 11, an old SID's wave, duty, sweep, ring and interval to SID-6581's page");
+        }
+        /* the FX machines (MONO2K's own designs, no reference to hold them to): a SWAV-SAW on T1, out of the mix by its
+         * VOL, into an FX on T2 opened with each of its trigs; CHORUS widens by WID, RING changes the sound by MIX, DYNAMIX
+         * brings a soft hit up to a loud one */
+        {
+            static int16_t kb[4 * M2K_SR + 512];
+            double pk, rm;
+            const int fp = 47;                                         /* C16, a scratch slot */
+            #define FXPAT(fxm, src, vl) do { m2k_init(2000); pat_init(&pat[fp], "FXT"); kit_default(&pat[fp], 0, src); kit_default(&pat[fp], 1, fxm); \
+                pat[fp].kit[0][P_VOL] = 0; pat[fp].kit[1][P_HOLD] = 127; pat[fp].glob[G_DRIV] = 0; \
+                for (int s_ = 0; s_ < 16; s_ += 4) { pat[fp].step[0][s_].flags = ST_TRIG; pat[fp].step[0][s_].note = 48; \
+                    pat[fp].step[1][s_].flags = ST_TRIG; pat[fp].step[1][s_].note = 48; } (void)(vl); } while (0)
+            double corr[2];
+            for (int w = 0; w < 2; w++) {
+                FXPAT(M_FXC, M_SAW, 0);
+                pat[fp].kit[1][P_SYN + 5] = (uint8_t)(w ? 127 : 0);
+                pat[fp].kit[1][P_SYN + 3] = 127;
+                fx_measure(fp, 0x3F, 1.0, kb, &pk, &rm);
+                double sl = 0, sr = 0, slr = 0;
+                for (int i = M2K_SR / 4; i < M2K_SR; i++) { sl += (double)kb[2 * i] * kb[2 * i]; sr += (double)kb[2 * i + 1] * kb[2 * i + 1]; slr += (double)kb[2 * i] * kb[2 * i + 1]; }
+                corr[w] = slr / sqrt(sl * sr + 1);
+            }
+            CHECK(corr[0] > 0.999 && corr[1] < 0.9, "FX-CHORUS: mono at WID 0, wide at 127");
+            double ring[2];
+            for (int mx = 0; mx < 2; mx++) {
+                FXPAT(M_FXR, M_SAW, 0);
+                pat[fp].kit[1][P_SYN + 3] = (uint8_t)(mx ? 127 : 0);
+                fx_measure(fp, 0x3F, 1.0, kb, &pk, &rm);
+                ring[mx] = rm;
+            }
+            double dry;
+            FXPAT(M_GSIN, M_SAW, 0);
+            pat[fp].kit[0][P_VOL] = 64;
+            pat[fp].mute = 0x02;
+            fx_measure(fp, 0x01, 1.0, kb, &pk, &dry);
+            CHECK(fabs(ring[0] - dry) < 1.5 && fabs(ring[1] - ring[0]) > 1.0, "FX-RING: its input as it is at MIX 0, rung at 127");
+            double spread[2];
+            for (int c = 0; c < 2; c++) {
+                FXPAT(M_FXD, M_GSIN, 0);
+                for (int s_ = 0; s_ < 16; s_ += 4) pat[fp].step[0][s_].note = 36;
+                pat[fp].kit[0][P_VOL] = 0;
+                pat[fp].kit[1][P_SYN + 4] = (uint8_t)(c ? 127 : 0);      /* RAT */
+                pat[fp].kit[1][P_SYN + 2] = 40;                          /* THRS */
+                pat[fp].kit[1][P_SYN + 5] = (uint8_t)(c ? 90 : 0);       /* GAIN */
+                pat[fp].kit[0][P_DEC] = 30;
+                lk(&pat[fp], 0, 4, P_DIST, 46);                          /* the second and fourth hits lower at the source */
+                lk(&pat[fp], 0, 12, P_DIST, 46);
+                fx_measure(fp, 0x3F, 2.0, kb, &pk, &rm);
+                int a0 = 0, a1 = 0;
+                int step = M2K_SR / 8;                                   /* a sixteenth at the blank's 120 bpm, in frames */
+                for (int i = 0; i < 2 * step; i++) { int v = abs(kb[2 * i]); if (v > a0) a0 = v; v = abs(kb[2 * (i + 4 * step)]); if (v > a1) a1 = v; }
+                spread[c] = 20 * log10((a0 + 1.0) / (a1 + 1.0));
+            }
+            printf("     FX-DYNAMIX: loud against soft %.1f dB at RAT 0, %.1f dB at RAT 127\n", spread[0], spread[1]);
+            CHECK(spread[1] < spread[0] - 6, "FX-DYNAMIX: brings a soft hit up to a loud one");
+            #undef FXPAT
         }
         /* the bank on the screen: a DIGI-WAV track's SYN has a third page, BANK; the wave knob names the bank's waves */
         {

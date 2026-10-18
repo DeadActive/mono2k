@@ -57,7 +57,8 @@ typedef struct {
 } mi_t;
 
 /* the machines as the selector steps through them: the Monomachine's order (its FM+ STAT, PAR, DYN together) */
-static const uint8_t M_ORDER[M_COUNT] = {M_GSIN, M_GNOI, M_SID, M_FMS, M_FMP, M_FMD, M_SAW, M_PUL, M_ENS, M_WAV, M_VOX};
+static const uint8_t M_ORDER[M_COUNT] = {M_GSIN, M_GNOI, M_SID, M_FMS, M_FMP, M_FMD, M_SAW, M_PUL, M_ENS, M_WAV, M_VOX, M_FXC,
+                                          M_FXD, M_FXR};
 static int m_place(int m) { for (int i = 0; i < M_COUNT; i++) if (M_ORDER[i] == m) return i; return 0; }
 
 static const mi_t MI[M_COUNT] = {
@@ -94,6 +95,15 @@ static const mi_t MI[M_COUNT] = {
     {"SWAV-PUL", "SWAV", "PULSE", "SYNTH", {3, 1, 4},
      {{"UNIL", "UNISON LEVEL", K_NUM}, {"UNIW", "UNISON WIDTH", K_NUM}, {"SUB1", "SINE SUB -1", K_NUM}, {"SUB2", "SINE SUB -2", K_NUM},
       {"PW", "PULSE WIDTH", K_NUM}, {"PWAD", "PW SWEEP", K_NUM}, {"PWRS", "SWEEP RESET", K_ONOFF}, {"TUNE", "TUNE", K_TUN2}}},
+    {"FX-CHORS", "FX", "CHORUS", "FX", {1, 2, 3},
+     {{"DEL", "DELAY", K_NUM}, {"DEP", "DEPTH", K_NUM}, {"SPD", "SPEED", K_NUM}, {"MIX", "MIX", K_NUM},
+      {"FB", "FEEDBACK", K_BI}, {"WID", "WIDTH", K_NUM}, {"LP", "LOWPASS", K_NUM}, {"INP", "INPUT", K_NUM}}},
+    {"FX-RING", "FX", "RINGMOD", "FX", {2, 4, 2},
+     {{"WAVE", "CARRIER WAVE", K_NUM}, {"EXT", "TRACK CARRIER", K_NUM}, {"-", "-", K_NUM}, {"MIX", "MIX", K_NUM},
+      {"-", "-", K_NUM}, {"-", "-", K_NUM}, {"-", "-", K_NUM}, {"INP", "INPUT", K_NUM}}},
+    {"FX-DYNMX", "FX", "DYNAMIX", "FX", {5, 1, 1},
+     {{"ATK", "ATTACK", K_NUM}, {"REL", "RELEASE", K_NUM}, {"THRS", "THRESHOLD", K_NUM}, {"MIX", "MIX", K_NUM},
+      {"RAT", "RATIO", K_NUM}, {"GAIN", "MAKE-UP GAIN", K_NUM}, {"RMS", "RMS / PEAK", K_NUM}, {"INP", "INPUT", K_NUM}}},
 };
 
 static const char *const SIDW_N[5] = {"TRI", "SAW", "PULS", "MIX", "NOIS"};

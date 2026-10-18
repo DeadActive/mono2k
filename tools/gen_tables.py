@@ -145,8 +145,8 @@ out.append(arr("T_DIST_C", "int32_t", [round(32767 * 10 ** (dist_c(d) / 20)) for
 # ceiling of its own, whatever the level going in (a saw alone, with its subs or its unison all clip to the same level;
 # a chord of one voice or four; a sine full or cut 15 dB). Against GND-SIN's, dB; Q12. In the machines' order
 DIST_M = {"GSIN": 0.0, "GNOI": 0.0, "SID": 0.0, "FMS": -1.4, "FMD": 0.0, "SAW": -10.5, "ENS": 1.7, "WAV": -7.0, "VOX": -1.4,
-          "FMP": 0.3, "PUL": -2.75}
-out.append(arr("T_DIST_M", "uint16_t", [round(4096 * 10 ** (v / 20)) for v in DIST_M.values()], 11))
+          "FMP": 0.3, "PUL": -2.75, "FXC": 0.0, "FXR": 0.0, "FXD": 0.0}
+out.append(arr("T_DIST_M", "uint16_t", [round(4096 * 10 ** (v / 20)) for v in DIST_M.values()], 14))
 # the filter follows the note: a cutoff 2^((step - 16) / 8) x f0, the same for the HP (BASE) and the LP (BASE + WDTH).
 # Positions in 1/96 octave over MIDI note 0 (8.18 Hz): 8 a semitone, 12 a step. Every section stops at 18 kHz,
 # which gives the open filter the Monomachine's top (-1 dB at 12.5 kHz, -1.8 dB at 14 kHz). ZDF g = tan(pi fc / fs)
@@ -391,6 +391,20 @@ out.append(arr("T_FMDEC", "uint32_t", [min(2 ** 31 - 1, round(2 ** 31 * math.exp
 # 1FEN: the first operator's frequency pushed by a note-independent amount at the trig (before its ratio): up 1.35 Hz by
 # the square of the distance over 64, down a quarter of that under it; a phase increment
 out.append(arr("T_FMFEN", "int32_t", [round((1.35 if v >= 64 else -0.34) * (v - 64) ** 2 * 2 ** 32 / SR) for v in range(128)], 8))
+
+# the FX machines (MONO2K's own designs on the Monomachine's pages: the emulator passes no neighbour into them).
+# log2 and 2^x in Q8, for FX-DYNAMIX's levels
+out.append(arr("T_LOG2M", "uint16_t", [round(256 * math.log2(1 + m / 256)) for m in range(256)], 16))
+out.append(arr("T_EXP2F", "uint32_t", [round(65536 * 2 ** (f / 256)) for f in range(256)], 8))
+# FX-DYNAMIX: attack 0.1 ms .. 200 ms, release 5 ms .. 3 s, as one-pole coefficients a control block (Q15)
+def blk_coef(tau):
+    return min(32767, round(32768 * (1 - math.exp(-SUB / (SR * tau)))))
+out.append(arr("T_DYN_A", "uint16_t", [blk_coef(0.0001 * (2000 ** (v / 127))) for v in range(128)], 16))
+out.append(arr("T_DYN_R", "uint16_t", [blk_coef(0.005 * (600 ** (v / 127))) for v in range(128)], 16))
+# its ratio, 1:1 .. 20:1 and on to a limiter at 127, as 1 - 1 / ratio (Q8)
+out.append(arr("T_DYN_K", "uint16_t", [256 if v == 127 else round(256 * (1 - 1 / (1 + 19 * (v / 126) ** 1.5))) for v in range(128)], 16))
+# FX-CHORUS's sweep: 0.05 .. 8 Hz, a phase increment a sample
+out.append(arr("T_CHO_INC", "uint32_t", [round(2 ** 32 * 0.05 * (160 ** (v / 127)) / SR) for v in range(128)], 8))
 
 # mu-law (8 bit) decoder, for the delay lines
 def mulaw_dec(b):

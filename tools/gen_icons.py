@@ -119,6 +119,19 @@ def mark(name):
         for w in (3.4, 2.4, 1.4):
             R(x, 1.8, x + w, 10.2)
             x += w + 2.2 - (3.4 - w) * 0.3
+    elif name == "FXC":         # the chorus: one wave and its copy, bent apart
+        for k, dy in enumerate((-1.3, 1.3)):
+            pts = [(1 + 10 * q / 40, 6 + dy * (1 if k else 1) + 3.2 * math.sin(2 * math.pi * q / 40 + k * 0.9)) for q in range(41)]
+            STROKE(pts, 1.5)
+    elif name == "FXR":         # the ring: a ring, a wave through it
+        ARC(6, 6, 5.2, 3.6, 0, 360)
+        STROKE([(1 + 10 * q / 40, 6 + 2.0 * math.sin(2 * math.pi * 2 * q / 40)) for q in range(41)], 1.2, 0)
+        STROKE([(1 + 10 * q / 40, 6 + 2.0 * math.sin(2 * math.pi * 2 * q / 40)) for q in range(41)], 0.8)
+    elif name == "FXD":         # the dynamics: a level, squeezed flat over its line
+        R(1, 8.5, 11, 10)
+        for k, h in enumerate((5.5, 7.5, 6.5, 6.5, 6.5)):
+            R(1.2 + k * 2.0, 10 - min(h, 6.5) - 1.5, 2.6 + k * 2.0, 8.5)
+        R(0.5, 2.0, 11.5, 2.8)
     elif name == "ENS":         # the ensemble: one tone, three voices swirled apart
         cx, cy, r = 6.0, 6.0, 4.9
         DISC(cx, cy, r)
@@ -150,7 +163,7 @@ def mark(name):
     return im                   # G * SS square, 8 bit
 
 
-NAMES = ["GSIN", "GNOI", "SID", "FMS", "FMD", "SAW", "ENS", "WAV", "VOX", "FMP", "PUL"]
+NAMES = ["GSIN", "GNOI", "SID", "FMS", "FMD", "SAW", "ENS", "WAV", "VOX", "FMP", "PUL", "FXC", "FXR", "FXD"]
 
 
 GS = 256        # the distance field's grid: finer than the mark, for clean normals

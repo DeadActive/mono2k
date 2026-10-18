@@ -33,7 +33,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 
 | | |
 |---|---|
-| Machines | GND-SIN, GND-NOIS, SID-6581, FM+STAT, FM+PAR, FM+DYN, SWAV-SAW, SWAV-PUL, SWAV-ENS, DIGI-WAV, VOX-6: clean-room designs after the Monomachine's families, integer only |
+| Machines | GND-SIN, GND-NOIS, SID-6581, FM+STAT, FM+PAR, FM+DYN, SWAV-SAW, SWAV-PUL, SWAV-ENS, DIGI-WAV, VOX-6, FX-CHORUS, FX-RINGMOD, FX-DYNAMIX (on the track before): clean-room designs after the Monomachine's families, integer only |
 | Per track | the Monomachine's chain and pages: SYN A–H · AMP (ATK HOLD DEC REL DIST VOL PAN PORT) · FILT (HP / LP as base and width following the note, resonance, envelope) · FX (EQ, SRR, a delay of its own in 8-bit mu-law, ping-pong on positive sends) · DSTR (bits, fold, xor, SPU send) · 3 LFOs (any track's parameter) · ARP |
 | Projects | the modern Elektron way: 4 projects × 4 banks (A–D) × 16 patterns, each pattern with its own sounds. SAVE keeps the pattern (its reload point), GLO + SAVE reloads it, SAVE held keeps the project; GLO + REC / PLAY / SEQ copy, paste, clear (the pattern on HOME, the track's sound on its pages); GLO > SET picks and loads a project. On the web: a project picker, export / import as `.m2kp` files. Stored packed (a typical pattern 0.5–1 KB; the DEMO project 32 KB) |
 | Factory | project DEMO, bank A: sixteen parts after the late-90s and 2000s digital era, written in batches of four, each heard and approved (`docs/bank-a.md`: reference, genre, key and idea of each). So far HAZE (after Boards of Canada), SPLICE (Autechre), RIBBON (Aphex Twin), FACETS (Aleksi Perälä), SMOKE (dub techno), TORQUE (hardgroove), TUNNEL (Overmono), MOTEL (Anthony Naples); A09–A16 hold the bank before until theirs. Banks B–D blank. A store saved with earlier demos takes the new ones where the old still stand |
@@ -63,7 +63,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
    and GND-NOIS are next. Their levels, measured with DIST at 64 (`tools/ref/chain_dist21.spec`, `regress.py` group
    `machine_level`, known gaps below): GND-NOIS 2.9 dB louder than the Monomachine's, VO-6 5.3 dB quieter.
    Driven hard, all of them meet its ceilings.
-3. More machines (DPRO-BBOX, FX machines that take the previous track), songs, MIDI out and clock.
+3. More machines (DPRO-BBOX, FX-REVERB and the rest of the FX family), songs, MIDI out and clock.
 
 ## Author
 
@@ -135,6 +135,18 @@ Done so far, all measured on OS 1.32B:
   second synced. NOIS is the chip's 23-bit register clocked by the cycle, MIX the triangle AND the saw. Levels within
   0.3 dB (the 7 dB gap closes), duty and sweep within 0.5 dB, ring and sync partials within 1–3 dB. Known gap: MIX's
   spectrum (the Monomachine combines the two waves otherwise; its level matches).
+- **FX-CHORUS, FX-RINGMOD, FX-DYNAMIX** (FX-CHORS, FX-RING, FX-DYNMX on the screen), new, on the Monomachine's pages
+  but MONO2K's own designs: the emulator they would be measured on passes no neighbouring track into any FX machine
+  (its THRU, REVERB and CHORUS all stay at digital silence, whether MIDI or the OS's own trigs open them; `mm_ref`'s
+  loop takes those, `Q track step`). Each takes the previous track's output, after its amp and before its VOL (so VOL
+  0 keeps a track out of the mix and in the FX), INP its level (100 as it is), and opens on its own trigs as the
+  Monomachine's FX tracks do (HOLD 127 by default). CHORUS (DEL DEP SPD MIX | FB WID LP INP): two taps swept in
+  opposite ways off one line, their mean the chorus, their difference its width added across the stereo after the pan,
+  fed back through the first, the wet lowpassed. RINGMOD (WAVE EXT – MIX | – – – INP): the input times a carrier on
+  the track's note, sine to triangle to square to saw by WAVE; EXT takes the carrier from the track before the input
+  instead. DYNAMIX (ATK REL THRS MIX | RAT GAIN RMS INP): a compressor on each block's peak and RMS (RMS the blend),
+  followed in log2, over a threshold of −60..0 dB by a ratio of 1:1..20:1 (a limiter at 127), made up by up to 24 dB,
+  MIX parallel. The self-test holds what each does.
 - **SWAV-PUL**, new, on SWAVE-PULS's page (`tools/ref/chain_pul38.spec`, group `pul`; UNIL UNIW SUB1 SUB2 | PW PWAD
   PWRS TUNE): a pulse whose duty is PW / 128 (a square at 64, silent at 0 and 127), against GND-SIN's sine at 0.105,
   its voices started together at each trig; PWAD sweeps PW on at 5.38 steps a second a step, PWRS ON starting it again
