@@ -10,6 +10,7 @@
 //   mm_ref ROM pages DIR           GND-SIN's init pages, as the screen shows them, one per press of the page key
 //   mm_ref ROM loop DIR < LOOP     a loop over several tracks (tools/ref/power.loop), DIR/loop_mm.wav
 //   mm_ref ROM values DIR M CC     machine M's page as the screen shows each value 0..127 of controller CC
+//   mm_ref ROM panel DIR < SCRIPT  panel presses, knob turns, screenshots, audio (tap / enc / assign / midi / wait / shot / record)
 #include "mdLib/mdhardware.h"
 #include "mdLib/mdfrontpanel.h"
 #include "mdLib/mdpanel.h"
@@ -21,6 +22,7 @@
 #include <cstring>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -49,6 +51,21 @@ namespace
 		require(_hw.trySendPanelEvent(p->row, p->mask), "panel press rejected");
 		advance(_hw, 2048);
 		require(_hw.trySendPanelEvent(p->row, 0), "panel release rejected");
+		advance(_hw, 4096);
+	}
+
+	// two controls held together, released in the other order
+	void chord(md::Hardware& _hw, md::PanelControl _a, md::PanelControl _b)
+	{
+		const auto a = md::panelPacket(md::MachineModel::Monomachine, _a);
+		const auto b = md::panelPacket(md::MachineModel::Monomachine, _b);
+		require(a && b, "no such panel control");
+		md::PanelRowState rows;
+		for(const auto p : {rows.press(*a), rows.press(*b), rows.release(*b), rows.release(*a)})
+		{
+			require(_hw.trySendPanelEvent(p.row, p.mask), "panel control rejected");
+			advance(_hw, 2048);
+		}
 		advance(_hw, 4096);
 	}
 
@@ -183,6 +200,64 @@ namespace
 		return 0;
 	}
 
+	// a panel script from stdin, to find where a setting lives: "tap NAME" (a panel control, as gearmulator names it),
+	// "enc N DELTA" (data entry knob N 0..7 turned), "assign TRACK MACHINE", "midi A B C", "wait MS", "shot NAME"
+	// (DIR/NAME.pbm), "record SECONDS NAME" (DIR/NAME.wav)
+	int panel(const char* _rom, const std::string& _dir)
+	{
+		auto hw = boot(_rom);
+		std::string line;
+		while(std::getline(std::cin, line))
+		{
+			if(line.empty() || line[0] == '#') continue;
+			std::istringstream in(line);
+			std::string cmd;
+			in >> cmd;
+			if(cmd == "tap")
+			{
+				std::string name;
+				in >> name;
+				bool found = false;
+				for(uint8_t c = 0; c <= static_cast<uint8_t>(md::PanelControl::ClassicExtended); ++c)
+					if(name == md::panelControlName(static_cast<md::PanelControl>(c))) { tap(*hw, static_cast<md::PanelControl>(c)); found = true; break; }
+				require(found, "no such panel control");
+			}
+			else if(cmd == "enc")
+			{
+				int n = 0, d = 0;
+				in >> n >> d;
+				const auto c = md::panelEncoderCommand(md::MachineModel::Monomachine, static_cast<md::PanelEncoder>(n));
+				require(c.has_value(), "no such knob");
+				for(int k = 0; k < (d < 0 ? -d : d); ++k)
+				{
+					require(hw->trySendPanelEvent(*c, static_cast<uint8_t>(d < 0 ? 0xff : 0x01)), "knob turn rejected");
+					advance(*hw, 1024);
+				}
+				advance(*hw, 4096);
+			}
+			else if(cmd == "chord")    // two controls held together: "chord Function Play"
+			{
+				std::string a, b;
+				in >> a >> b;
+				auto find = [](const std::string& n) {
+					for(uint8_t c = 0; c <= static_cast<uint8_t>(md::PanelControl::ClassicExtended); ++c)
+						if(n == md::panelControlName(static_cast<md::PanelControl>(c))) return std::optional<md::PanelControl>(static_cast<md::PanelControl>(c));
+					return std::optional<md::PanelControl>();
+				};
+				const auto ca = find(a), cb = find(b);
+				require(ca && cb, "no such panel control");
+				chord(*hw, *ca, *cb);
+			}
+			else if(cmd == "assign") { unsigned t = 0, m = 0; in >> t >> m; assign(*hw, static_cast<uint8_t>(t), static_cast<uint8_t>(m)); }
+			else if(cmd == "midi") { unsigned a = 0, b = 0, c = 0; in >> a >> b >> c; midi(*hw, static_cast<uint8_t>(a), static_cast<uint8_t>(b), static_cast<uint8_t>(c)); }
+			else if(cmd == "wait") { unsigned ms = 0; in >> ms; advance(*hw, g_rate / 1000 * ms); }
+			else if(cmd == "shot") { std::string name; in >> name; writePbm(_dir + "/" + name + ".pbm", hw->getFrontPanelSnapshot()); }
+			else if(cmd == "record") { double sec = 0; std::string name; in >> sec >> name; std::vector<float> lr; render(*hw, static_cast<uint32_t>(sec * g_rate), lr); writeWav(_dir + "/" + name + ".wav", lr); }
+			else require(false, "unknown panel command");
+		}
+		return 0;
+	}
+
 	int renderSpec(const char* _rom, const std::string& _dir)
 	{
 		auto hw = boot(_rom);
@@ -239,6 +314,7 @@ namespace
 		unsigned steps = 16;
 		struct Note { unsigned track, step, note, vel, gate; };
 		std::vector<Note> notes;
+		std::vector<std::pair<unsigned, unsigned>> seq;
 		std::string line;
 		while(std::getline(std::cin, line))
 		{
@@ -252,6 +328,12 @@ namespace
 				Note n{};
 				require(static_cast<bool>(in >> n.track >> n.step >> n.note >> n.vel >> n.gate), "bad N line");
 				notes.push_back(n);
+			}
+			else if(kind == "Q")       // a sequencer trig (an FX track opens on the OS's own trigs, not on MIDI notes)
+			{
+				unsigned track = 0, step = 0;
+				require(static_cast<bool>(in >> track >> step), "bad Q line");
+				seq.emplace_back(track, step);
 			}
 			else if(kind == "T")
 			{
@@ -271,6 +353,23 @@ namespace
 			}
 		}
 		advance(*hw, g_rate * 2);               // the controllers land one by one on the OS: let them all arrive
+		if(!seq.empty())                        // grid recording: the pattern's tracks cleared (the image's A01 holds a
+		{                                       // demo), each Q trig placed, then the sequencer runs
+			tap(*hw, md::PanelControl::Record);
+			for(uint8_t t = 0; t < 6; ++t)
+			{
+				tap(*hw, static_cast<md::PanelControl>(static_cast<uint8_t>(md::PanelControl::Track1) + t));
+				chord(*hw, md::PanelControl::Function, md::PanelControl::Play);    // CLEAR TRACK
+			}
+			for(const auto& q : seq)
+			{
+				tap(*hw, static_cast<md::PanelControl>(static_cast<uint8_t>(md::PanelControl::Track1) + q.first));
+				tap(*hw, static_cast<md::PanelControl>(static_cast<uint8_t>(md::PanelControl::Trigger1) + q.second));
+			}
+			tap(*hw, md::PanelControl::Record);
+			advance(*hw, g_rate / 2);
+			tap(*hw, md::PanelControl::Play);
+		}
 		const double step_frames = g_rate * 15.0 / tempo;
 		const uint32_t total = static_cast<uint32_t>(seconds * g_rate);
 		std::vector<float> lr;
@@ -309,6 +408,7 @@ int main(int _argc, char** _argv)
 		if(cmd == "lcd") return lcd(_argv[1], _argv[3]);
 		if(cmd == "render") return renderSpec(_argv[1], _argv[3]);
 		if(cmd == "pages") return pages(_argv[1], _argv[3]);
+		if(cmd == "panel") return panel(_argv[1], _argv[3]);
 		if(cmd == "loop") return loop(_argv[1], _argv[3]);
 		std::cerr << "unknown command\n";
 		return 2;

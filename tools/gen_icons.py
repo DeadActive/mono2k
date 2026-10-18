@@ -113,6 +113,12 @@ def mark(name):
             d.line([(x * U, y * U) for x, y in pts + [pts[0]]], fill=0, width=int(2 * SL * U), joint="curve")
             P(pts)
         R(0, B, 12, 12, 0)                            # the halo's foot, off the baseline
+    elif name == "PUL":         # the pulse: a train on its low line, each pulse narrower than the last (its width swept)
+        R(0.5, 8.6, 11.5, 10.2)
+        x = 0.5
+        for w in (3.4, 2.4, 1.4):
+            R(x, 1.8, x + w, 10.2)
+            x += w + 2.2 - (3.4 - w) * 0.3
     elif name == "ENS":         # the ensemble: one tone, three voices swirled apart
         cx, cy, r = 6.0, 6.0, 4.9
         DISC(cx, cy, r)
@@ -144,7 +150,7 @@ def mark(name):
     return im                   # G * SS square, 8 bit
 
 
-NAMES = ["GSIN", "GNOI", "SID", "FMS", "FMD", "SAW", "ENS", "WAV", "VOX", "FMP"]
+NAMES = ["GSIN", "GNOI", "SID", "FMS", "FMD", "SAW", "ENS", "WAV", "VOX", "FMP", "PUL"]
 
 
 GS = 256        # the distance field's grid: finer than the mark, for clean normals

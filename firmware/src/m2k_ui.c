@@ -57,7 +57,7 @@ typedef struct {
 } mi_t;
 
 /* the machines as the selector steps through them: the Monomachine's order (its FM+ STAT, PAR, DYN together) */
-static const uint8_t M_ORDER[M_COUNT] = {M_GSIN, M_GNOI, M_SID, M_FMS, M_FMP, M_FMD, M_SAW, M_ENS, M_WAV, M_VOX};
+static const uint8_t M_ORDER[M_COUNT] = {M_GSIN, M_GNOI, M_SID, M_FMS, M_FMP, M_FMD, M_SAW, M_PUL, M_ENS, M_WAV, M_VOX};
 static int m_place(int m) { for (int i = 0; i < M_COUNT; i++) if (M_ORDER[i] == m) return i; return 0; }
 
 static const mi_t MI[M_COUNT] = {
@@ -91,6 +91,9 @@ static const mi_t MI[M_COUNT] = {
     {"FM+PAR", "FM+", "TRIPLE", "SYNTH", {4, 5, 3},
      {{"1FRQ", "RATIO 1", K_FR24}, {"1ENV", "DEPTH / DECAY 1", K_BI}, {"2FRQ", "RATIO 2", K_FR24}, {"2ENV", "DEPTH / DECAY 2", K_BI},
       {"3FRQ", "RATIO 3", K_FR24}, {"3ENV", "DEPTH / DECAY 3", K_BI}, {"TONE", "TONE", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
+    {"SWAV-PUL", "SWAV", "PULSE", "SYNTH", {3, 1, 4},
+     {{"UNIL", "UNISON LEVEL", K_NUM}, {"UNIW", "UNISON WIDTH", K_NUM}, {"SUB1", "SINE SUB -1", K_NUM}, {"SUB2", "SINE SUB -2", K_NUM},
+      {"PW", "PULSE WIDTH", K_NUM}, {"PWAD", "PW SWEEP", K_NUM}, {"PWRS", "SWEEP RESET", K_ONOFF}, {"TUNE", "TUNE", K_TUN2}}},
 };
 
 static const char *const SIDW_N[5] = {"TRI", "SAW", "PULS", "MIX", "NOIS"};

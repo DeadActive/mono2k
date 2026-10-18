@@ -33,7 +33,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 
 | | |
 |---|---|
-| Machines | GND-SIN, GND-NOIS, SID-6581, FM+STAT, FM+PAR, FM+DYN, SWAV-SAW, SWAV-ENS, DIGI-WAV, VOX-6: clean-room designs after the Monomachine's families, integer only |
+| Machines | GND-SIN, GND-NOIS, SID-6581, FM+STAT, FM+PAR, FM+DYN, SWAV-SAW, SWAV-PUL, SWAV-ENS, DIGI-WAV, VOX-6: clean-room designs after the Monomachine's families, integer only |
 | Per track | the Monomachine's chain and pages: SYN A–H · AMP (ATK HOLD DEC REL DIST VOL PAN PORT) · FILT (HP / LP as base and width following the note, resonance, envelope) · FX (EQ, SRR, a delay of its own in 8-bit mu-law, ping-pong on positive sends) · DSTR (bits, fold, xor, SPU send) · 3 LFOs (any track's parameter) · ARP |
 | Projects | the modern Elektron way: 4 projects × 4 banks (A–D) × 16 patterns, each pattern with its own sounds. SAVE keeps the pattern (its reload point), GLO + SAVE reloads it, SAVE held keeps the project; GLO + REC / PLAY / SEQ copy, paste, clear (the pattern on HOME, the track's sound on its pages); GLO > SET picks and loads a project. On the web: a project picker, export / import as `.m2kp` files. Stored packed (a typical pattern 0.5–1 KB; the DEMO project 32 KB) |
 | Factory | project DEMO, bank A: sixteen parts after the late-90s and 2000s digital era, written in batches of four, each heard and approved (`docs/bank-a.md`: reference, genre, key and idea of each). So far HAZE (after Boards of Canada), SPLICE (Autechre), RIBBON (Aphex Twin), FACETS (Aleksi Perälä), SMOKE (dub techno), TORQUE (hardgroove), TUNNEL (Overmono), MOTEL (Anthony Naples); A09–A16 hold the bank before until theirs. Banks B–D blank. A store saved with earlier demos takes the new ones where the old still stand |
@@ -59,8 +59,8 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
    the second core as CS-1 does, the 1-bit framebuffer blitted in strips with the palette's two colours. The projects'
    images move to the 1 MiB flash (`m2k_proj.c` get / put), and RAM keeps the playing bank, not all 64 patterns.
 2. **Calibration against the Monomachine**, machine by machine: levels, spectra, the machines' own envelopes. The amp
-   envelope, SWAV-SAW, SWAV-ENS, the three FM+, SID-6581 and the whole track chain are done (below); VO-6 and GND-NOIS
-   are next. Their levels, measured with DIST at 64 (`tools/ref/chain_dist21.spec`, `regress.py` group
+   envelope, SWAV-SAW, SWAV-PUL, SWAV-ENS, the three FM+, SID-6581 and the whole track chain are done (below); VO-6
+   and GND-NOIS are next. Their levels, measured with DIST at 64 (`tools/ref/chain_dist21.spec`, `regress.py` group
    `machine_level`, known gaps below): GND-NOIS 2.9 dB louder than the Monomachine's, VO-6 5.3 dB quieter.
    Driven hard, all of them meet its ceilings.
 3. More machines (DPRO-BBOX, FX machines that take the previous track), songs, MIDI out and clock.
@@ -135,6 +135,12 @@ Done so far, all measured on OS 1.32B:
   second synced. NOIS is the chip's 23-bit register clocked by the cycle, MIX the triangle AND the saw. Levels within
   0.3 dB (the 7 dB gap closes), duty and sweep within 0.5 dB, ring and sync partials within 1–3 dB. Known gap: MIX's
   spectrum (the Monomachine combines the two waves otherwise; its level matches).
+- **SWAV-PUL**, new, on SWAVE-PULS's page (`tools/ref/chain_pul38.spec`, group `pul`; UNIL UNIW SUB1 SUB2 | PW PWAD
+  PWRS TUNE): a pulse whose duty is PW / 128 (a square at 64, silent at 0 and 127), against GND-SIN's sine at 0.105,
+  its voices started together at each trig; PWAD sweeps PW on at 5.38 steps a second a step, PWRS ON starting it again
+  at each trig; a unison pair ∓0.211 c a step of UNIW off (SWAV-SAW's extended pair's spread), each as loud as UNIL
+  says; sine subs an octave and two down, the first up to full scale. Its DIST ceiling sits 2.75 dB under GND-SIN's.
+  Levels within 0.3 dB, the unison's beating and the sweep's timing as the Monomachine's.
 - **The track chain** (`tools/ref/chain.py` writes the specs, `chain_anal.py` reads them), in the Monomachine's order:
   - VOL and LEV squared; PAN cos / sin; the track clips per channel after the pan, just under full scale at LEV 127.
     MONO2K matches within 0.02 dB.
@@ -145,8 +151,8 @@ Done so far, all measured on OS 1.32B:
     subs and the saw with unison all land within 0.8 dB of each other. One to four voices land within 0.6 dB, and a
     sine at full scale or 15 dB down within 0.9 dB. So there is no output compensation and no ceiling that follows
     the input. Between machines the ceilings differ: against GND-SIN's, SWAV-SAW's is 10.5 dB lower, DIGI-WAV's 7.0,
-    FM+STAT's and VO-6's 1.4, and SWAV-ENS's 1.7 and FM+PAR's 0.3 higher; GND-NOIS, SID and FM+DYN clip at
-    GND-SIN's. A bass driven past about 80 gains harmonics and almost no level. MONO2K now follows within 1 dB on all
+    SWAV-PUL's 2.75, FM+STAT's and VO-6's 1.4; SWAV-ENS's 1.7 and FM+PAR's 0.3 higher; GND-NOIS, SID and FM+DYN clip
+    at GND-SIN's. A bass driven past about 80 gains harmonics and almost no level. MONO2K now follows within 1 dB on all
     of these (`regress.py`, group `dist_loud`).
 
     **Saved patterns with high DIST sound different.** Before this fix, every machine clipped at GND-SIN's ceiling,

@@ -4,8 +4,8 @@
 # one control. A sine (GND-SIN) for the levels, the distortion and the sample rate reduction; noise (GND-NOIS) for the
 # filter and the EQ, whose responses are read as the ratio to the clean noise at the same note (the filter follows the
 # note); a short sine blip for the delay.
-#   .venv/bin/python tools/ref/chain.py specs|specs2|specs3|fm26|sid36 tools/ref   writes chain_*.spec (rounds one to three;
-#   FM+; SID-6581)
+#   .venv/bin/python tools/ref/chain.py specs|specs2|specs3|fm26|sid36|pul38 tools/ref   writes chain_*.spec (rounds one to
+#   three; FM+; SID-6581; SWAVE-PULS)
 import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -471,8 +471,26 @@ def sid36():
     return out
 
 
+def pul38():
+    """SWAVE-PULS (5): the pulse up the keyboard, PW's duty, PWAD's sweep, the unison, the subs, TUNE, and the machine
+    driven (its DIST ceiling). Each line sends the page"""
+    I = {48: 0, 49: 0, 50: 0, 51: 0, 52: 64, 53: 0, 54: 0, 55: 64}
+    out = ["# SWAVE-PULS: UNIL UNIW SUB1 SUB2 | PW PWAD PWRS TUNE (init 0 0 0 0 64 0 0 64)"]
+    out += [line(f"p38_lev_n{n}", 5, n, I, gate=1.0) for n in (36, 48, 72)]
+    out += [line(f"p38_pw_{v:03d}", 5, 48, {**I, 52: v}, gate=1.0) for v in (8, 32, 48, 96)]
+    out += [line(f"p38_pwad_{v:03d}", 5, 48, {**I, 53: v}, gate=1.6) for v in (16, 64)]
+    out += [line(f"p38_uni_l{l:03d}_w{w:03d}", 5, 48, {**I, 48: l, 49: w}, gate=1.2) for l, w in ((64, 64), (127, 16), (127, 127))]
+    out += [line(f"p38_sub{k}_{v:03d}", 5, 36, {**I, 49 + k: v}, gate=1.0) for k in (1, 2) for v in (64, 127)]
+    out += [line(f"p38_tune_{v:03d}", 5, 48, {**I, 55: v}, gate=1.0) for v in (0, 127)]
+    out += [line(f"p38_drv_d{d:03d}", 5, 36, {**I, 48: 127, 49: 64, 50: 127, 60: d}, gate=1.0) for d in (64, 96, 112, 127)]
+    return out
+
+
 if __name__ == "__main__":
-    if sys.argv[1] == "sid36":
+    if sys.argv[1] == "pul38":
+        with open(os.path.join(sys.argv[2], "chain_pul38.spec"), "w") as fh:
+            fh.write("\n".join(pul38()) + "\n")
+    elif sys.argv[1] == "sid36":
         with open(os.path.join(sys.argv[2], "chain_sid36.spec"), "w") as fh:
             fh.write("\n".join(sid36()) + "\n")
     elif sys.argv[1] == "fm26":

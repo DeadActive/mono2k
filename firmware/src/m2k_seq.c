@@ -325,6 +325,7 @@ static const uint8_t MACH_DEF[M_COUNT][8] = {
     /* DIGI-WAV */ {40, 64, 64, 0, 0, 70, 0, 0},
     /* VOX-6    */ {10, 80, 60, 64, 10, 70, 20, 20},
     /* FM+PAR   */ {61, 64, 82, 64, 104, 80, 64, 64},  /* the Monomachine's init: 1/2, 1, 2; the third decaying */
+    /* SWAV-PUL */ {0, 0, 0, 0, 64, 0, 0, 64},     /* the Monomachine's init: the square alone */
 };
 
 static void kit_default(m2k_pattern_t *p, int t, int m)

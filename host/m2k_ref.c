@@ -16,6 +16,7 @@ static int machine_of(int mm)
     case 2: return M_GNOI;
     case 3: return M_SID;
     case 4: return M_SAW;
+    case 5: return M_PUL;
     case 6: return M_WAV;
     case 8: return M_FMS;
     case 9: return M_FMP;

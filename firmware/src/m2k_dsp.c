@@ -177,6 +177,9 @@ static inline int32_t fold16(int32_t y)
 
 static inline uint32_t noise_step(uint32_t *s) { uint32_t x = *s; x ^= x << 13; x ^= x >> 17; x ^= x << 5; *s = x; return x; }
 
+#define PUL_A 3430                     /* SWAVE-PULS's pulse: 0.105 of GND-SIN's sine */
+#define PUL_S1 32767                   /* its sine subs, as measured: an octave down at full scale, two at 0.96 */
+#define PUL_S2 31500
 #define SID_A 24950                    /* SID-6581's peak: a square 2.3 dB under full scale (measured) */
 #define SID_MIX0 1024                  /* the triangle AND the saw: its mean over a cycle, of 4096 */
 #define SID_MIXA (SID_A * 15 / 32)   /* MIX 9 dB under the triangle */
@@ -207,6 +210,10 @@ static void mach_trig(trk_t *t, int m)
         break;
     case M_SID:                        /* PWRS ON: the PW sweep starts again */
         if (t->eff[P_SYN + 2] >= 64) t->ms[4] = 0;
+        break;
+    case M_PUL:                        /* the voices start together (the unison's beating says so) */
+        t->ph[0] = t->ph[1] = t->ph[2] = 0;
+        if (t->eff[P_SYN + 6] >= 64) t->ms[4] = 0;
         break;
     case M_ENS:                        /* the voices start together on a trig (chain_ens18: two trigs alike) */
         t->ph[0] = t->ph[1] = t->ph[2] = t->ph[3] = 0;
@@ -532,6 +539,38 @@ static void mach_block(int ti, int m, int32_t pitch)
             t->ph[5] += ih;
             t->ph[6] += inc[0] >> 2;
             o[i] = (int16_t)sat16(y);
+        }
+        break;
+    }
+    case M_PUL: {                      /* UNIL UNIW SUB1 SUB2 PW PWAD PWRS TUNE */
+        /* after the Monomachine's SWAVE-PULS, measured on its OS (tools/ref/chain_pul38.spec): a pulse, its voices
+         * started together, its duty PW / 128 (a square at 64, silent at 0 and 127), against GND-SIN's sine at 0.105;
+         * PWAD sweeps PW on, 5.38 steps a second a step, round and round, PWRS ON starting it again at each trig; a
+         * unison pair -+0.211 c a step of UNIW off, each as loud as UNIL says; sines an octave and two down */
+        int unil = P7(t, P_SYN + 0), uniw = P7(t, P_SYN + 1);
+        uint32_t inc[3], inv[3];
+        inc[0] = inc_of(pitch + (P7(t, P_SYN + 7) - 64) * 2);
+        inc[1] = mulu_hi(inc[0], T_SW2LO[uniw], 24);                    /* SWAV-SAW's extended pair's spread */
+        inc[2] = mulu_hi(inc[0], T_SW2HI[uniw], 24);
+        int nv = unil ? 3 : 1;
+        for (int k = 0; k < nv; k++) inv[k] = 0xFFFFFFFFu / (inc[k] | 1);
+        t->ms[4] = (int32_t)(((uint32_t)t->ms[4] + (uint32_t)P7(t, P_SYN + 5) * 128u) & 0x7FFFFFu);  /* the sweep, Q16 */
+        uint32_t duty = (uint32_t)(((P8(t, P_SYN + 4) << 8) + t->ms[4]) & 0x7FFFFF) << 9;
+        int32_t g1 = PUL_A * unil / 127;
+        int32_t gs1 = PUL_S1 * P7(t, P_SYN + 2) / 127, gs2 = PUL_S2 * P7(t, P_SYN + 3) / 127;
+        int32_t dc = 32768 - (int32_t)(duty >> 16);
+        for (int i = 0; i < M2K_SUB; i++) {
+            int32_t s = (blep_saw(t->ph[0], inc[0], inv[0]) - blep_saw(t->ph[0] - duty, inc[0], inv[0]) + dc) * PUL_A;
+            if (unil)
+                for (int k = 1; k < 3; k++)
+                    s += (blep_saw(t->ph[k], inc[k], inv[k]) - blep_saw(t->ph[k] - duty, inc[k], inv[k]) + dc) * g1;
+            s >>= 15;
+            for (int k = 0; k < nv; k++) t->ph[k] += inc[k];
+            if (gs1) s += (sinp(t->ph[5]) * gs1) >> 15;
+            if (gs2) s += (sinp(t->ph[6]) * gs2) >> 15;
+            t->ph[5] += inc[0] >> 1;
+            t->ph[6] += inc[0] >> 2;
+            o[i] = (int16_t)sat16(s);
         }
         break;
     }

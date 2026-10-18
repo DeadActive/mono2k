@@ -25,13 +25,13 @@ REF_JSON = os.path.join(HERE, "regress_ref.json")
 GAPS_JSON = os.path.join(HERE, "regress_gaps.json")
 SPECS = ["chain_levels", "chain_dist2", "chain_filt2", "chain_map3", "chain_clip3", "chain_eq2", "chain_srr2",
          "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14", "chain_ens20", "chain_ensacc", "chain_dist21",
-         "chain_fm26", "chain_sid36"]
+         "chain_fm26", "chain_sid36", "chain_pul38"]
 MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2": "mm_cfilt2", "chain_map3": "mm_cmap3",
           "chain_clip3": "mm_cclip3", "chain_eq2": "mm_ceq2", "chain_srr2": "mm_csrr2", "chain_delay": "mm_cdelay",
           "chain_delay2": "mm_cdelay2", "chain_ftime5": "mm_cftime5", "chain_res6": "mm_cres6",
           "chain_drive12": "mm_cdrive12", "chain_tune13": "mm_ctune13",
           "chain_sidbend14": "mm_csidbend14", "chain_ens20": "mm_cens20", "chain_ensacc": "mm_censacc",
-          "chain_dist21": "mm_cdist21", "chain_fm26": "mm_cfm26", "chain_sid36": "mm_csid36"}
+          "chain_dist21": "mm_cdist21", "chain_fm26": "mm_cfm26", "chain_sid36": "mm_csid36", "chain_pul38": "mm_cpul38"}
 
 
 def db(v):
@@ -275,7 +275,7 @@ def m_fm_side(x, a, ld):                  # FM+: partials at given Hz, dB under 
     out = []
     for q in a["hz"]:
         k = int(round(q / df))
-        out.append(max(-50.0, db(sp[max(0, k - r):k + r + 1].max() / sp.max())))
+        out.append(max(a.get("floor", -50.0), db(sp[max(0, k - r):k + r + 1].max() / sp.max())))
     return out
 
 
@@ -613,6 +613,26 @@ def cases():
         add("sid", "chain_sid36", f"s36_mfrq_n{n}", "fm_side", {"hz": [k * f0n for k in sorted(near)]}, 3.0)
     for v in (0, 127):
         add("sid", "chain_sid36", f"s36_tune_{v:03d}", "pitch_c", {"note": 48}, 1.0)
+    # SWAVE-PULS (chain_pul38): a pulse, its duty PW / 128, the sweep, the unison, the sine subs, its DIST ceiling
+    for n in (36, 48, 72):
+        add("pul", "chain_pul38", f"p38_lev_n{n}", "rms", {}, 0.5)
+        add("pul", "chain_pul38", f"p38_lev_n{n}", "fm_side", {"hz": [f0_of(n) * k for k in range(1, 9)]}, 1.5)
+    for v in (8, 32, 48, 96):
+        add("pul", "chain_pul38", f"p38_pw_{v:03d}", "rms", {}, 0.5 if v > 8 else 1.5)
+        add("pul", "chain_pul38", f"p38_pw_{v:03d}", "fm_side", {"hz": [fc * k for k in range(1, 9)], "floor": -30.0}, 2.0)   # its
+                                                   # zeros (the duty's) are sharp: floored
+    for v in (16, 64):
+        for a in (0.1, 0.4, 0.7, 1.0, 1.3):
+            add("pul", "chain_pul38", f"p38_pwad_{v:03d}", "rms", {"t": (a, a + 0.06)}, 1.5)
+    for l, w in ((64, 64), (127, 16), (127, 127)):
+        add("pul", "chain_pul38", f"p38_uni_l{l:03d}_w{w:03d}", "rms", {}, 0.5)
+    for k in (1, 2):
+        for v in (64, 127):
+            add("pul", "chain_pul38", f"p38_sub{k}_{v:03d}", "rms", {}, 0.5)
+    for v in (0, 127):
+        add("pul", "chain_pul38", f"p38_tune_{v:03d}", "pitch_c", {"note": 48}, 1.0)
+    for d in (64, 96, 112, 127):
+        add("pul", "chain_pul38", f"p38_drv_d{d:03d}", "rms", {"t": (0.3, 0.95)}, 1.0)
     for m in ("p",):                               # FM+PAR: three of FM+STAT's operators side by side
         add("fm", "chain_fm26", f"f26{m}_carrier", "rms", {}, 0.3)
     for j in (1, 2, 3):
