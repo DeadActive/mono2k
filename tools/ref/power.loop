@@ -1,0 +1,26 @@
+# The power test (tools/ref/power.py): one short loop on machines both instruments have, with the same controls,
+# played over MIDI by tools/ref/mm_ref (the Monomachine, `loop`) and host/m2k_ref (MONO2K, `--loop`).
+#   L tempo steps seconds                       the loop: 16 sixteenths at 120, played for 15 s
+#   T track machine cc=v ...                    a track's machine (the Monomachine's numbers) and its controls, on its
+#                                               own MIDI channel; "m2k:cc=v" MONO2K's alone, "mm:cc=v" the Monomachine's
+#   N track step note velocity gate_steps       a note in the loop
+# The kick is GND-SIN's sine alone (the Monomachine's GND-SIN has TUNE and nothing else: MONO2K's pitch drop, click
+# and the rest are set to nothing), shaped by the amp and driven; the bass SWAVE-SAW's saw with both subs, driven hard
+# into the clip; the hat GND-NOIS's noise through a high-pass, short. Amp 56-63 ATK HOLD DEC REL DIST VOL PAN PORT;
+# filter 72-79 BASE WDTH HPQ LPQ FATK FDEC BOF WOF; level 7.
+L 120 16 15
+T 0 1 56=0 57=0 58=34 59=10 60=96 61=110 62=64 63=0 72=0 73=127 74=0 75=0 7=100 m2k:48=64 m2k:49=0 m2k:50=0 m2k:51=0 m2k:52=0 m2k:53=0 m2k:54=0 m2k:55=0
+T 1 4 48=0 49=0 50=0 52=0 53=110 54=80 55=64 56=0 57=127 58=127 59=24 60=100 61=96 62=64 63=0 72=0 73=40 74=0 75=0 7=100
+T 2 2 56=0 57=0 58=12 59=6 60=64 61=80 62=64 63=0 72=56 73=127 74=0 75=0 7=100
+N 0 0 36 100 1
+N 0 4 36 100 1
+N 0 8 36 100 1
+N 0 12 36 100 1
+N 1 0 36 100 3
+N 1 6 36 100 2
+N 1 10 43 100 2
+N 1 14 36 100 1
+N 2 2 60 100 1
+N 2 6 60 100 1
+N 2 10 60 100 1
+N 2 14 60 100 1

@@ -8,6 +8,7 @@
 //   mm_ref ROM render DIR < SPEC   one WAV per line of SPEC: name machine note velocity gate_s tail_s [cc=value ...]
 //                                  (mm:cc=value for this renderer alone, m2k:cc=value skipped)
 //   mm_ref ROM pages DIR           GND-SIN's init pages, as the screen shows them, one per press of the page key
+//   mm_ref ROM loop DIR < LOOP     a loop over several tracks (tools/ref/power.loop), DIR/loop_mm.wav
 #include "mdLib/mdhardware.h"
 #include "mdLib/mdfrontpanel.h"
 #include "mdLib/mdpanel.h"
@@ -208,6 +209,76 @@ namespace
 	}
 }
 
+namespace
+{
+	// a loop over several tracks (tools/ref/power.loop): each track its machine and controls on its own MIDI
+	// channel, then the notes played step by step at the tempo, from a fresh boot; DIR/loop_mm.wav
+	int loop(const char* _rom, const std::string& _dir)
+	{
+		auto hw = boot(_rom);
+		double tempo = 120, seconds = 15;
+		unsigned steps = 16;
+		struct Note { unsigned track, step, note, vel, gate; };
+		std::vector<Note> notes;
+		std::string line;
+		while(std::getline(std::cin, line))
+		{
+			if(line.empty() || line[0] == '#') continue;
+			std::istringstream in(line);
+			std::string kind;
+			in >> kind;
+			if(kind == "L") require(static_cast<bool>(in >> tempo >> steps >> seconds), "bad L line");
+			else if(kind == "N")
+			{
+				Note n{};
+				require(static_cast<bool>(in >> n.track >> n.step >> n.note >> n.vel >> n.gate), "bad N line");
+				notes.push_back(n);
+			}
+			else if(kind == "T")
+			{
+				unsigned track, machine;
+				require(static_cast<bool>(in >> track >> machine), "bad T line");
+				assign(*hw, static_cast<uint8_t>(track), static_cast<uint8_t>(machine));
+				std::string kv;
+				while(in >> kv)
+				{
+					if(kv.rfind("m2k:", 0) == 0) continue;
+					if(kv.rfind("mm:", 0) == 0) kv = kv.substr(3);
+					const auto eq = kv.find('=');
+					require(eq != std::string::npos, "cc=value expected");
+					midi(*hw, static_cast<uint8_t>(0xb0 | track), static_cast<uint8_t>(std::stoi(kv.substr(0, eq))),
+					     static_cast<uint8_t>(std::stoi(kv.substr(eq + 1))));
+				}
+			}
+		}
+		advance(*hw, g_rate * 2);               // the controllers land one by one on the OS: let them all arrive
+		const double step_frames = g_rate * 15.0 / tempo;
+		const uint32_t total = static_cast<uint32_t>(seconds * g_rate);
+		std::vector<float> lr;
+		std::vector<std::pair<uint32_t, uint32_t>> offs;     // (frame, channel << 8 | note)
+		for(uint32_t s = 0, at = 0; at < total; ++s)
+		{
+			const uint32_t frame = static_cast<uint32_t>(s * step_frames + 0.5);
+			const uint32_t next = static_cast<uint32_t>((s + 1) * step_frames + 0.5);
+			for(auto it = offs.begin(); it != offs.end();)
+				if(it->first <= frame) { midi(*hw, static_cast<uint8_t>(0x80 | (it->second >> 8)), static_cast<uint8_t>(it->second & 0xff), 0); it = offs.erase(it); }
+				else ++it;
+			for(const auto& n : notes)
+				if(n.step == s % steps)
+				{
+					midi(*hw, static_cast<uint8_t>(0x90 | n.track), static_cast<uint8_t>(n.note), static_cast<uint8_t>(n.vel));
+					offs.emplace_back(static_cast<uint32_t>((s + n.gate) * step_frames + 0.5) - 1, n.track << 8 | n.note);
+				}
+			const uint32_t n = std::min(next, total) - at;
+			render(*hw, n, lr);
+			at += n;
+		}
+		writeWav(_dir + "/loop_mm.wav", lr);
+		std::cout << "loop_mm\n";
+		return 0;
+	}
+}
+
 int main(int _argc, char** _argv)
 {
 	if(_argc != 4) { std::cerr << "mm_ref ROM lcd|render DIR\n"; return 2; }
@@ -217,6 +288,7 @@ int main(int _argc, char** _argv)
 		if(cmd == "lcd") return lcd(_argv[1], _argv[3]);
 		if(cmd == "render") return renderSpec(_argv[1], _argv[3]);
 		if(cmd == "pages") return pages(_argv[1], _argv[3]);
+		if(cmd == "loop") return loop(_argv[1], _argv[3]);
 		std::cerr << "unknown command\n";
 		return 2;
 	}

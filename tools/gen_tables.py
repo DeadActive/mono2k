@@ -141,6 +141,11 @@ def dist_c(d):
     return 0.6 + interp([(64, 5.79), (68, 3.94), (72, 0.0), (76, -2.27), (80, -3.24)], d)
 out.append(arr("T_DIST_H", "uint32_t", [round(2 ** 24 * 10 ** (dist_h(d) / 20)) for d in range(128)], 8))
 out.append(arr("T_DIST_C", "int32_t", [round(32767 * 10 ** (dist_c(d) / 20)) for d in range(128)], 8))
+# and the ceiling machine by machine (tools/ref/chain_dist21.spec): the Monomachine clips each machine against a
+# ceiling of its own, whatever the level going in (a saw alone, with its subs or its unison all clip to the same level;
+# a chord of one voice or four; a sine full or cut 15 dB). Against GND-SIN's, dB; Q12. In the machines' order
+DIST_M = {"GSIN": 0.0, "GNOI": 0.0, "SID": 0.0, "FMS": -1.4, "FMD": 0.0, "SAW": -10.5, "ENS": 1.7, "WAV": -7.0, "VOX": -1.4}
+out.append(arr("T_DIST_M", "uint16_t", [round(4096 * 10 ** (v / 20)) for v in DIST_M.values()], 9))
 # the filter follows the note: a cutoff 2^((step - 16) / 8) x f0, the same for the HP (BASE) and the LP (BASE + WDTH).
 # Positions in 1/96 octave over MIDI note 0 (8.18 Hz): 8 a semitone, 12 a step. Every section stops at 18 kHz,
 # which gives the open filter the Monomachine's top (-1 dB at 12.5 kHz, -1.8 dB at 14 kHz). ZDF g = tan(pi fc / fs)

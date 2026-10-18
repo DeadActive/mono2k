@@ -778,10 +778,11 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     mon.cut_hp[ti] = CLAMP(((ph >> 8) * 1087 >> 10) - 132, 0, 1016);       /* on the screen's 20 Hz .. 20 kHz */
     mon.cut_lp[ti] = CLAMP(((pl >> 8) * 1087 >> 10) - 132, 0, 1016);
     /* DIST: headroom below 64, a gain into the clip above 72; the clip's ceiling falls from +5.8 dB to -3.2 dB of a
-     * full-scale machine between 64 and 80. Between steps, interpolated */
+     * full-scale GND-SIN between 64 and 80, and each machine has its own, as the Monomachine's do (SWAV-SAW's 10.5 dB
+     * under GND-SIN's, whatever goes in: chain_dist21). Between steps, interpolated */
     int32_t d8 = P8(t, P_DIST), di = d8 >> 8, df = d8 & 255, dn = di < 127 ? di + 1 : 127;
     int64_t dh = T_DIST_H[di] + ((((int64_t)T_DIST_H[dn] - T_DIST_H[di]) * df) >> 8);
-    int32_t ceil = T_DIST_C[di] + (((T_DIST_C[dn] - T_DIST_C[di]) * df) >> 8);
+    int32_t ceil = (int32_t)(((int64_t)(T_DIST_C[di] + (((T_DIST_C[dn] - T_DIST_C[di]) * df) >> 8)) * T_DIST_M[m]) >> 12);
     /* EQ: a band added to the signal, Q 2.2, +36 / -31 dB; a cut is the inverse of a boost as deep (its band widened
      * by the gain) */
     int eqv = P7(t, P_EQG), eq_on = eqv != 64;

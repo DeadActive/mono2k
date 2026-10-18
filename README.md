@@ -60,6 +60,8 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
    images move to the 1 MiB flash (`m2k_proj.c` get / put), and RAM keeps the playing bank, not all 64 patterns.
 2. **Calibration against the Monomachine**, machine by machine: levels, spectra, the machines' own envelopes. The amp
    envelope, SWAV-SAW and the whole track chain are done (below); SWAV-ENS, SID, FM+, VO-6 and GND-NOIS are next.
+   Their levels, measured with DIST at 64 (`tools/ref/chain_dist21.spec`): SID 6.9 dB and FM+ 6.6 dB louder than the
+   Monomachine's, GND-NOIS 2.9 dB louder, VO-6 5.3 dB quieter. Driven hard, all of them meet its ceilings.
 3. More machines (DPRO-BBOX, FX machines that take the previous track), songs, MIDI out and clock.
 
 ## Author
@@ -100,7 +102,27 @@ Done so far, all measured on OS 1.32B:
   - VOL and LEV squared; PAN cos / sin; the track clips per channel after the pan, just under full scale at LEV 127.
     MONO2K matches within 0.02 dB.
   - DIST: below 64 headroom, 1.35 dB a step; 65–72 nothing; above, a gain into a hard clip whose ceiling falls from
-    +5.8 dB to −3.2 dB of a full-scale machine between 64 and 80. Within 0.15 dB.
+    +5.8 dB to −3.2 dB of a full-scale GND-SIN between 64 and 80. Within 0.15 dB. The ceiling is the machine's own
+    and nothing else moves it (`tools/ref/chain_dist21.spec`: sine, saw, saw with subs or unison, one to four
+    SWAVE-ENS voices and noise, each at several input levels and DIST 64–127). Driven hard, a saw, the saw with both
+    subs and the saw with unison all land within 0.8 dB of each other. One to four voices land within 0.6 dB, and a
+    sine at full scale or 15 dB down within 0.9 dB. So there is no output compensation and no ceiling that follows
+    the input. Between machines the ceilings differ: against GND-SIN's, SWAV-SAW's is 10.5 dB lower, DIGI-WAV's 7.0,
+    FM+STAT's and VO-6's 1.4, and SWAV-ENS's 1.7 higher; GND-NOIS, SID and FM+DYN clip at GND-SIN's. A bass driven
+    past about 80 gains harmonics and almost no level. MONO2K now follows within 1 dB on all of these (`regress.py`,
+    group `dist_loud`).
+
+    **Saved patterns with high DIST sound different.** Before this fix, every machine clipped at GND-SIN's ceiling,
+    so SWAV-SAW, DIGI-WAV, SWAV-ENS, FM+STAT and VO-6 came out of a hard DIST louder than the Monomachine's (a
+    SWAV-SAW bass up to 10.5 dB louder) and were clipped harder. This is a fidelity fix, so patterns are not converted:
+    they play as the Monomachine would play them. To get the old sound back, lower DIST until the clip starts where it
+    used to (a SWAV-SAW at 88 to 75, a DIGI-WAV at 74 to 66) and raise VOL or LEV by the level lost (here 9.1 and
+    1.0 dB).
+  - The power test (`tools/ref/power.loop`, `power.py`): one loop on machines both instruments have (a GND-SIN
+    kick, a SWAV-SAW bass with both subs driven at DIST 100, a GND-NOIS hat), played on the Monomachine by
+    `mm_ref ROM loop DIR` and on MONO2K by `m2k_ref DIR --loop [DRIVE]` with the same controls. The two now match
+    within 0.3 dB in rms and in the energy under 120 Hz, and within 0.6 dB on the bass (before the fix, MONO2K's bass
+    was 10.7 dB louder).
   - The filter follows the note: a cutoff of 2^((step − 16)/8) × the note, for the HP (BASE) and the LP (BASE + WDTH),
     exact from C1 to C7. The LP is a resonant two-pole (1.35 × the cutoff at LPQ 0, onto it as the Q rises, up to
     Q ≈ 1000 and +54 dB without oscillating), the clip, then two one-poles at 1.55 ×; the HP a resonant two-pole and

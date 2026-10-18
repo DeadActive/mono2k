@@ -5,8 +5,8 @@
 #     is installed (its -Wstringop-overflow and -Warray-bounds see more than clang's); none allowed
 #  2. the device rules: the core built for a 32-bit soft-float target (armv7m) calls no float helper and no 64-bit
 #     division (__aeabi_ldivmod / __aeabi_uldivmod, __divdi3 ...); its section sizes are printed
-#  3. sanitizers: the self-test, every screen, every bank A track and every reference spec under ASan + UBSan; any
-#     report fails the run
+#  3. sanitizers: the self-test, every screen, every bank A track, every reference spec and the power test's loop
+#     under ASan + UBSan; any report fails the run
 #  4. the wave banks (tools/wave_check.py); the bus's controls, every value as recorded and every old value as it
 #     sounded once converted (tools/bus_curves.py)
 set -u
@@ -53,9 +53,10 @@ mkdir -p "$B/screens" "$B/pitch" "$B/ref"
     "$B/m2k_host_san" "$B/screens"
     "$B/m2k_host_san" "$B/pitch" --pitch
     for f in tools/ref/*.spec; do "$B/m2k_ref_san" "$B/ref" < "$f" > /dev/null; done
+    "$B/m2k_ref_san" "$B/ref" --loop 88 < tools/ref/power.loop > /dev/null
 } > "$B/san.log" 2>&1
 rep=$(grep -E "runtime error|ERROR: AddressSanitizer|SELFTEST FAILED" "$B/san.log" | sort | uniq -c)
-if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  self-test, screens, bank A, $(ls tools/ref/*.spec | wc -l | tr -d ' ') specs: clean"; fi
+if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  self-test, screens, bank A, $(ls tools/ref/*.spec | wc -l | tr -d ' ') specs, the power loop: clean"; fi
 
 echo "== the wave banks"
 .venv/bin/python tools/wave_check.py > "$B/waves.log" 2>&1 && tail -1 "$B/waves.log" | sed 's/^/  /' || { cat "$B/waves.log"; FAIL=1; }

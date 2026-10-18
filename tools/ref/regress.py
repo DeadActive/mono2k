@@ -24,12 +24,13 @@ from chain_anal import harm, psd
 REF_JSON = os.path.join(HERE, "regress_ref.json")
 GAPS_JSON = os.path.join(HERE, "regress_gaps.json")
 SPECS = ["chain_levels", "chain_dist2", "chain_filt2", "chain_map3", "chain_clip3", "chain_eq2", "chain_srr2",
-         "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14", "chain_ens20", "chain_ensacc"]
+         "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14", "chain_ens20", "chain_ensacc", "chain_dist21"]
 MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2": "mm_cfilt2", "chain_map3": "mm_cmap3",
           "chain_clip3": "mm_cclip3", "chain_eq2": "mm_ceq2", "chain_srr2": "mm_csrr2", "chain_delay": "mm_cdelay",
           "chain_delay2": "mm_cdelay2", "chain_ftime5": "mm_cftime5", "chain_res6": "mm_cres6",
           "chain_drive12": "mm_cdrive12", "chain_tune13": "mm_ctune13",
-          "chain_sidbend14": "mm_csidbend14", "chain_ens20": "mm_cens20", "chain_ensacc": "mm_censacc"}
+          "chain_sidbend14": "mm_csidbend14", "chain_ens20": "mm_cens20", "chain_ensacc": "mm_censacc",
+          "chain_dist21": "mm_cdist21"}
 
 
 def db(v):
@@ -295,6 +296,16 @@ def cases():
         add("dist", "chain_dist2", f"dd_{d:03d}", "h1", {"note": 36}, 0.1)
     for d in range(76, 128, 4):                         # the clip
         add("dist", "chain_dist2", f"dd_{d:03d}", "harm", {"note": 36}, [0.4, 1.5, 1.5])
+    # DIST on loud and complex signals (chain_dist21): the Monomachine clips each machine against a ceiling of its own
+    # (SWAVE-SAW's ~10 dB under GND-SIN's), whatever the level going in. The output's rms, past where it clips
+    for sig in ("saw", "saw_s1_040", "saw_s1_127", "saw_subs", "saw_uni", "ens1", "ens4", "nois"):
+        for d in (80, 88, 104, 127):
+            add("dist_loud", "chain_dist21", f"d21_{sig}_d{d:03d}", "rms", {"t": (0.3, 0.95)}, 1.0)
+    for d in (104, 127):            # a sine cut 15 dB going in reaches the same ceiling (lower, the EQ's own 1.4 dB)
+        add("dist_loud", "chain_dist21", f"d21_sin_eq32_d{d:03d}", "rms", {"t": (0.3, 0.95)}, 1.0)
+    for sig in ("sid", "fms", "fmd", "wav", "vox"):
+        for d in (112, 127):
+            add("dist_loud", "chain_dist21", f"d21m_{sig}_d{d:03d}", "rms", {"t": (0.3, 0.95)}, 1.0)
     for v in range(0, 31, 2):
         add("filter_mag", "chain_filt2", f"hp_{v:03d}", "h1_rel", {"note": 48, "ref": "hp_000"}, 0.5)
     for v in range(32, 45, 2):                          # the HP's far stopband: MONO2K's 1-2 dB steeper

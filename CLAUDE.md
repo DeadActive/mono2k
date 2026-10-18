@@ -50,6 +50,13 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   size is held in `tools/ref/regress_gaps.json` (`regress.py gaps`; it only narrows unless `--widen`, a decision the
   diff shows): a gap that grows past it plus the tolerance FAILs, and XPASS fails too (re-mark the case PASS). Every
   DSP fix gets a case that failed before it. `m2k_host --selftest` covers the pattern formats.
+- Loud signals: test the chain with the machine's own signal, not only a sine. Bank A's demos were written on a DIST
+  whose ceiling was GND-SIN's for every machine, while the Monomachine's is per machine (`T_DIST_M`; SWAV-SAW's
+  10.5 dB lower). The sine cases all passed, and a driven SWAV-SAW bass came out 10.7 dB louder than the
+  Monomachine's. The cases that catch this: `chain_dist21` and group `dist_loud`. The power test is a whole loop on
+  both instruments: `build/ref/mm_ref ROM loop build/power < tools/ref/power.loop > /dev/null`, then
+  `build/host/m2k_ref build/power --loop [DRIVE] < tools/ref/power.loop`, then
+  `.venv/bin/python tools/ref/power.py build/power`.
 - The Monomachine's renders in one `mm_ref` run were not independent: its oscillator keeps feeding the filter between
   notes (the amp envelope comes after the filter and the drive), so a line inherited the last one's resonance; another
   machine assigned does not reset it, a note played on it does (`chain_order11`). `mm_ref` now plays a short GND-NOIS

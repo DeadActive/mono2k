@@ -380,6 +380,34 @@ def order11():
     return out
 
 
+# ---- round six: DIST on loud and complex signals (the power test found MONO2K's drive 10 dB hotter than the
+# Monomachine's on a saw with its subs, where the sine of rounds one to three agreed)
+
+SAW, ENS = 4, 14
+D21 = (64, 72, 76, 80, 84, 88, 96, 104, 112, 127)
+
+
+def dist21():
+    out = ["# DIST on loud and complex signals, at several input levels: a C3 sine (full, and cut by the EQ before the"
+           " filter, as clip3), SWAVE-SAW's saw at C2 alone, with SUB1 at three levels, with both subs (the power test's"
+           " bass), with its unison; a SWAVE-ENS chord of one, two and four voices at C3; noise. Every line sends the"
+           " machine's whole page"]
+    saw = {48: 0, 49: 0, 50: 0, 51: 0, 52: 0, 53: 0, 54: 0, 55: 64}
+    ens = {48: 62, 49: 62, 50: 62, 51: 0, 52: 64, 53: 0, 54: 64, 55: 64}
+    sigs = [("sin", SIN, 48, {}), ("sin_eq48", SIN, 48, {80: 28, 81: 48}), ("sin_eq32", SIN, 48, {80: 28, 81: 32}),
+            ("saw", SAW, 36, saw), ("saw_s1_040", SAW, 36, {**saw, 53: 40}), ("saw_s1_080", SAW, 36, {**saw, 53: 80}),
+            ("saw_s1_127", SAW, 36, {**saw, 53: 127}), ("saw_subs", SAW, 36, {**saw, 53: 110, 54: 80}),
+            ("saw_uni", SAW, 36, {**saw, 48: 127, 49: 20, 50: 127}),
+            ("ens1", ENS, 48, ens), ("ens2", ENS, 48, {**ens, 49: 100}), ("ens4", ENS, 48, {**ens, 48: 85, 49: 100, 50: 120}),
+            ("nois", NOIS, 60, {})]
+    for name, m, n, cc in sigs:
+        out += [line(f"d21_{name}_d{d:03d}", m, n, {**cc, 60: d}, gate=1.0, tail=0.05) for d in D21]
+    out.append("# and each other machine at its init page, DIST 64 / 96 / 112 / 127")
+    for name, m, n in (("sid", 3, 36), ("sid48", 3, 48), ("fms", 8, 48), ("fmd", 10, 48), ("wav", 6, 48), ("vox", 11, 48)):
+        out += [line(f"d21m_{name}_d{d:03d}", m, n, {60: d}, gate=1.0, tail=0.05) for d in (64, 96, 112, 127)]
+    return out
+
+
 if __name__ == "__main__":
     if sys.argv[1] == "specs":
         d = sys.argv[2]
@@ -388,7 +416,7 @@ if __name__ == "__main__":
                 fh.write("\n".join(f()) + "\n")
     elif sys.argv[1] == "specs3":
         d = sys.argv[2]
-        for name, f in (("clip3", clip3), ("map3", map3), ("fenv4", fenv4), ("ftime5", ftime5), ("res6", res6), ("hres8", hres8), ("drive10", drive10), ("order11", order11), ("drive12", drive12), ("tune13", tune13), ("sidbend14", sidbend14), ("ens15", ens15), ("ens16", ens16), ("ens17", ens17), ("ens18", ens18), ("ens19", ens19), ("ens20", ens20)):
+        for name, f in (("clip3", clip3), ("map3", map3), ("fenv4", fenv4), ("ftime5", ftime5), ("res6", res6), ("hres8", hres8), ("drive10", drive10), ("order11", order11), ("drive12", drive12), ("tune13", tune13), ("sidbend14", sidbend14), ("ens15", ens15), ("ens16", ens16), ("ens17", ens17), ("ens18", ens18), ("ens19", ens19), ("ens20", ens20), ("dist21", dist21)):
             with open(os.path.join(d, f"chain_{name}.spec"), "w") as fh:
                 fh.write("\n".join(f()) + "\n")
     elif sys.argv[1] == "specs2":
