@@ -318,12 +318,13 @@ static const uint8_t MACH_DEF[M_COUNT][8] = {
     /* GND-SIN  */ {64, 0, 0, 0, 40, 40, 30, 0},
     /* GND-NOIS */ {64, 0, 0, 40, 0, 40, 0, 0},
     /* SID-8BIT */ {40, 64, 30, 24, 64, 64, 0, 0},
-    /* FM+STAT  */ {14, 60, 60, 26, 30, 50, 0, 0},
-    /* FM+DYN   */ {42, 80, 45, 38, 40, 35, 20, 96},
+    /* FM+STAT  */ {61, 64, 80, 32, 82, 64, 64, 64},  /* the Monomachine's init: 1/2, 1; a slow decay, a little feedback */
+    /* FM+DYN   */ {64, 64, 64, 0, 74, 80, 32, 64},   /* the Monomachine's init: 1, 1.33; a slow decay, a little feedback */
     /* SWAV-SAW */ {0, 0, 0, 0, 0, 0, 0, 64},     /* the Monomachine's init: the base saw alone */
     /* SWAV-ENS */ {85, 100, 120, 0, 64, 0, 64, 64},   /* +4 +7 +11 (the Monomachine's: all OFF, 62) */
     /* DIGI-WAV */ {40, 64, 64, 0, 0, 70, 0, 0},
     /* VOX-6    */ {10, 80, 60, 64, 10, 70, 20, 20},
+    /* FM+PAR   */ {61, 64, 82, 64, 104, 80, 64, 64},  /* the Monomachine's init: 1/2, 1, 2; the third decaying */
 };
 
 static void kit_default(m2k_pattern_t *p, int t, int m)

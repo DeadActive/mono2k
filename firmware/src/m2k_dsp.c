@@ -181,13 +181,24 @@ static const int16_t SID_SHAPES[8] = {1, 2, 4, 8, 3, 5, 6, 7};   /* tri saw pul 
 static const int8_t SAW_SPREAD[7] = {0, -16, 16, -9, 9, -4, 4};
 static const uint16_t METAL_HZ[6] = {205, 304, 370, 523, 540, 800};
 
+/* FM+DYN's depth at a point of its law (Q8 steps, 0..256), between table entries */
+static inline uint32_t fmd_at(int32_t v8)
+{
+    int32_t i = v8 >> 8;
+    if (i >= 256) return T_FMDV[256];
+    return T_FMDV[i] + (uint32_t)(((uint64_t)(T_FMDV[i + 1] - T_FMDV[i]) * (uint32_t)(v8 & 255)) >> 8);
+}
+
 static void mach_trig(trk_t *t, int m)
 {
     t->menv[0] = t->menv[1] = t->menv[2] = 1u << 30;
     switch (m) {
-    case M_GSIN: case M_FMS: case M_FMD:
+    case M_GSIN: case M_FMS: case M_FMD: case M_FMP:
         t->ph[0] = t->ph[1] = t->ph[2] = t->ph[3] = 0;
-        t->ms[0] = t->ms[1] = 0;
+        t->ms[0] = t->ms[1] = t->ms[2] = t->ms[3] = t->ms[4] = t->ms[5] = 0;
+        /* FM+'s carrier starts half a cycle on from its modulators (its harmonics' phases: a ratio-1 modulator reads
+         * turned over, a ratio-2 one not) */
+        if (m != M_GSIN) t->ph[0] = 1u << 31;
         break;
     case M_WAV:
         t->ph[0] = t->ph[1] = 0;
@@ -320,49 +331,139 @@ static void mach_block(int ti, int m, int32_t pitch)
         }
         break;
     }
-    case M_FMS:
-    case M_FMD: {                      /* RAT1 DEP1 DEC1 RAT2 DEP2 DEC2 FDBK ALGO|SWEP */
-        uint32_t inc = inc_of(pitch);
-        int32_t e1 = (int32_t)(t->menv[0] >> 15), e2 = (int32_t)(t->menv[1] >> 15);
-        int d1 = P7(t, P_SYN + 2), d2 = P7(t, P_SYN + 5);
-        if (d1 < 127) t->menv[0] = mulu_hi(t->menv[0], T_ENV_COEF[d1], 31);
-        if (d2 < 127) t->menv[1] = mulu_hi(t->menv[1], T_ENV_COEF[d2], 31);
-        uint32_t r1 = T_RATIO[PN(t, P_SYN + 0, 32)], r2 = T_RATIO[PN(t, P_SYN + 3, 32)];
-        int algo = 0;
-        if (m == M_FMD) {              /* the first modulator's ratio sweeps in from SWEP, with its envelope */
-            int32_t sw = PB8(t, P_SYN + 7) >> 8;
-            int32_t f = 256 + ((sw * 16 * e1) >> 15);
-            r1 = (r1 * (uint32_t)CLAMP(f, 8, 4096)) >> 8;
-        } else {
-            algo = PN(t, P_SYN + 7, 4);
+    case M_FMS: {                      /* 1FRQ 1FIN 1ENV 1FB 2FRQ 2VOL TONE TUNE */
+        /* after the Monomachine's FM+STAT, measured on its OS (tools/ref/chain_fm25.spec): a sine carrier on the note,
+         * half GND-SIN's level, phase-modulated by two sine operators side by side. Each operator's ratio on one 24-step
+         * table (1/64 .. 4); the first's fine-tuned by 0.75 .. 1.25 and fed back on itself; 1ENV its depth up to 64
+         * (index 0 .. 1.56), above 64 that depth decaying from the trig (10 s .. 5 ms); 2VOL the second's depth, the same
+         * law to 64 and on to index 14 at 127; both through a lowpass, TONE its cutoff (30 Hz at 0, 1.37 kHz at 64, open at
+         * 127), so a high modulator goes in shallower; TUNE +-2 semitones */
+        uint32_t inc = inc_of(pitch + (P7(t, P_SYN + 7) - 64) * 2);
+        uint32_t r1 = (T_FMR24[(P7(t, P_SYN + 0) * 24) >> 7] * (uint32_t)(192 + P7(t, P_SYN + 1))) >> 8;
+        uint32_t r2 = T_FMR24[(P7(t, P_SYN + 4) * 24) >> 7];
+        uint32_t i1 = (uint32_t)(((uint64_t)inc * r1) >> 16), i2 = (uint32_t)(((uint64_t)inc * r2) >> 16);
+        int env = P7(t, P_SYN + 2), tone = P7(t, P_SYN + 6);
+        uint32_t k1 = T_FMB[env];
+        if (env > 64) {                /* the depth from the trig, decaying */
+            k1 = (uint32_t)(((uint64_t)T_FMB[64] * (t->menv[0] >> 15)) >> 15);
+            t->menv[0] = mulu_hi(t->menv[0], T_FMEC[env - 64], 31);
         }
-        uint32_t i1 = mulu_hi(inc, r1, 8), i2 = mulu_hi(inc, r2, 8);
-        uint32_t k1 = mulu_hi(T_FMK[P7(t, P_SYN + 1)], (uint32_t)e1, 15);
-        uint32_t k2 = mulu_hi(T_FMK[P7(t, P_SYN + 4)], (uint32_t)e2, 15);
-        uint32_t kf = T_FMK[P7(t, P_SYN + 6)] >> 1;
+        uint32_t k2 = T_FMB[P7(t, P_SYN + 5)];
+        int32_t lp = T_FMLP[tone];
+        int64_t kf = T_FMFB[P7(t, P_SYN + 3)];
         for (int i = 0; i < M2K_SUB; i++) {
-            int32_t m2 = sinp(t->ph[2] + (uint32_t)(t->ms[1] + t->ms[0]) * (kf >> 1));
+            int32_t m1 = sinp(t->ph[1] + (uint32_t)(((t->ms[0] + t->ms[1]) >> 1) * kf));
             t->ms[1] = t->ms[0];
-            t->ms[0] = m2;
-            int32_t s;
-            if (algo == 0) {           /* M2 > M1 > C */
-                int32_t m1 = sinp(t->ph[1] + (uint32_t)m2 * k2);
-                s = sinp(t->ph[0] + (uint32_t)m1 * k1);
-            } else if (algo == 1) {    /* M1 + M2 > C */
-                int32_t m1 = sinp(t->ph[1]);
-                s = sinp(t->ph[0] + (uint32_t)m1 * k1 + (uint32_t)m2 * k2);
-            } else if (algo == 2) {    /* M1 > C, M2 as a second carrier */
-                int32_t m1 = sinp(t->ph[1]);
-                s = (sinp(t->ph[0] + (uint32_t)m1 * k1) + ((m2 * (e2 >> 1)) >> 14)) >> 1;
-            } else {                   /* M1 > C, ring with M2 */
-                int32_t m1 = sinp(t->ph[1]);
-                int32_t c = sinp(t->ph[0] + (uint32_t)m1 * k1);
-                s = c + ((((c * m2) >> 15) - c) * (e2 >> 7) >> 8);
-            }
+            t->ms[0] = m1;
+            /* each modulator through two one-poles at TONE's cutoff on its way to the carrier (at 64, 1.37 kHz: its
+             * depth measured 0.88 at 523 Hz, 0.30 at 2 kHz, 0.10 at 4 kHz; the feedback taken before), states Q23 */
+            t->ms[2] += (int32_t)(((int64_t)(m1 * 256 - t->ms[2]) * lp) >> 15);
+            t->ms[3] += (int32_t)(((int64_t)(t->ms[2] - t->ms[3]) * lp) >> 15);
+            t->ms[4] += (int32_t)(((int64_t)(sinp(t->ph[2]) * 256 - t->ms[4]) * lp) >> 15);
+            t->ms[5] += (int32_t)(((int64_t)(t->ms[4] - t->ms[5]) * lp) >> 15);
+            uint32_t pm = (uint32_t)(((int64_t)t->ms[3] * k1) >> 8) + (uint32_t)(((int64_t)t->ms[5] * k2) >> 8);
+            o[i] = (int16_t)(sinp(t->ph[0] + pm) >> 1);
             t->ph[0] += inc;
             t->ph[1] += i1;
             t->ph[2] += i2;
-            o[i] = (int16_t)s;
+        }
+        break;
+    }
+    case M_FMD: {                      /* 1FRQ 1FEN 1VOL 1VEN 2FRQ 2ENV 2FB TUNE */
+        /* after the Monomachine's FM+DYN, measured on its OS (tools/ref/chain_fm26.spec): FM+STAT's carrier and two
+         * operators side by side. The first's ratio 1FRQ / 64 (2 at 127), its frequency pushed from the trig by 1FEN (a
+         * note-independent amount added before the ratio, up over 64, a quarter of it down under) and falling back; 1VOL
+         * its depth, on FM+STAT's law; 1VEN over 64 pushes that law up from the trig by up to 128 of its steps, falling
+         * back on 1FEN's time (under 64's depth the push adds twice as fast, and stops there). The second's ratio
+         * (2FRQ / 64)^2 (4 at 127), 2ENV its depth or its decay as FM+STAT's 1ENV, 2FB its feedback as FM+STAT's 1FB;
+         * TUNE +-2 semitones */
+        uint32_t inc = inc_of(pitch + (P7(t, P_SYN + 7) - 64) * 2);
+        int f1 = P7(t, P_SYN + 0), f2 = P7(t, P_SYN + 4);
+        int64_t r1 = (f1 == 127 ? 128 : f1) << 10;                          /* Q16 */
+        uint32_t r2 = (uint32_t)(f2 == 127 ? 128 * 128 : f2 * f2) << 4;
+        int fen = P7(t, P_SYN + 1), ven = P7(t, P_SYN + 3), env = P7(t, P_SYN + 5);
+        int64_t b1 = inc;
+        if (fen != 64) {
+            b1 += ((int64_t)T_FMFEN[fen] * (int32_t)(t->menv[1] >> 15)) >> 15;
+            t->menv[1] = mulu_hi(t->menv[1], T_FMDEC[fen > 64 ? fen - 64 : 64 - fen], 31);
+        }
+        uint32_t i1 = (uint32_t)(int32_t)((b1 * r1) >> 16), i2 = (uint32_t)(((uint64_t)inc * r2) >> 16);
+        int32_t vol8 = P8(t, P_SYN + 2);
+        int32_t k1 = (int32_t)fmd_at(vol8);
+        if (ven > 64) {                /* a push from the trig: 4 steps of the law a step, to 128 */
+            int32_t e8 = (int32_t)(((int64_t)(ven < 96 ? 4 * (ven - 64) : 128) * 256 * (int32_t)(t->menv[0] >> 15)) >> 15);
+            t->menv[0] = mulu_hi(t->menv[0], T_FMDEC[ven - 64], 31);
+            if (vol8 + e8 >= 64 * 256) {
+                k1 = (int32_t)fmd_at(vol8 + e8);
+            } else {                   /* under 64's depth it adds linearly, twice as fast, and stops there */
+                k1 += (int32_t)(((uint64_t)T_FMDV[64] * (uint32_t)e8) >> 13);
+                if (k1 > (int32_t)T_FMDV[64]) k1 = (int32_t)T_FMDV[64];
+            }
+        } else if (ven < 64) {         /* a cut from the trig, 1/32 of 1VOL a step; on 64's depth, past half of it the
+                                        * operator turns over (to its whole depth, inverted, at 0) */
+            int32_t c = (int32_t)(((int64_t)(64 - ven) * (int32_t)(t->menv[0] >> 15)) >> 5);    /* Q15 of 1VOL */
+            t->menv[0] = mulu_hi(t->menv[0], T_FMDEC[64 - ven], 31);
+            int32_t f = 32768 - c;                                               /* Q15, -1 .. 1 */
+            int32_t v8 = (int32_t)(((int64_t)(f < 0 && vol8 > 64 * 256 ? 64 * 256 : vol8) * f) >> 15);
+            if (v8 >= 64 * 256) {
+                k1 = (int32_t)fmd_at(v8);
+            } else if (vol8 >= 64 * 256) {
+                /* from over 64 the turn comes lower: at 32 steps from 64, at 0 from 127 */
+                int64_t h = vol8 - 64 * 256;
+                int32_t z = 32 * 256 - (int32_t)((h * h * 2113) >> 26);
+                k1 = (int32_t)(((int64_t)T_FMDV[64] * (v8 - z)) >> 13);
+                if (k1 > (int32_t)T_FMDV[64]) k1 = (int32_t)T_FMDV[64];
+            } else {
+                k1 = (int32_t)(((int64_t)k1 * (2 * f - 32768)) >> 15);
+            }
+        }
+        uint32_t k2 = T_FMDV[env];
+        if (env > 64) {
+            k2 = (uint32_t)(((uint64_t)T_FMDV[64] * (t->menv[2] >> 15)) >> 15);
+            t->menv[2] = mulu_hi(t->menv[2], T_FMEC[env - 64], 31);
+        }
+        int64_t kf = T_FMFB[P7(t, P_SYN + 6)];
+        for (int i = 0; i < M2K_SUB; i++) {
+            int32_t m2 = sinp(t->ph[2] + (uint32_t)(((t->ms[0] + t->ms[1]) >> 1) * kf));
+            t->ms[1] = t->ms[0];
+            t->ms[0] = m2;
+            uint32_t pm = (uint32_t)((int64_t)sinp(t->ph[1]) * k1) + (uint32_t)((int64_t)m2 * k2);
+            o[i] = (int16_t)(sinp(t->ph[0] + pm) >> 1);
+            t->ph[0] += inc;
+            t->ph[1] += i1;
+            t->ph[2] += i2;
+        }
+        break;
+    }
+    case M_FMP: {                      /* 1FRQ 1ENV 2FRQ 2ENV 3FRQ 3ENV TONE TUNE */
+        /* after the Monomachine's FM+PAR, measured on its OS (tools/ref/chain_fm26.spec): FM+STAT's carrier, lowpass and
+         * laws with three operators side by side, each on the 24 steps; an ENV up to 64 its depth, over 64 the depth of
+         * FM+STAT's 2VOL at that value, falling from the trig on 1ENV's time; TONE as FM+STAT's; TUNE +-2 semitones */
+        uint32_t inc = inc_of(pitch + (P7(t, P_SYN + 7) - 64) * 2);
+        int tone = P7(t, P_SYN + 6);
+        uint32_t ii[3], kk[3];
+        for (int j = 0; j < 3; j++) {
+            ii[j] = (uint32_t)(((uint64_t)inc * T_FMR24[(P7(t, P_SYN + 2 * j) * 24) >> 7]) >> 16);
+            int env = P7(t, P_SYN + 2 * j + 1);
+            uint32_t k = T_FMB[env];
+            if (env > 64) {
+                k = (uint32_t)(((uint64_t)k * (t->menv[j] >> 15)) >> 15);
+                t->menv[j] = mulu_hi(t->menv[j], T_FMEC[env - 64], 31);
+            }
+            kk[j] = k;
+        }
+        int32_t lp = T_FMLP[tone];
+        for (int i = 0; i < M2K_SUB; i++) {
+            uint32_t pm = 0;
+            for (int j = 0; j < 3; j++) {
+                int32_t *a = &t->ms[2 * j];
+                a[0] += (int32_t)(((int64_t)(sinp(t->ph[1 + j]) * 256 - a[0]) * lp) >> 15);
+                a[1] += (int32_t)(((int64_t)(a[0] - a[1]) * lp) >> 15);
+                pm += (uint32_t)(((int64_t)a[1] * kk[j]) >> 8);
+                t->ph[1 + j] += ii[j];
+            }
+            o[i] = (int16_t)(sinp(t->ph[0] + pm) >> 1);
+            t->ph[0] += inc;
         }
         break;
     }

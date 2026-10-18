@@ -33,17 +33,18 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   every screen, bank A and every reference spec under ASan + UBSan, clean; the wave banks (`tools/wave_check.py`);
   the bus's controls (`tools/bus_curves.py`: `m2k_host DIR --bus` measures every value of GLCH HISS ADPC DRIV TAPE,
   held to `tools/ref/bus_m2k.json`, and each old value through `T_V9_*` to the old engine's, `tools/ref/bus_v8.json`).
-- Calibration (README, Calibration): `tools/ref/mm_ref` (gearmulator, the user's OS image at a path, never in the repo;
-  it logs to stdout, so send stdout to /dev/null) against `host/m2k_ref.c`, same specs in `tools/ref/*.spec`.
+- Calibration (README, Calibration): `tools/ref/mm_ref` (gearmulator, the user's OS image at a path, never in the
+  repo; it logs to stdout, so send stdout to /dev/null) against `host/m2k_ref.c`, same specs in `tools/ref/*.spec`.
   Pattern format: 2 amp ATK/HOLD/DEC/REL on the measured curve; 4 SWAV-SAW's page; 5 the track chain on the
-  Monomachine's (DIST/DSND/EQG bipolar, the filter follows the note); 6 GND-SIN's TUNE +-2 semitones (3.125 c a
-  step); 7 SWAV-ENS on SWAVE-ENS's page (`ens_v6`); 8 the wave bank's choice (`P_WBNK`, kits 71 wide; the self-test
-  packs the older layouts with `pat_pack_v`); 9 the bus's controls on new laws (`bus_v9`, tables `T_V9_*`). Older ones
-  are converted on load; bank A's slots still holding the bank before (A11 so far) are written on SWAV-ENS's
-  old page and the bus's old laws and converted once at build (`ens_v6`, `bus_v9` in `factory()`), until the new
-  bank's parts replace them. A batch that replaces demos bumps `FACTORY_REV` and adds the names it replaced to
-  `OLD_DEMO` (m2k_proj.c), so a saved store takes the new parts where the old still stand (a demo whose name stays
-  and whose settings change, as HAZE's after the DIST fix, takes them the same way). The reference renderer
+  Monomachine's (DIST/DSND/EQG bipolar, the filter follows the note); 6 GND-SIN's TUNE +-2 semitones (3.125 c a step);
+  7 SWAV-ENS on SWAVE-ENS's page (`ens_v6`); 8 the wave bank's choice (`P_WBNK`, kits 71 wide; the self-test packs the
+  older layouts with `pat_pack_v`); 9 the bus's controls on new laws (`bus_v9`, tables `T_V9_*`); 10 FM+STAT's and
+  FM+DYN's pages (`fm_v9`). Older ones are converted on load; bank A's slots still holding the bank before (A11 so
+  far) are written on SWAV-ENS's old page and the bus's old laws and converted once at build (`ens_v6`, `bus_v9` in
+  `factory()`), until the new bank's parts replace them; the parts with an FM+ track (`FM_OLD`) are converted so
+  (`fm_v9`) until voiced on the new pages. A batch that replaces demos bumps `FACTORY_REV` and adds the names it
+  replaced to `OLD_DEMO` (m2k_proj.c), so a saved store takes the new parts where the old still stand (a demo whose
+  name stays and whose settings change, as HAZE's after the DIST fix, takes them the same way). The reference renderer
   writes 32-bit float WAVs; `tools/ref/sweep.py`'s `load` reads both.
 - Fidelity regressions: `.venv/bin/python tools/ref/regress.py check [GROUP ...]` renders MONO2K with the chain specs
   and compares against `tools/ref/regress_ref.json` (numbers measured from the Monomachine's output; `capture` rebuilds

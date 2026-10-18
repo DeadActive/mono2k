@@ -9,6 +9,7 @@
 //                                  (mm:cc=value for this renderer alone, m2k:cc=value skipped)
 //   mm_ref ROM pages DIR           GND-SIN's init pages, as the screen shows them, one per press of the page key
 //   mm_ref ROM loop DIR < LOOP     a loop over several tracks (tools/ref/power.loop), DIR/loop_mm.wav
+//   mm_ref ROM values DIR M CC     machine M's page as the screen shows each value 0..127 of controller CC
 #include "mdLib/mdhardware.h"
 #include "mdLib/mdfrontpanel.h"
 #include "mdLib/mdpanel.h"
@@ -149,6 +150,24 @@ namespace
 		return 0;
 	}
 
+	// a machine's page as its screen shows each value of one controller: what the instrument tells a player the value
+	// means (a ratio, a waveform's name). DIR/val_MM_CC_VVV.pbm
+	int values(const char* _rom, const std::string& _dir, uint8_t _machine, uint8_t _cc)
+	{
+		auto hw = boot(_rom);
+		assign(*hw, 0, _machine);
+		advance(*hw, g_rate / 2);
+		for(unsigned v = 0; v < 128; ++v)
+		{
+			midi(*hw, 0xb0, _cc, static_cast<uint8_t>(v));
+			advance(*hw, g_rate / 8);
+			char name[48];
+			std::snprintf(name, sizeof name, "/val_%02u_%02u_%03u.pbm", _machine, _cc, v);
+			writePbm(_dir + name, hw->getFrontPanelSnapshot());
+		}
+		return 0;
+	}
+
 	int pages(const char* _rom, const std::string& _dir)
 	{
 		auto hw = boot(_rom);
@@ -281,10 +300,12 @@ namespace
 
 int main(int _argc, char** _argv)
 {
-	if(_argc != 4) { std::cerr << "mm_ref ROM lcd|render DIR\n"; return 2; }
+	if(_argc != 4 && _argc != 6) { std::cerr << "mm_ref ROM lcd|render|pages|loop DIR | mm_ref ROM values DIR M CC\n"; return 2; }
 	try
 	{
 		const std::string cmd = _argv[2];
+		if(cmd == "values" && _argc == 6)
+			return values(_argv[1], _argv[3], static_cast<uint8_t>(std::stoi(_argv[4])), static_cast<uint8_t>(std::stoi(_argv[5])));
 		if(cmd == "lcd") return lcd(_argv[1], _argv[3]);
 		if(cmd == "render") return renderSpec(_argv[1], _argv[3]);
 		if(cmd == "pages") return pages(_argv[1], _argv[3]);

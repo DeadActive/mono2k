@@ -465,7 +465,7 @@ static int selftest(void)
         lk(&a, 0, 8, P_SYN + 1, 99);
         lk(&a, 0, 12, P_SYN, 65);
         int n = pat_pack(&a, bl);
-        CHECK(bl[1] == 9, "format: patterns are written as version 9");
+        CHECK(bl[1] == 10, "format: patterns are written as version 10");
         n = pat_pack_v(&a, bl, 4);
         CHECK(pat_unpack(&b, bl, n), "format: a version-4 pattern loads");
         CHECK(b.kit[0][P_DIST] == T_V5_DIST[34] && b.kit[0][P_DTIM] == 32 && b.kit[0][P_DSND] == 64 &&
@@ -504,16 +504,17 @@ static int selftest(void)
             for (int ver = 4; ver <= 5; ver++) {
                 n = pat_pack_v(&pat[d], bl, ver);
                 if (!pat_unpack(&c, bl, n)) { moved++; continue; }
-                for (int t = 0; t < M2K_TRACKS; t++) {               /* SWAV-ENS's page converts at 7, by design */
-                    moved += c.kit[t][P_PTCH] != pat[d].kit[t][P_PTCH] ||
-                             (pat[d].machine[t] != M_ENS && memcmp(c.kit[t], pat[d].kit[t], 8) != 0);
+                for (int t = 0; t < M2K_TRACKS; t++) {               /* SWAV-ENS's page converts at 7, FM+'s at 10 */
+                    int conv = pat[d].machine[t] == M_ENS || pat[d].machine[t] == M_FMS || pat[d].machine[t] == M_FMD;
+                    moved += c.kit[t][P_PTCH] != pat[d].kit[t][P_PTCH] || (!conv && memcmp(c.kit[t], pat[d].kit[t], 8) != 0);
                     for (int s = 0; s < M2K_STEPS; s++)
                         moved += c.step[t][s].note != pat[d].step[t][s].note || c.step[t][s].flags != pat[d].step[t][s].flags;
                 }
-                for (int i = 0; i < M2K_LOCKS; i++)
-                    if (pat[d].lock[i].trk != 0xFF && pat[d].machine[pat[d].lock[i].trk] != M_ENS &&
-                        (pat[d].lock[i].param < 8 || pat[d].lock[i].param == P_PTCH))
+                for (int i = 0; i < M2K_LOCKS; i++) {
+                    int m = pat[d].lock[i].trk != 0xFF ? pat[d].machine[pat[d].lock[i].trk] : M_ENS;
+                    if (m != M_ENS && m != M_FMS && m != M_FMD && (pat[d].lock[i].param < 8 || pat[d].lock[i].param == P_PTCH))
                         moved += c.lock[i].val != pat[d].lock[i].val;
+                }
             }
         CHECK(moved == 0, "format: versions 4 and 5 move no demo's notes, PTCH, machine page or their locks");
         /* SWAV-ENS onto the Monomachine's page (7): every old interval folds by octaves into -11..+12, keeping its
@@ -565,6 +566,46 @@ static int selftest(void)
             wn = pat_pack(&w, wb);
             CHECK(conv && pat_unpack(&w2, wb, wn) && !memcmp(w2.glob, w.glob, G_COUNT),
                   "format: a version-8 pattern's bus converts on load (GLCH 30 -> 91 ...), today's loads as it is");
+        }
+        /* FM+'s pages (10): an old FM+STAT and FM+DYN (RAT1 DEP1 DEC1 RAT2 DEP2 DEC2 FDBK ALGO / SWEP) carried over */
+        {
+            static m2k_pattern_t w, w2;
+            static uint8_t wb[BLOB_MAX];
+            m_set(&w, 0, sizeof w);
+            pat_init(&w, "OLDFM");
+            w.machine[1] = M_FMS; w.machine[2] = M_FMD;
+            /* STAT: ratio 2 (T_RATIO 6), 1.41 (4: to 1.5, the nearest step); DEP1 static, DEP2, feedback */
+            const uint8_t os[8] = {24, 60, 127, 16, 90, 40, 50, 0}, od[8] = {12, 80, 60, 40, 30, 127, 20, 96};
+            m_cpy(&w.kit[1][P_SYN], os, 8);
+            m_cpy(&w.kit[2][P_SYN], od, 8);                  /* DYN: ratio 1, 3.5; DEP1 decaying, SWEP up */
+            lk(&w, 1, 3, P_SYN + 0, 37);                     /* RAT1 to 3.0 (T_RATIO 9) */
+            lk(&w, 1, 5, P_SYN + 2, 40);                     /* DEC1: goes */
+            lk(&w, 2, 7, P_SYN + 4, 70);                     /* DEP2, held: to 2ENV */
+            w.kit[0][P_LFO + L_TRCK] = 1 * 128 / M2K_TRACKS + 1; w.kit[0][P_LFO + L_DEST] = P_SYN + 4 + 1;   /* T2's DEP2 */
+            int wn = pat_pack_v(&w, wb, 9);
+            int ok = pat_unpack(&w2, wb, wn);
+            const uint8_t *s2 = &w2.kit[1][P_SYN], *d2 = &w2.kit[2][P_SYN];
+            ok = ok && (s2[0] * 24) >> 7 == 19 && s2[1] == 64 && (s2[4] * 24) >> 7 == 17 &&
+                 s2[2] == near_u32(T_FMB, 0, 64, T_FMK[60]) && s2[5] == near_u32(T_FMB, 0, 127, T_FMK[90]) &&
+                 s2[3] == near_u32(T_FMFB, 0, 127, T_FMK[50] >> 1) && s2[6] == 64 && s2[7] == 64;
+            CHECK(ok, "format: version 9 -> 10, an old FM+STAT's ratios to the 24 steps, its depths and feedback to the laws");
+            int vl = near_u32(T_FMDEC, 1, 63, T_ENV_COEF[60]);
+            ok = d2[0] == 64 && d2[4] == 119 && d2[3] == 64 + vl && d2[1] > 64 && d2[5] == near_u32(T_FMDV, 0, 64, T_FMK[30]) &&
+                 d2[2] == CLAMP(near_u32(T_FMDV, 0, 256, T_FMK[80]) - (vl < 32 ? 4 * vl : 128), 0, 127) && d2[7] == 64;
+            CHECK(ok, "format: an old FM+DYN's ratios to /64 and squared /64, its decay to 1VEN, SWEP to 1FEN up");
+            int lr = 0, ld = 0, l2 = 0;
+            for (int i = 0; i < M2K_LOCKS; i++) {
+                const m2k_lock_t *l = &w2.lock[i];
+                if (l->trk == 1 && l->step == 3) lr = l->param == P_SYN + 0 && (l->val * 24) >> 7 == 21;
+                if (l->trk == 1 && l->step == 5) ld = 1;
+                if (l->trk == 2 && l->step == 7) l2 = l->param == P_SYN + 5 && l->val == near_u32(T_FMDV, 0, 64, T_FMK[70]);
+            }
+            CHECK(lr && !ld && l2 && w2.kit[0][P_LFO + L_DEST] == P_SYN + 5 + 1,
+                  "format: an FM lock goes with its parameter (RAT1 to 1FRQ, DEP2 to 2ENV), DEC1's goes; an LFO follows");
+            static uint8_t wb2[BLOB_MAX];
+            wn = pat_pack(&w2, wb);
+            int wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
+            CHECK(wn2 == wn && !memcmp(wb, wb2, (size_t)wn), "format: version 10 loads unchanged");
         }
         /* the bank on the screen: a DIGI-WAV track's SYN has a third page, BANK; the wave knob names the bank's waves */
         {

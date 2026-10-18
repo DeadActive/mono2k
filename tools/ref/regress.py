@@ -24,13 +24,14 @@ from chain_anal import harm, psd
 REF_JSON = os.path.join(HERE, "regress_ref.json")
 GAPS_JSON = os.path.join(HERE, "regress_gaps.json")
 SPECS = ["chain_levels", "chain_dist2", "chain_filt2", "chain_map3", "chain_clip3", "chain_eq2", "chain_srr2",
-         "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14", "chain_ens20", "chain_ensacc", "chain_dist21"]
+         "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14", "chain_ens20", "chain_ensacc", "chain_dist21",
+         "chain_fm26"]
 MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2": "mm_cfilt2", "chain_map3": "mm_cmap3",
           "chain_clip3": "mm_cclip3", "chain_eq2": "mm_ceq2", "chain_srr2": "mm_csrr2", "chain_delay": "mm_cdelay",
           "chain_delay2": "mm_cdelay2", "chain_ftime5": "mm_cftime5", "chain_res6": "mm_cres6",
           "chain_drive12": "mm_cdrive12", "chain_tune13": "mm_ctune13",
           "chain_sidbend14": "mm_csidbend14", "chain_ens20": "mm_cens20", "chain_ensacc": "mm_censacc",
-          "chain_dist21": "mm_cdist21"}
+          "chain_dist21": "mm_cdist21", "chain_fm26": "mm_cfm26"}
 
 
 def db(v):
@@ -265,11 +266,77 @@ def _resfit(f, ratio, fc, hp):
     return fp, q, 10 * np.log10(aa / np.median(pb)), e
 
 
+def m_fm_side(x, a, ld):                  # FM+: partials at given Hz, dB under the window's strongest (floored at -50)
+    t0, n = a.get("t", 0.3), a.get("n", 16384)
+    s = x[int(t0 * SR):int(t0 * SR) + n].mean(axis=1)
+    sp = np.abs(np.fft.rfft(s * np.hanning(len(s))))
+    df = SR / len(s)
+    r = max(2, int(round(8 / df)))
+    out = []
+    for q in a["hz"]:
+        k = int(round(q / df))
+        out.append(max(-50.0, db(sp[max(0, k - r):k + r + 1].max() / sp.max())))
+    return out
+
+
+_JT = {}
+
+
+def m_fm_beta(x, a, ld):                  # FM+: a modulator's index (rad), fitted to its sidebands' |J_k| (a ratio whose
+    if not _JT:                           # sidebands fall apart from each other); Bessel J_n by its integral
+        tau = np.linspace(0, np.pi, 2001)
+        b = np.arange(0, 24, 0.01)
+        _JT["b"] = b
+        _JT["j"] = np.stack([np.abs(getattr(np, "trapezoid", getattr(np, "trapz", None))(np.cos(k * tau[None, :] - b[:, None] * np.sin(tau)[None, :]), tau, axis=1) / np.pi)
+                             for k in range(29)], axis=1)
+    fc, fm = f0_of(a["note"]), f0_of(a["note"]) * a["ratio"]
+    t0, n, K = a.get("t", 0.3), a.get("n", 32768), a.get("k", 12)
+    s = x[int(t0 * SR):int(t0 * SR) + n].mean(axis=1)
+    w = np.hanning(len(s))
+    N = max(1 << 15, len(s))
+    X = np.abs(np.fft.rfft(s * w, N))
+    df = SR / N
+    def at(q):
+        k, r = int(round(q / df)), max(2, int(round(8 / df)))
+        return X[max(0, k - r):k + r + 1].max()
+    m = np.array([at(fc)] + [0.5 * (at(fc + k * fm) + at(abs(fc - k * fm))) for k in range(1, K + 1)])
+    J = _JT["j"][:, :K + 1]
+    sc = (J @ m) / np.maximum((J * J).sum(axis=1), 1e-20)
+    e = ((m[None, :] - sc[:, None] * J) ** 2).sum(axis=1)
+    return [float(_JT["b"][int(np.argmin(e))])]
+
+
+def m_fen_hz(x, a, ld):                   # FM+DYN's first operator's frequency at given times: the J1 pair (fc +- f1)
+    fc = f0_of(a["note"])                 # that carries the most, the carrier's own lobe left out; or ("peak", for one
+    y, N = x.mean(axis=1), 1 << 16        # that sweeps up through 0) the strongest sideband's distance from the carrier
+    f = np.fft.rfftfreq(N, 1 / SR)
+    cand = np.arange(0.0, 4000.0, 1.0)
+    L = 2048 if a.get("mode") == "peak" else 1024
+    out = []
+    for t in a["at"]:
+        s = y[int(t * SR):int(t * SR) + L]
+        X = np.abs(np.fft.rfft(s * np.hanning(len(s)), N))
+        if a.get("mode") == "peak":
+            X[(np.abs(f - fc) < 2.2 * SR / L) | (f < 25)] = 0
+            out.append(float(abs(f[int(np.argmax(X))] - fc)))
+            continue
+        X[np.abs(f - fc) < 1.6 * SR / L] = 0
+        sc = np.interp(fc + cand, f, X) + np.interp(np.abs(fc - cand), f, X)
+        sc[cand < 1.6 * SR / L] = 0
+        out.append(float(cand[int(np.argmax(sc))]))
+    return out
+
+
+def m_grit(x, a, ld):                     # the energy off the note's harmonics, dB under the whole (character.py)
+    import character
+    return [character.analyse_x(x, a["note"])["grit"]]
+
+
 METRICS = {"res_fit": m_res_fit, "rms": m_rms, "h1": m_h1, "h1_rel": m_h1_rel, "harm": m_harm, "thd": m_thd, "peak_hz": m_peak_hz,
            "res_db": m_res_db, "resp_at": m_resp_at, "srr_image": m_srr_image, "level_at": m_level_at, "echo_ms": m_echo_ms,
            "echoes": m_echoes, "echo_bands": m_echo_bands, "fenv_ms": m_fenv_ms, "tone_rel": m_tone_rel, "pitch_c": m_pitch_c, "bend_c": m_bend_c,
            "ens_voice": m_ens_voice, "c3_partials": m_c3_partials, "chorus_mix": m_chorus_mix, "lr_corr": m_lr_corr,
-           "ens_voices": m_ens_voices}
+           "ens_voices": m_ens_voices, "fm_side": m_fm_side, "fm_beta": m_fm_beta, "fen_hz": m_fen_hz, "grit": m_grit}
 
 
 # ------------------------------------------------------------------------------------------------------ cases
@@ -303,7 +370,7 @@ def cases():
             add("dist_loud", "chain_dist21", f"d21_{sig}_d{d:03d}", "rms", {"t": (0.3, 0.95)}, 1.0)
     for d in (104, 127):            # a sine cut 15 dB going in reaches the same ceiling (lower, the EQ's own 1.4 dB)
         add("dist_loud", "chain_dist21", f"d21_sin_eq32_d{d:03d}", "rms", {"t": (0.3, 0.95)}, 1.0)
-    for sig in ("sid", "fms", "fmd", "wav", "vox"):
+    for sig in ("sid", "fms", "fmd", "fmp", "wav", "vox"):
         for d in (112, 127):
             add("dist_loud", "chain_dist21", f"d21m_{sig}_d{d:03d}", "rms", {"t": (0.3, 0.95)}, 1.0)
     # each machine's own level, clean (DIST 64, chain_dist21): the machines measured so far match; the rest are the
@@ -318,9 +385,8 @@ def cases():
     for sig in ("sid", "sid48"):
         add("machine_level", "chain_dist21", f"d21m_{sig}_d064", "rms", {"t": (0.3, 0.95)}, 1.0,
             xfail="SID-8BIT: MONO2K 6.9-7.0 dB louder (C2 and C3)")
-    for sig in ("fms", "fmd"):
-        add("machine_level", "chain_dist21", f"d21m_{sig}_d064", "rms", {"t": (0.3, 0.95)}, 1.0,
-            xfail="FM+STAT and FM+DYN: MONO2K 6.5-6.6 dB louder")
+    for sig in ("fms", "fmd", "fmp"):              # on the Monomachine's pages: the carrier at half GND-SIN's
+        add("machine_level", "chain_dist21", f"d21m_{sig}_d064", "rms", {"t": (0.3, 0.95)}, 1.0)
     add("machine_level", "chain_dist21", "d21m_vox_d064", "rms", {"t": (0.3, 0.95)}, 1.0,
         xfail="VO-6: MONO2K 5.3 dB quieter")
     add("machine_level", "chain_dist21", "d21m_wav_d064", "rms", {"t": (0.3, 0.95)}, 1.0, info=True)   # not the
@@ -463,6 +529,73 @@ def cases():
         add("fenv", "chain_ftime5", f"ft_atk_{v:03d}", "fenv_ms", {"kind": "atk"}, 0.08, rel=True)
     add("fenv", "chain_ftime5", "ft_atk_064", "fenv_ms", {"kind": "atk"}, 0.08, rel=True,
         xfail="the reference's attack starts slower than a straight line (crossing 15 % of it at 26 ms, MONO2K 19 ms)")
+    # FM+STAT and FM+DYN on the Monomachine's pages (chain_fm26): partials against the strongest, so each depth, ratio,
+    # decay, lowpass and feedback reads as the spectrum it makes
+    def odd(fc, top=9):
+        return [fc * k for k in range(1, top + 1, 2)]
+    fc = f0_of(48)
+    for m in ("s", "d"):
+        add("fm", "chain_fm26", f"f26{m}_carrier", "rms", {}, 0.3)
+    for v in (16, 32, 48, 64):
+        add("fm", "chain_fm26", f"f26s_i1_{v:03d}", "fm_side", {"hz": odd(fc)}, 1.0)
+    for v in (80, 112):                            # high depths: their index (the partials swing through J's zeros)
+        add("fm", "chain_fm26", f"f26s_i2_{v:03d}", "fm_beta", {"note": 48, "ratio": 4}, "3%")
+    for n in (60, 72, 84):                         # a modulator at 1, 2, 4 kHz: FM+STAT's lowpass takes its depth
+        add("fm", "chain_fm26", f"f26s_lp_n{n}", "fm_side", {"hz": odd(f0_of(n), 5)}, 1.0)
+    R24 = {6: 3 / 16, 13: 3 / 4, 17: 1.5, 22: 3.5}
+    for i, r in R24.items():
+        add("fm", "chain_fm26", f"f26s_r1_{i:02d}", "fm_side", {"hz": [abs(1 - r) * fc, (1 + r) * fc, (1 + 2 * r) * fc]}, 1.5)
+    add("fm", "chain_fm26", "f26s_fin_096", "fm_side", {"hz": [fc, 2.125 * fc, 0.125 * fc, 3.25 * fc]}, 1.5)
+    split = ("high feedback: the Monomachine's carrier moves off the note (fc + 0.14 fc at 48, a quarter at 56..72, then"
+             " noise), MONO2K's stays harmonic until it aliases")
+    for m, top in (("s", 48), ("d", 48)):
+        for v in (16, 32, 48):
+            add("fm", "chain_fm26", f"f26{m}_fb_{v:03d}", "fm_side", {"hz": [fc * k for k in range(1, 9)]}, 1.5,
+                xfail=split if v == 48 else None)
+    add("fm", "chain_fm26", "f26s_fb_064", "grit", {"note": 48}, 3.0, xfail=split)
+    add("fm", "chain_fm26", "f26d_fb_096", "grit", {"note": 48}, 3.0, xfail=split)
+    for v in (88, 104):
+        for t in (0.02, 0.15, 0.4):
+            add("fm", "chain_fm26", f"f26s_env_{v:03d}", "fm_side", {"hz": [3 * fc, 5 * fc], "t": t, "n": 2048}, 2.0)
+    for v in (16, 32):
+        add("fm", "chain_fm26", f"f26s_tone_{v:03d}", "fm_side", {"hz": odd(fc, 7)}, 1.5)
+    for v in (32, 64):                             # DYN's 1VOL on a 1.5 ratio
+        add("fm", "chain_fm26", f"f26d_v1_{v:03d}", "fm_side", {"hz": [k * fc for k in (0.5, 2, 2.5, 3.5, 4, 5.5)]}, 1.0)
+    for v in (96, 120):
+        add("fm", "chain_fm26", f"f26d_v1_{v:03d}", "fm_beta", {"note": 48, "ratio": 1.5, "k": 20}, "3%")
+    for v in (32, 64):
+        add("fm", "chain_fm26", f"f26d_e2_{v:03d}", "fm_side", {"hz": odd(fc)}, 1.0)
+    for t in (0.02, 0.15, 0.4):
+        add("fm", "chain_fm26", "f26d_d2_096", "fm_side", {"hz": [3 * fc, 5 * fc], "t": t, "n": 2048}, 2.0)
+    for v, r in ((16, 0.25), (112, 1.75)):
+        add("fm", "chain_fm26", f"f26d_r1_{v:03d}", "fm_side", {"hz": [abs(1 - r) * fc, (1 + r) * fc, (1 + 2 * r) * fc]}, 1.5)
+    for v, r in ((48, 0.5625), (111, 111 * 111 / 4096)):
+        add("fm", "chain_fm26", f"f26d_r2_{v:03d}", "fm_side", {"hz": [abs(1 - r) * fc, (1 + r) * fc, (1 + 2 * r) * fc]}, 1.5)
+    for name, ts in (("f26d_ven_088", (0.3, 0.9)), ("f26d_ven_032", (0.05, 0.2, 0.6))):   # the push; the cut turning
+        for t in ts:                                                                             # over (a ratio-2 operator:
+            add("fm", "chain_fm26", name, "fm_side", {"hz": odd(fc, 7), "t": t, "n": 2048}, 3.0)    # its phase shows too)
+    for name, ts in (("f26d_vp_088", (0.0, 0.1, 0.3, 0.7, 1.2)), ("f26d_vn_032", (0.0, 0.06, 0.15, 0.4, 0.8))):
+        for t in ts:
+            add("fm", "chain_fm26", name, "fm_beta", {"note": 48, "ratio": 1.5, "t": t, "n": 1102, "k": 20}, 0.15)
+    add("fm", "chain_fm26", "f26d_fen_096", "fen_hz", {"note": 48, "at": [0.03, 0.1, 0.3, 0.6]}, "3%")
+    add("fm", "chain_fm26", "f26d_fen60_096", "fen_hz", {"note": 60, "at": [0.03, 0.1, 0.3, 0.6]}, "3%")
+    add("fm", "chain_fm26", "f26d_fen_032", "fen_hz", {"note": 48, "at": [0.03, 0.08, 0.6, 1.2], "mode": "peak"}, "4%")
+    for v in (0, 127):
+        add("fm", "chain_fm26", f"f26d_tune_{v:03d}", "pitch_c", {"note": 48}, 1.0)
+    for m in ("p",):                               # FM+PAR: three of FM+STAT's operators side by side
+        add("fm", "chain_fm26", f"f26{m}_carrier", "rms", {}, 0.3)
+    for j in (1, 2, 3):
+        for v in (32, 64):
+            add("fm", "chain_fm26", f"f26p_i{j}_{v:03d}", "fm_side", {"hz": odd(fc)}, 1.0)
+        add("fm", "chain_fm26", f"f26p_r{j}_13", "fm_side", {"hz": [0.25 * fc, 1.75 * fc, 2.5 * fc]}, 1.5)
+    for v in (88, 104):                            # ENV over 64: 2VOL's depth there, falling
+        for t in (0.0, 0.02, 0.15, 0.4):
+            add("fm", "chain_fm26", f"f26p_e3_{v:03d}", "fm_beta", {"note": 48, "ratio": 4, "t": t, "n": 1102, "k": 16}, 0.25)
+    add("fm", "chain_fm26", "f26p_sum", "fm_side", {"hz": [fc * k for k in range(1, 9)]}, 1.5)   # two at ratio 1: one depth
+    for v in (16, 48, 96):                         # TONE: the lowpass's cutoff
+        add("fm", "chain_fm26", f"f26p_tone_{v:03d}", "fm_side", {"hz": odd(fc, 7)}, 1.5)
+    for v in (56, 80):
+        add("fm", "chain_fm26", f"f26s_tone_{v:03d}", "fm_side", {"hz": odd(f0_of(72), 5)}, 1.5)
     return C
 
 

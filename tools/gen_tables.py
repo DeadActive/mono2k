@@ -144,8 +144,9 @@ out.append(arr("T_DIST_C", "int32_t", [round(32767 * 10 ** (dist_c(d) / 20)) for
 # and the ceiling machine by machine (tools/ref/chain_dist21.spec): the Monomachine clips each machine against a
 # ceiling of its own, whatever the level going in (a saw alone, with its subs or its unison all clip to the same level;
 # a chord of one voice or four; a sine full or cut 15 dB). Against GND-SIN's, dB; Q12. In the machines' order
-DIST_M = {"GSIN": 0.0, "GNOI": 0.0, "SID": 0.0, "FMS": -1.4, "FMD": 0.0, "SAW": -10.5, "ENS": 1.7, "WAV": -7.0, "VOX": -1.4}
-out.append(arr("T_DIST_M", "uint16_t", [round(4096 * 10 ** (v / 20)) for v in DIST_M.values()], 9))
+DIST_M = {"GSIN": 0.0, "GNOI": 0.0, "SID": 0.0, "FMS": -1.4, "FMD": 0.0, "SAW": -10.5, "ENS": 1.7, "WAV": -7.0, "VOX": -1.4,
+          "FMP": 0.3}
+out.append(arr("T_DIST_M", "uint16_t", [round(4096 * 10 ** (v / 20)) for v in DIST_M.values()], 10))
 # the filter follows the note: a cutoff 2^((step - 16) / 8) x f0, the same for the HP (BASE) and the LP (BASE + WDTH).
 # Positions in 1/96 octave over MIDI note 0 (8.18 Hz): 8 a semitone, 12 a step. Every section stops at 18 kHz,
 # which gives the open filter the Monomachine's top (-1 dB at 12.5 kHz, -1.8 dB at 14 kHz). ZDF g = tan(pi fc / fs)
@@ -336,6 +337,60 @@ out.append("static const char *const T_RATIO_NAME[32] = {%s};\n" %
 def idx(v):
     return 14.0 * (v / 127.0) ** 2.2
 out.append(arr("T_FMK", "uint32_t", [round(idx(v) / (2 * math.pi) * 2 ** 17) for v in range(128)], 8))
+
+# FM+STAT as the Monomachine plays it, measured on its OS (tools/ref/chain_fm25.spec). Each operator's ratio on one
+# 24-step table (the screen's labels for steps 5..9 are its neighbours'; the sidebands say these), Q16
+FM_R24 = [1 / 64, 1 / 32, 1 / 16, 3 / 32, 1 / 8, 5 / 32, 3 / 16, 1 / 4, 5 / 16, 3 / 8, 7 / 16, 1 / 2, 5 / 8, 3 / 4, 7 / 8, 1,
+          1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4]
+out.append(arr("T_FMR24", "uint32_t", [round(r * 65536) for r in FM_R24], 8))
+out.append("static const char *const T_FMR24_NAME[24] = {%s};\n" % ", ".join(
+    '"%s"' % n for n in "1/64 1/32 1/16 3/32 1/8 5/32 3/16 1/4 5/16 3/8 7/16 1/2 5/8 3/4 7/8 1 1.25 1.5 1.75 2 2.5 3 3.5 4".split()))
+def lerp(pts, v, log=False):
+    for (a, ya), (b, yb) in zip(pts, pts[1:]):
+        if a <= v <= b:
+            u = (v - a) / (b - a)
+            return math.exp(math.log(ya) + u * (math.log(yb) - math.log(ya))) if log else ya + u * (yb - ya)
+    return pts[-1][1]
+# the depth (an index, rad) by 1ENV / 2VOL: the same law to 64 (index 1.46), 2VOL's straight on to 12.3 at 127
+# (the fits read MONO2K's own renders 5..12 % over their index at low depth: the table is the Monomachine's fit scaled by
+# the same reading of MONO2K's, so both read alike)
+FM_IDX = [(0, 0), (4, .005), (8, .025), (12, .047), (16, .083), (20, .135), (24, .199), (28, .27), (32, .351), (36, .45),
+          (40, .547), (44, .66), (48, .783), (52, .92), (56, 1.075), (60, 1.23), (64, 1.393), (72, 2.75), (80, 4.207),
+          (88, 5.578), (96, 6.983), (104, 8.394), (112, 9.754), (120, 11.2), (127, 12.464)]
+# under FM+STAT's modulators' lowpass (m2k_dsp.c): 1.12 of the law, which the fit at 523 Hz read through it
+FMS_K = 1.13
+out.append(arr("T_FMB", "uint32_t", [round(FMS_K * lerp(FM_IDX, v) / (2 * math.pi) * 2 ** 17) for v in range(128)], 8))
+# 1ENV over 64: the depth decays from the trig, its time constant (s); per control block, Q31
+FM_TAU = [(64, 1e9), (68, 150.0), (72, 24.0), (76, 4.85), (80, 1.5), (84, .63), (88, .28), (92, .15), (96, .092),
+          (100, .058), (104, .04), (108, .028), (112, .019), (116, .0138), (120, .0107), (124, .0078), (127, .0062)]
+out.append(arr("T_FMEC", "uint32_t", [min(2 ** 31, round(2 ** 31 * math.exp(-SUB / (SR * lerp(FM_TAU, v, True)))))
+                                      for v in range(64, 128)], 8))
+# TONE: the cutoff of the modulators' lowpass (two one-poles; each depth measured at 65 Hz .. 2 kHz against TONE,
+# tools/ref/chain_fm26.spec): 1.37 kHz at 64, x1.61 every 8 steps (31 Hz at 0; past Nyquist, open, at 127). The one-pole's
+# coefficient, Q15
+def fm_lp(v):
+    fp = 1370 * 1.61 ** ((v - 64) / 8)
+    return min(32767, round(32768 * (1 - math.exp(-2 * math.pi * fp / SR))))
+out.append(arr("T_FMLP", "uint16_t", [fm_lp(v) for v in range(128)], 8))
+# 1FB: the first operator's feedback, on the mean of its last two outputs (rad per unit); up to 40 as measured, then
+# on into the chaotic range (where the Monomachine splits its carrier: a known gap)
+FM_FB = [(0, 0), (16, .4), (32, .85), (40, 1.0), (127, 2.6)]
+out.append(arr("T_FMFB", "uint32_t", [round(lerp(FM_FB, v) / (2 * math.pi) * 2 ** 17) for v in range(128)], 8))
+
+# FM+DYN as the Monomachine plays it (tools/ref/chain_fm26.spec). Its depths on FM+STAT's law, 1VOL's carried on past
+# 127 for 1VEN's push (to 255, as straight as its top)
+FMD_K = 1.125                          # its depth at every frequency (no lowpass): 1.125 of the law
+FMD_TOP = (12.464 - 11.2) / 7
+out.append(arr("T_FMDV", "uint32_t", [round(FMD_K * (lerp(FM_IDX, v) if v < 128 else 12.464 + FMD_TOP * (v - 127))
+                                            / (2 * math.pi) * 2 ** 17) for v in range(257)], 8))
+# 1VEN and 1FEN: one decay from the trig, its time constant (s) by the distance from 64; per control block, Q31
+FMD_TAU = [(0, 7.5), (8, 6.0), (16, 2.13), (24, .72), (32, .25), (36, .157), (40, .085), (44, .050), (48, .031),
+           (52, .0175), (56, .0095), (60, .0055), (64, .0035)]
+out.append(arr("T_FMDEC", "uint32_t", [min(2 ** 31 - 1, round(2 ** 31 * math.exp(-SUB / (SR * lerp(FMD_TAU, d, True)))))
+                                       for d in range(65)], 8))
+# 1FEN: the first operator's frequency pushed by a note-independent amount at the trig (before its ratio): up 1.35 Hz by
+# the square of the distance over 64, down a quarter of that under it; a phase increment
+out.append(arr("T_FMFEN", "int32_t", [round((1.35 if v >= 64 else -0.34) * (v - 64) ** 2 * 2 ** 32 / SR) for v in range(128)], 8))
 
 # mu-law (8 bit) decoder, for the delay lines
 def mulaw_dec(b):

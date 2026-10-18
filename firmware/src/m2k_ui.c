@@ -14,7 +14,7 @@ enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOWL, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
     K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD,
-    K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK
+    K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -56,6 +56,10 @@ typedef struct {
     pi_t syn[8];
 } mi_t;
 
+/* the machines as the selector steps through them: the Monomachine's order (its FM+ STAT, PAR, DYN together) */
+static const uint8_t M_ORDER[M_COUNT] = {M_GSIN, M_GNOI, M_SID, M_FMS, M_FMP, M_FMD, M_SAW, M_ENS, M_WAV, M_VOX};
+static int m_place(int m) { for (int i = 0; i < M_COUNT; i++) if (M_ORDER[i] == m) return i; return 0; }
+
 static const mi_t MI[M_COUNT] = {
     {"GND-SIN", "GND", "SINE", "PERC", {5, 1, 3},
      {{"TUNE", "TUNE", K_TUN2}, {"FOLD", "SINE FOLD", K_NUM}, {"SUB", "SUB LEVEL", K_NUM}, {"NOIS", "NOISE", K_NUM},
@@ -67,11 +71,11 @@ static const mi_t MI[M_COUNT] = {
      {{"WAV1", "OSC 1 WAVE", K_SIDW}, {"PW", "PULSE WIDTH", K_NUM}, {"PWM", "PWM DEPTH", K_NUM}, {"WAV2", "OSC 2 WAVE", K_SIDW},
       {"DTN2", "OSC 2 TUNE", K_SEMI24}, {"FINE", "OSC 2 FINE", K_FINE}, {"MODE", "SYNC / RING", K_SIDM}, {"MIX", "OSC MIX", K_NUM}}},
     {"FM+STAT", "FM+", "STATIC", "SYNTH", {4, 5, 3},
-     {{"RAT1", "RATIO 1", K_RATIO}, {"DEP1", "DEPTH 1", K_NUM}, {"DEC1", "DECAY 1", K_DECT}, {"RAT2", "RATIO 2", K_RATIO},
-      {"DEP2", "DEPTH 2", K_NUM}, {"DEC2", "DECAY 2", K_DECT}, {"FDBK", "FEEDBACK", K_NUM}, {"ALGO", "ALGORITHM", K_ALGO}}},
+     {{"1FRQ", "RATIO 1", K_FR24}, {"1FIN", "FINE 1", K_BI}, {"1ENV", "DEPTH / DECAY 1", K_BI}, {"1FB", "FEEDBACK 1", K_NUM},
+      {"2FRQ", "RATIO 2", K_FR24}, {"2VOL", "DEPTH 2", K_NUM}, {"TONE", "TONE", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
     {"FM+DYN", "FM+", "DYNAMIC", "SYNTH", {4, 4, 5},
-     {{"RAT1", "RATIO 1", K_RATIO}, {"DEP1", "DEPTH 1", K_NUM}, {"DEC1", "DECAY 1", K_DECT}, {"RAT2", "RATIO 2", K_RATIO},
-      {"DEP2", "DEPTH 2", K_NUM}, {"DEC2", "DECAY 2", K_DECT}, {"FDBK", "FEEDBACK", K_NUM}, {"SWEP", "RATIO SWEEP", K_BI}}},
+     {{"1FRQ", "RATIO 1", K_FR64}, {"1FEN", "RATIO 1 BY ENV", K_BI}, {"1VOL", "DEPTH 1", K_NUM}, {"1VEN", "DEPTH 1 BY ENV", K_BI},
+      {"2FRQ", "RATIO 2", K_FRSQ}, {"2ENV", "DEPTH / DECAY 2", K_BI}, {"2FB", "FEEDBACK 2", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
     {"SWAV-SAW", "SWV", "SUPER", "SYNTH", {2, 1, 2},
      {{"UNIL", "UNISON LEVEL", K_NUM}, {"UNIW", "UNISON WIDTH", K_NUM}, {"UNIX", "EXTENDED UNISON", K_NUM}, {"DRFT", "DRIFT", K_NUM},
       {"SUBX", "SQUARE SUB", K_NUM}, {"SUB1", "SINE SUB -1", K_NUM}, {"SUB2", "SINE SUB -2", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
@@ -84,6 +88,9 @@ static const mi_t MI[M_COUNT] = {
     {"VOX-6", "VOX", "VOICE", "VOICE", {1, 2, 5},
      {{"VOWL", "VOWEL", K_VOWL}, {"VSWP", "VOWEL SWEEP", K_BI}, {"VTIM", "SWEEP TIME", K_TIME}, {"SHFT", "FORMANT SHIFT", K_BI},
       {"BRTH", "BREATH", K_NUM}, {"RESO", "RESONANCE", K_NUM}, {"BUZZ", "BUZZ", K_NUM}, {"VIBR", "VIBRATO", K_NUM}}},
+    {"FM+PAR", "FM+", "PARALLEL", "SYNTH", {4, 5, 3},
+     {{"1FRQ", "RATIO 1", K_FR24}, {"1ENV", "DEPTH / DECAY 1", K_BI}, {"2FRQ", "RATIO 2", K_FR24}, {"2ENV", "DEPTH / DECAY 2", K_BI},
+      {"3FRQ", "RATIO 3", K_FR24}, {"3ENV", "DEPTH / DECAY 3", K_BI}, {"TONE", "TONE", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
 };
 
 static const char *const SIDW_N[8] = {"TRI", "SAW", "PUL", "NOI", "T+S", "T+P", "S+P", "ALL"};
@@ -114,6 +121,7 @@ static int kind_choices(int k)
 {
     switch (k) {
     case K_RATIO: case K_WAVE: return 32;
+    case K_FR24: return 24;
     case K_SIDW: return 8;
     case K_SIDM: case K_ALGO: case K_ASPD: case K_ARNG: return 4;
     case K_SCRN: return 2;
@@ -151,6 +159,26 @@ static void s_hz(char *out, const char **unit, int hz)
 {
     if (hz < 1000) { s_int(out, hz); *unit = "HZ"; }
     else { s_dec1(out, hz / 100); *unit = "KHZ"; }
+}
+/* an FM ratio in 4096ths as the Monomachine's screen writes it: its own fractions, else 3 decimals under 1, 2 over, cut */
+static void s_ratio(char *d, int r, int sq)
+{
+    static const uint16_t FR[17] = {64, 128, 256, 384, 512, 576, 640, 768, 1024, 1280, 1536, 1792, 2048, 2304, 2560, 3072, 3584};
+    static const char *const FN[17] = {"1/64", "1/32", "1/16", "3/32", "1/8", "9/64", "5/32", "3/16", "1/4", "5/16", "3/8",
+                                       "7/16", "1/2", "9/16", "5/8", "3/4", "7/8"};
+    for (int i = 0; i < 17; i++)
+        if (r == FR[i] && (sq ? r <= 1024 || r == 2304 : r != 576)) { s_cpy(d, FN[i]); return; }
+    if (r == 0) { s_cpy(d, "0.0"); return; }
+    if (r < 4096) {
+        int m = r * 1000 / 4096;
+        d[0] = '.'; d[1] = (char)('0' + m / 100); d[2] = (char)('0' + m / 10 % 10); d[3] = (char)('0' + m % 10); d[4] = 0;
+        return;
+    }
+    int c = r * 100 / 4096;
+    d = s_int(d, c / 100);
+    *d++ = '.';
+    if (c % 100) { *d++ = (char)('0' + c / 10 % 10); *d++ = (char)('0' + c % 10); } else *d++ = '0';
+    *d = 0;
 }
 /* a pattern's name on the panel: A01 .. A16 */
 /* a pattern's name on the panel: the bank's letter and its place, A01 .. D16 */
@@ -224,6 +252,9 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_BITS: s_int(out, 16 - (v * 14 >> 7)); *unit = "BIT"; break;
     case K_SEMI: s_int(out, v - 64); *unit = "SEMI"; break;
     case K_RATIO: s_cpy(out, T_RATIO_NAME[c]); *unit = "RATIO"; break;
+    case K_FR24: s_cpy(out, T_FMR24_NAME[c]); *unit = "RATIO"; break;   /* FM+'s 24 steps */
+    case K_FR64: s_ratio(out, v == 127 ? 8192 : v * 64, 0); *unit = "RATIO"; break;          /* FM+DYN's: v / 64, 2 at 127 */
+    case K_FRSQ: s_ratio(out, v == 127 ? 16384 : v * v, 1); *unit = "RATIO"; break;          /* (v / 64)^2, 4 at 127 */
     case K_SEMI24: s_int(out, ((v - 64) * 24) / 64); *unit = "SEMI"; break;
     case K_INT25: { char *e = s_cpy(out, "+"); s_int(e, c); *unit = "SEMI"; break; }
     case K_SIDW: s_cpy(out, SIDW_N[c]); break;
@@ -854,7 +885,7 @@ void m2k_encoder(int e, int d)
             ui.held_edit = 1;
             break;
         }
-        set_machine((p->machine[ui.trk] + M_COUNT + (d > 0 ? 1 : -1)) % M_COUNT);
+        set_machine(M_ORDER[(m_place(p->machine[ui.trk]) + M_COUNT + (d > 0 ? 1 : -1)) % M_COUNT]);
         break;
     case E_PRESET: {
         if (ui.grid && ui.nheld) { held_step_edit(d > 0 ? 1 : -1, 0); break; }
@@ -1023,7 +1054,7 @@ static void machine_dots(int cx, int y, int m)
     int x0 = cx - (M_COUNT * 9) / 2 + 4;
     for (int i = 0; i < M_COUNT; i++) {
         int x = x0 + i * 9;
-        if (i == m) disc(x, y, 3, 1);
+        if (M_ORDER[i] == m) disc(x, y, 3, 1);
         else { frame(x - 3, y - 3, 7, 7, 1); px(x - 3, y - 3, 0); px(x + 3, y - 3, 0); px(x - 3, y + 3, 0); px(x + 3, y + 3, 0); }
     }
 }

@@ -33,7 +33,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 
 | | |
 |---|---|
-| Machines | GND-SIN, GND-NOIS, SID-8BIT, FM+STAT, FM+DYN, SWAV-SAW, SWAV-ENS, DIGI-WAV, VOX-6: clean-room designs after the Monomachine's families, integer only |
+| Machines | GND-SIN, GND-NOIS, SID-8BIT, FM+STAT, FM+PAR, FM+DYN, SWAV-SAW, SWAV-ENS, DIGI-WAV, VOX-6: clean-room designs after the Monomachine's families, integer only |
 | Per track | the Monomachine's chain and pages: SYN A–H · AMP (ATK HOLD DEC REL DIST VOL PAN PORT) · FILT (HP / LP as base and width following the note, resonance, envelope) · FX (EQ, SRR, a delay of its own in 8-bit mu-law, ping-pong on positive sends) · DSTR (bits, fold, xor, SPU send) · 3 LFOs (any track's parameter) · ARP |
 | Projects | the modern Elektron way: 4 projects × 4 banks (A–D) × 16 patterns, each pattern with its own sounds. SAVE keeps the pattern (its reload point), GLO + SAVE reloads it, SAVE held keeps the project; GLO + REC / PLAY / SEQ copy, paste, clear (the pattern on HOME, the track's sound on its pages); GLO > SET picks and loads a project. On the web: a project picker, export / import as `.m2kp` files. Stored packed (a typical pattern 0.5–1 KB; the DEMO project 32 KB) |
 | Factory | project DEMO, bank A: sixteen parts after the late-90s and 2000s digital era, written in batches of four, each heard and approved (`docs/bank-a.md`: reference, genre, key and idea of each). So far HAZE (after Boards of Canada), SPLICE (Autechre), RIBBON (Aphex Twin), FACETS (Aleksi Perälä), SMOKE (dub techno), TORQUE (hardgroove), TUNNEL (Overmono), MOTEL (Anthony Naples); A09–A16 hold the bank before until theirs. Banks B–D blank. A store saved with earlier demos takes the new ones where the old still stand |
@@ -59,9 +59,10 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
    the second core as CS-1 does, the 1-bit framebuffer blitted in strips with the palette's two colours. The projects'
    images move to the 1 MiB flash (`m2k_proj.c` get / put), and RAM keeps the playing bank, not all 64 patterns.
 2. **Calibration against the Monomachine**, machine by machine: levels, spectra, the machines' own envelopes. The amp
-   envelope, SWAV-SAW and the whole track chain are done (below); SWAV-ENS, SID, FM+, VO-6 and GND-NOIS are next.
-   Their levels, measured with DIST at 64 (`tools/ref/chain_dist21.spec`, `regress.py` group `machine_level`, known
-   gaps below): SID 7 dB and FM+ 6.6 dB louder than the Monomachine's, GND-NOIS 2.9 dB louder, VO-6 5.3 dB quieter.
+   envelope, SWAV-SAW, SWAV-ENS, the three FM+ and the whole track chain are done (below); SID, VO-6 and GND-NOIS are
+   next. Their levels, measured with DIST at 64 (`tools/ref/chain_dist21.spec`,
+   `regress.py` group `machine_level`, known gaps below): SID 7 dB louder than the Monomachine's, GND-NOIS 2.9 dB
+   louder, VO-6 5.3 dB quieter.
    Driven hard, all of them meet its ceilings. Until SID's is fixed, bank A has no SID bass.
 3. More machines (DPRO-BBOX, FX machines that take the previous track), songs, MIDI out and clock.
 
@@ -99,6 +100,33 @@ Done so far, all measured on OS 1.32B:
   (0.4 dB); TUNE ±2 semitones (0.7 c); the chorus a copy whose pitch travels a triangle, CHRL its mix (within 1.5 dB).
   Bank A's chords, converted, against the Monomachine's voice by voice: within 0.5 c. MONO2K's chorus is mono, where
   the Monomachine's widens the stereo by CHRW (a known gap).
+- **FM+STAT, FM+PAR and FM+DYN** on their pages (`tools/ref/chain_fm26.spec`, group `fm`): a sine carrier on the
+  note at half GND-SIN's level, phase-modulated by sine operators side by side, every phase reset at the trig, the
+  carrier's half a cycle on from its modulators (as the Monomachine's harmonics' phases read: a ratio-1 modulator
+  turned over, a ratio-2 one not).
+  - FM+STAT (1FRQ 1FIN 1ENV 1FB | 2FRQ 2VOL TONE TUNE): each ratio on one 24-step table, 1/64 to 4 (the screen's
+    labels for steps 5–9 are their neighbours'; the sidebands say which), 1FIN a factor of 0.75–1.25 on the first;
+    1ENV its depth up to 64 (index 1.57), over 64 that depth falling from the trig (24 s at 72 to 6 ms at 127); 2VOL
+    the second's depth on the same law to 64, then straight on to 14 at 127; 1FB feeds the first operator back on the
+    mean of its last two outputs. Both modulators pass two one-poles on their way to the carrier, TONE their cutoff:
+    30 Hz at 0, 1.37 kHz at 64 (where a modulator at 523 Hz goes in at 0.88 of its depth, at 2 kHz 0.30, at 4 kHz
+    0.10), ×1.61 every 8 steps, open at 127. Depths within 3 % from 65 Hz to 4 kHz and over TONE, the decays within
+    0.03 of the index, the feedback within 1.5 dB up to 40.
+  - FM+PAR (1FRQ 1ENV 2FRQ 2ENV | 3FRQ 3ENV TONE TUNE), new: three of FM+STAT's operators on the same table, law and
+    lowpass; an ENV up to 64 its depth, over 64 the depth 2VOL has at that value, falling from the trig on 1ENV's time.
+    Within 0.01 of the index, two at the same ratio adding as one.
+  - FM+DYN (1FRQ 1FEN 1VOL 1VEN | 2FRQ 2ENV 2FB TUNE): no lowpass, and 1.125 times FM+STAT's depth law. 1FRQ is v/64
+    (2 at 127), 2FRQ (v/64)² (4 at 127). 1VEN over 64 pushes 1VOL up its law from the trig by 4 steps a step (128 at
+    most), falling back on a time of its own (6 s at 72 to 4 ms at 127); under 64's depth the push adds straight, twice
+    as fast, and stops there. Under 64, 1VEN cuts 1VOL by 1/32 a step, and past half the operator turns over (a cut of
+    32 at 1VOL 64 goes to the whole depth inverted and back). 1FEN pushes the first operator's frequency at the trig
+    by 1.35 Hz × (v − 64)², the same at every note and added before the ratio, a quarter of that downward under 64,
+    falling back on 1VEN's time. 2ENV is FM+STAT's 1ENV, 2FB its 1FB. Depths within 1.5 %, 1VEN's push and cut within
+    about 0.1 of the index, 1FEN within 1 %.
+
+  Known gaps: from about 44 of feedback the Monomachine's carrier moves off the note (by 0.14 of it at 48, a quarter
+  at 56–72, noise above) where MONO2K's stays harmonic until it aliases; a deep 1VEN cut (under 32) at 1VOL over 64
+  recovers through the low depths up to 0.4 of the index apart for a few hundred ms.
 - **The track chain** (`tools/ref/chain.py` writes the specs, `chain_anal.py` reads them), in the Monomachine's order:
   - VOL and LEV squared; PAN cos / sin; the track clips per channel after the pan, just under full scale at LEV 127.
     MONO2K matches within 0.02 dB.
@@ -109,9 +137,9 @@ Done so far, all measured on OS 1.32B:
     subs and the saw with unison all land within 0.8 dB of each other. One to four voices land within 0.6 dB, and a
     sine at full scale or 15 dB down within 0.9 dB. So there is no output compensation and no ceiling that follows
     the input. Between machines the ceilings differ: against GND-SIN's, SWAV-SAW's is 10.5 dB lower, DIGI-WAV's 7.0,
-    FM+STAT's and VO-6's 1.4, and SWAV-ENS's 1.7 higher; GND-NOIS, SID and FM+DYN clip at GND-SIN's. A bass driven
-    past about 80 gains harmonics and almost no level. MONO2K now follows within 1 dB on all of these (`regress.py`,
-    group `dist_loud`).
+    FM+STAT's and VO-6's 1.4, and SWAV-ENS's 1.7 and FM+PAR's 0.3 higher; GND-NOIS, SID and FM+DYN clip at
+    GND-SIN's. A bass driven past about 80 gains harmonics and almost no level. MONO2K now follows within 1 dB on all
+    of these (`regress.py`, group `dist_loud`).
 
     **Saved patterns with high DIST sound different.** Before this fix, every machine clipped at GND-SIN's ceiling,
     so SWAV-SAW, DIGI-WAV, SWAV-ENS, FM+STAT and VO-6 came out of a hard DIST louder than the Monomachine's (a
@@ -154,7 +182,7 @@ Done so far, all measured on OS 1.32B:
   8-bit lines, so ping-pong past 0.37 s (and any delay past 0.74 s) slows the line's clock and darkens, where the
   Monomachine stays bright; SWAV-SAW's top harmonics at C7 are 2–6 dB short. Each machine's own level, clean (DIST
   64, group `machine_level`): GND-SIN, SWAV-SAW (alone, with unison, with SUB1 up to 80) and SWAV-ENS within 0.8 dB;
-  the rest still to calibrate: SID-8BIT 6.9–7.0 dB louder, FM+STAT and FM+DYN 6.5–6.6 dB louder, GND-NOIS 2.9 dB
+  the three FM+ within 0.2 dB; the rest still to calibrate: SID-8BIT 6.9–7.0 dB louder, GND-NOIS 2.9 dB
   louder, VO-6 5.3 dB quieter, and SWAV-SAW's sine sub at C1 1.1–1.2 dB under at SUB1 127. DIGI-WAV is not compared:
   it plays MONO2K's own waves, not the DigiPro's.
 
@@ -165,7 +193,10 @@ old interval folded into −11..+12 by octaves, one folding to 0 to +12, keeping
 spread, not the chorus's moving copy), shape, level and sub have no counterpart and reset; a trig the old level
 silenced has its intervals locked OFF; an LFO aimed at the old page is cleared, intervals included, since the new axis
 has OFF and an octave down in it; 8: the wave bank's choice, MONO2K's 32 for every older pattern; 9: the bus's
-controls on their new laws, each old value to the new one that measures the same, HISS by its crackle).
+controls on their new laws, each old value to the new one that measures the same, HISS by its crackle; 10: FM+STAT's
+and FM+DYN's pages, MONO2K's old ones carried over as near as the new pages go, not as they sounded: the old
+operators ran in series, the new side by side; each ratio, depth, decay and feedback to the new page's nearest, SWEP
+to 1FEN; a lock goes with its parameter where it has a place).
 
 The bus's controls are MONO2K's own, so their laws are a design choice, made by measurement (`m2k_host DIR --bus`,
 `tools/bus_curves.py`: every value of each on a reference loop). Before, most of each range sat past where it was

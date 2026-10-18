@@ -202,6 +202,122 @@ static void bus_v9(m2k_pattern_t *p)
     g[G_ADPC] = T_V9_ADPC[g[G_ADPC] & 127];
 }
 
+/* FM+STAT and FM+DYN took the Monomachine's pages (version 10). The old ones were MONO2K's own: RAT1 DEP1 DEC1 RAT2
+ * DEP2 DEC2 FDBK, then ALGO (STAT) or SWEP (DYN), the second operator fed back and modulating the first in series.
+ * Both new machines run their operators side by side, so an old sound is carried over as near as the pages go, not
+ * as it was: each ratio to the nearest the new page holds (STAT's 24 steps with 1FIN making up the rest; DYN's
+ * straight /64 and squared /64); each depth to the new law's nearest; a decay to the new decay of the nearest time,
+ * which starts from 64's depth (STAT's 1ENV, DYN's 2ENV) or, on DYN's first operator, as 1VEN's push down to a 1VOL
+ * that keeps the old start; the feedback to the first operator (STAT) or stays on the second (DYN); SWEP to 1FEN.
+ * A lock goes with its parameter where it has a place; DEC1, DEC2, ALGO's go, and so does an LFO aimed at them */
+static int near_u32(const uint32_t *T, int lo, int hi, uint32_t want)
+{
+    int best = lo;
+    for (int v = lo; v <= hi; v++)
+        if ((T[v] > want ? T[v] - want : want - T[v]) < (T[best] > want ? T[best] - want : want - T[best])) best = v;
+    return best;
+}
+
+static int isqrt(int x)
+{
+    int r = 0;
+    while ((r + 1) * (r + 1) <= x) r++;
+    return r;
+}
+
+/* a ratio (Q8) to FM+STAT's step, as its knob value, and the 1FIN that makes up the rest */
+static int fms_ratio(int q8, int *fin)
+{
+    int best = 0;
+    uint64_t r = (uint64_t)q8 << 8;
+    for (int s = 1; s < 24; s++) {    /* nearest on a log scale, by products (no division) */
+        uint64_t x = T_FMR24[s], y = T_FMR24[best];
+        int closer = x >= r ? (y >= r ? x < y : x * y < r * r) : (y >= r ? r * r < x * y : x > y);
+        if (closer) best = s;
+    }
+    if (fin) {
+        int f = (int)(((uint32_t)q8 << 16) / T_FMR24[best]) - 192;   /* (192 + fin) / 256 = r / step */
+        *fin = CLAMP(f, 0, 127);
+    }
+    return (best * 128 + 23) / 24;
+}
+
+static int fm_dec(int d) { return 65 + near_u32(T_FMEC, 1, 63, T_ENV_COEF[d]) - 1; }        /* an old decay's 1ENV */
+
+/* where an old page's parameter went: STAT, DYN (-1: nowhere) */
+static const int8_t FM_TO[2][8] = {{0, 2, -1, 4, 5, -1, 3, -1}, {0, 2, -1, 4, 5, -1, 6, 1}};
+
+static int fm_val(int dyn, int prm, int v, const uint8_t *old)
+{
+    switch (prm) {
+    case 0: return dyn ? (T_RATIO[(v * 32) >> 7] >= 512 ? 127 : (T_RATIO[(v * 32) >> 7] + 2) >> 2)
+                       : fms_ratio(T_RATIO[(v * 32) >> 7], 0);
+    case 3: return dyn ? (T_RATIO[(v * 32) >> 7] >= 1024 ? 127 : isqrt(T_RATIO[(v * 32) >> 7] * 16))
+                       : fms_ratio(T_RATIO[(v * 32) >> 7], 0);
+    case 1:
+        if (dyn) {                    /* 1VOL: the old start, less 1VEN's push */
+            int d = old[2] < 127 ? near_u32(T_FMDEC, 1, 63, T_ENV_COEF[old[2]]) : 0;
+            int e = d < 32 ? 4 * d : 128;
+            return CLAMP(near_u32(T_FMDV, 0, 256, T_FMK[v]) - e, 0, 127);
+        }
+        return near_u32(T_FMB, 0, 64, T_FMK[v]);
+    case 4: return dyn ? near_u32(T_FMDV, 0, 64, T_FMK[v]) : near_u32(T_FMB, 0, 127, T_FMK[v]);
+    case 6: return near_u32(T_FMFB, 0, 127, T_FMK[v] >> 1);
+    case 7: {                         /* SWEP: the old push at C4, as 1FEN's note-independent one */
+        int sw = v - 64;
+        return sw >= 0 ? 64 + CLAMP(isqrt(12 * sw), 0, 63) : 64 - CLAMP(isqrt(48 * -sw), 0, 64);
+    }
+    default: return 64;
+    }
+}
+
+static void fm_v9(m2k_pattern_t *p)
+{
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        int m = p->machine[t], dyn = m == M_FMD;
+        if (m != M_FMS && m != M_FMD) continue;
+        uint8_t *k = &p->kit[t][P_SYN], o[8];
+        m_cpy(o, k, 8);
+        for (int i = 0; i < M2K_LOCKS; i++) {
+            m2k_lock_t *l = &p->lock[i];
+            if (l->trk != t || l->param >= P_SYN + 8 || l->param < P_SYN) continue;
+            int prm = l->param - P_SYN, to = FM_TO[dyn][prm];
+            if (prm == 1 && !dyn && o[2] < 127) to = -1;          /* STAT's 1ENV holds the decay */
+            if (prm == 4 && dyn && o[5] < 127) to = -1;           /* and DYN's 2ENV */
+            if (to < 0) { l->trk = 0xFF; continue; }
+            l->val = (uint8_t)fm_val(dyn, prm, l->val, o);
+            l->param = (uint8_t)(P_SYN + to);
+        }
+        int fin = 64;
+        if (dyn) {
+            k[0] = (uint8_t)fm_val(1, 0, o[0], o);
+            k[1] = (uint8_t)fm_val(1, 7, o[7], o);
+            k[2] = (uint8_t)fm_val(1, 1, o[1], o);
+            k[3] = (uint8_t)(o[2] < 127 ? 64 + near_u32(T_FMDEC, 1, 63, T_ENV_COEF[o[2]]) : 64);
+            k[4] = (uint8_t)fm_val(1, 3, o[3], o);
+            k[5] = (uint8_t)(o[5] < 127 ? fm_dec(o[5]) : fm_val(1, 4, o[4], o));
+            k[6] = (uint8_t)fm_val(1, 6, o[6], o);
+        } else {
+            k[0] = (uint8_t)fms_ratio(T_RATIO[(o[0] * 32) >> 7], &fin);
+            k[1] = (uint8_t)fin;
+            k[2] = (uint8_t)(o[2] < 127 ? fm_dec(o[2]) : fm_val(0, 1, o[1], o));
+            k[3] = (uint8_t)fm_val(0, 6, o[6], o);
+            k[4] = (uint8_t)fm_val(0, 3, o[3], o);
+            k[5] = (uint8_t)fm_val(0, 4, o[4], o);
+            k[6] = 64;
+        }
+        k[7] = 64;
+    }
+    for (int t = 0; t < M2K_TRACKS; t++)              /* LFOs aimed at an FM page: to the parameter's new place */
+        for (int l = 0; l < 3; l++) {
+            uint8_t *b = &p->kit[t][P_LFO + 8 * l];
+            int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1, m = p->machine[to];
+            if ((m != M_FMS && m != M_FMD) || dest < P_SYN || dest >= P_SYN + 8) continue;
+            int n = FM_TO[m == M_FMD][dest - P_SYN];
+            b[L_DEST] = (uint8_t)(n < 0 ? 0 : P_SYN + n + 1);
+        }
+}
+
 static void lk(m2k_pattern_t *p, int t, int s, int prm, int v)
 {
     for (int i = 0; i < M2K_LOCKS; i++)
@@ -862,4 +978,8 @@ static void factory(void)
         ens_v6(&pat[OLD_SLOTS[i]]);
         bus_v9(&pat[OLD_SLOTS[i]]);
     }
+    /* the parts with an FM+ track, written on MONO2K's old FM pages: onto the Monomachine's, once, until each is
+     * voiced on them */
+    static const uint8_t FM_OLD[] = {1, 5, 6, 9, 10, 11, 12};
+    for (unsigned i = 0; i < sizeof FM_OLD; i++) fm_v9(&pat[FM_OLD[i]]);
 }

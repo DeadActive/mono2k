@@ -4,7 +4,7 @@
 # one control. A sine (GND-SIN) for the levels, the distortion and the sample rate reduction; noise (GND-NOIS) for the
 # filter and the EQ, whose responses are read as the ratio to the clean noise at the same note (the filter follows the
 # note); a short sine blip for the delay.
-#   .venv/bin/python tools/ref/chain.py specs|specs2|specs3 tools/ref   writes chain_*.spec (rounds one to three)
+#   .venv/bin/python tools/ref/chain.py specs|specs2|specs3|fm26 tools/ref   writes chain_*.spec (rounds one to three; FM+)
 import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -403,13 +403,61 @@ def dist21():
     for name, m, n, cc in sigs:
         out += [line(f"d21_{name}_d{d:03d}", m, n, {**cc, 60: d}, gate=1.0, tail=0.05) for d in D21]
     out.append("# and each other machine at its init page, DIST 64 / 96 / 112 / 127")
-    for name, m, n in (("sid", 3, 36), ("sid48", 3, 48), ("fms", 8, 48), ("fmd", 10, 48), ("wav", 6, 48), ("vox", 11, 48)):
+    for name, m, n in (("sid", 3, 36), ("sid48", 3, 48), ("fms", 8, 48), ("fmd", 10, 48), ("wav", 6, 48), ("vox", 11, 48),
+                       ("fmp", 9, 48)):
         out += [line(f"d21m_{name}_d{d:03d}", m, n, {60: d}, gate=1.0, tail=0.05) for d in (64, 96, 112, 127)]
     return out
 
 
+def fm26():
+    """FM+STAT (8) and FM+DYN (10) on the Monomachine's pages: the carrier, each depth law, the ratio laws, FM+STAT's
+    modulators' lowpass up the keyboard, the decays, DYN's 1VEN push and cut and its 1FEN sweep, the feedback, TUNE.
+    Each line sends the whole page (a line keeps the controls of the one before)"""
+    S = {48: 61, 49: 64, 50: 0, 51: 0, 52: 82, 53: 0, 54: 64, 55: 64}
+    D = {48: 64, 49: 64, 50: 0, 51: 0, 52: 74, 53: 0, 54: 0, 55: 64}
+    out = ["# FM+STAT: 1FRQ 1FIN 1ENV 1FB | 2FRQ 2VOL TONE TUNE (init 61 64 80 32 82 64 64 64)"]
+    out.append(line("f26s_carrier", 8, 48, S))
+    out += [line(f"f26s_i1_{v:03d}", 8, 48, {**S, 48: 125, 50: v}) for v in (16, 32, 48, 64)]
+    out += [line(f"f26s_i2_{v:03d}", 8, 48, {**S, 52: 125, 53: v}) for v in (80, 112)]
+    out += [line(f"f26s_lp_n{n}", 8, n, {**S, 48: 125, 50: 32}) for n in (60, 72, 84)]
+    out += [line(f"f26s_r1_{i:02d}", 8, 48, {**S, 48: (i * 128 + 23) // 24, 50: 32}) for i in (6, 13, 17, 22)]
+    out.append(line("f26s_fin_096", 8, 48, {**S, 48: 82, 49: 96, 50: 32}))
+    out += [line(f"f26s_fb_{v:03d}", 8, 48, {**S, 48: 82, 50: 64, 51: v}) for v in (16, 32, 48, 64)]
+    out += [line(f"f26s_env_{v:03d}", 8, 48, {**S, 48: 125, 50: v}, gate=1.6) for v in (88, 104)]
+    out += [line(f"f26s_tone_{v:03d}", 8, 48, {**S, 48: 125, 50: 40, 54: v}) for v in (16, 32)]
+    out.append("# FM+DYN: 1FRQ 1FEN 1VOL 1VEN | 2FRQ 2ENV 2FB TUNE (init 64 64 64 0 74 80 32 64)")
+    out.append(line("f26d_carrier", 10, 48, D))
+    out += [line(f"f26d_v1_{v:03d}", 10, 48, {**D, 48: 96, 50: v}) for v in (32, 64, 96, 120)]
+    out += [line(f"f26d_e2_{v:03d}", 10, 48, {**D, 52: 127, 53: v}) for v in (32, 64)]
+    out.append(line("f26d_d2_096", 10, 48, {**D, 52: 127, 53: 96}, gate=1.6))
+    out += [line(f"f26d_r1_{v:03d}", 10, 48, {**D, 48: v, 50: 32}) for v in (16, 112)]
+    out += [line(f"f26d_r2_{v:03d}", 10, 48, {**D, 52: v, 53: 32}) for v in (48, 111)]
+    out.append(line("f26d_ven_088", 10, 48, {**D, 48: 127, 50: 16, 51: 88}, gate=1.6))
+    out.append(line("f26d_ven_032", 10, 48, {**D, 48: 127, 50: 64, 51: 32}, gate=1.6))
+    out.append(line("f26d_vp_088", 10, 48, {**D, 48: 96, 50: 16, 51: 88}, gate=1.6))
+    out.append(line("f26d_vn_032", 10, 48, {**D, 48: 96, 50: 64, 51: 32}, gate=1.6))
+    out += [line(f"f26d_fen_{v:03d}", 10, 48, {**D, 48: 96, 49: v, 50: 32}, gate=1.6) for v in (32, 96)]
+    out.append(line("f26d_fen60_096", 10, 60, {**D, 48: 96, 49: 96, 50: 32}, gate=1.6))
+    out += [line(f"f26d_fb_{v:03d}", 10, 48, {**D, 52: 64, 53: 64, 54: v}) for v in (16, 32, 48, 96)]
+    out += [line(f"f26d_tune_{v:03d}", 10, 48, {**D, 55: v}) for v in (0, 127)]
+    P = {48: 61, 49: 0, 50: 82, 51: 0, 52: 104, 53: 0, 54: 64, 55: 64}
+    out.append("# FM+PAR: 1FRQ 1ENV 2FRQ 2ENV | 3FRQ 3ENV TONE TUNE (init 61 64 82 64 104 80 64 64)")
+    out.append(line("f26p_carrier", 9, 48, P))
+    for j in range(3):
+        out += [line(f"f26p_i{j + 1}_{v:03d}", 9, 48, {**P, 48 + 2 * j: 125, 49 + 2 * j: v}) for v in (32, 64)]
+    out += [line(f"f26p_r{j + 1}_13", 9, 48, {**P, 48 + 2 * j: (13 * 128 + 23) // 24, 49 + 2 * j: 32}) for j in range(3)]
+    out += [line(f"f26p_e3_{v:03d}", 9, 48, {**P, 52: 125, 53: v}, gate=1.6) for v in (88, 104)]
+    out.append(line("f26p_sum", 9, 48, {**P, 48: 82, 49: 64, 50: 82, 51: 64}))
+    out += [line(f"f26p_tone_{v:03d}", 9, 48, {**P, 52: 125, 53: 40, 54: v}) for v in (16, 48, 96)]
+    out += [line(f"f26s_tone_{v:03d}", 8, 72, {**S, 48: 125, 50: 40, 54: v}) for v in (56, 80)]
+    return out
+
+
 if __name__ == "__main__":
-    if sys.argv[1] == "specs":
+    if sys.argv[1] == "fm26":
+        with open(os.path.join(sys.argv[2], "chain_fm26.spec"), "w") as fh:
+            fh.write("\n".join(fm26()) + "\n")
+    elif sys.argv[1] == "specs":
         d = sys.argv[2]
         for name, f in (("levels", levels), ("dist", dist), ("filt", filt), ("eq", eq), ("srr", srr), ("delay", delay)):
             with open(os.path.join(d, f"chain_{name}.spec"), "w") as fh:

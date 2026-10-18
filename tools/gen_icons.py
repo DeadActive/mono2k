@@ -100,6 +100,10 @@ def mark(name):
             R(x0, y, 8, y + 1.2)
         DISC(8, 6, 3.6, 0)
         DISC(8, 6, 3.1)
+    elif name == "FMP":         # parallel FM: the carrier, three modulators standing side by side over it
+        DISC(6, 7.9, 3.1)
+        for x in (1.9, 5.3, 8.7):
+            R(x, 0.6, x + 1.4, 4.0)
     elif name == "SAW":         # the supersaw: three teeth, detuned, each in front of the last and cut out of it
         off, T, B = 2.75, 2.0, 10.0
         w = 10 - 2 * off
@@ -140,7 +144,7 @@ def mark(name):
     return im                   # G * SS square, 8 bit
 
 
-NAMES = ["GSIN", "GNOI", "SID", "FMS", "FMD", "SAW", "ENS", "WAV", "VOX"]
+NAMES = ["GSIN", "GNOI", "SID", "FMS", "FMD", "SAW", "ENS", "WAV", "VOX", "FMP"]
 
 
 GS = 256        # the distance field's grid: finer than the mark, for clean normals
