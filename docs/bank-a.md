@@ -1,35 +1,57 @@
 # Bank A
 
-Sixteen parts after the late-90s and 2000s digital era (Warp, Rephlex and Skam electronica, IDM, drill'n'bass, early
-digital hardware), with SOPHIE, Overmono, Anthony Naples, Pizza Hotline and Zorrovian as the modern lens on it.
-Each is original, written for MONO2K's six machines (`firmware/src/m2k_factory.c`, one comment a part): the
-references say what a part is after, never what it quotes. One idea a part, the rest supporting it; one or two
-chords or a modal centre; every melodic track in the declared key; kicks and basses on the key.
+One world: late-90s and 2000s digital-gritty IDM, the Warp, Skam and Rephlex era. Two flavours alternate across the
+bank:
 
-They arrive in batches of four, each heard and approved before the next. Until a slot's part is here it holds the bank
-before (ea69d53, `docs/bank-a-diagnosis.md`).
+1. **Drummy, glitchy IDM** (after Aphex Twin and Autechre): the drums lead, chopped, ratcheted, crushed and locked
+   (pitched retrigs, crushed hits, fills that change every loop by condition), over a heavy bass; little or no
+   melody.
+2. **Soft and digital-gritty, with a catchy deep melody** (after Boards of Canada): a slow, dusty hip-hop beat, a deep
+   heavy bass, and a short motif you remember after one loop, worn by tape and grit.
 
-The table is read by the tools: `tools/demo_pitch.py` takes each part's key from it, `tools/demo_levels.py` the
-tracks' roles (drums by peak against the kick, the rest by rms; `-` a track that rests).
+A01 HAZE is the template, and stays as it is. Every part has a powerful low bass (roots C1 to C2, mono, sustained or
+punchy, locked with the kick) and hard drums. Melodies are motifs of three to five notes in C3 to C4 (never over C5),
+minor or modal, on the owner's darker and warmer waves. Every part is original: the references say what it is after,
+never what it quotes. The bank's bus drive (`BANK_DRIVE`, about 6 dB into the soft clip, like a master limiter) sets
+every slot at HAZE's loudness.
 
-| Slot | Name | Reference | Genre | BPM | Key | Idea | Tracks |
+The bass rules (`tools/demo_pitch.py` checks both):
+
+- A SWAV-SAW bass is played so its subs land in 30–80 Hz, never under 30 Hz. SUBX and SUB1 sound an octave under
+  the note and SUB2 two, so for a root on G1, play G2 with SUB1, or G3 with SUB2.
+- No SID bass until SID's level gap is fixed: MONO2K's SID stands 7 dB over the Monomachine's (the README's known
+  gaps).
+
+The parts arrive in batches of four, each heard and approved before the next; slots without a part from this brief
+still hold an earlier one. The table is read by the tools: `tools/demo_pitch.py` takes each part's key from it,
+`tools/demo_levels.py` the tracks' roles (drums by peak against the kick, the rest by rms while sounding; `-` a track
+that rests) and prints each part's rms, low-end share (the energy in 30–120 Hz: under 30 Hz is not heard) and crest
+beside HAZE's.
+
+| Slot | Name | Flavour | Reference | BPM | Key | Idea | Tracks |
 |---|---|---|---|---|---|---|---|
-| A01 | HAZE | Boards of Canada | downtempo, hauntology | 88 | D minor | a dark, wobbling one-chord vamp and a dusty beat; four low notes over it | kick snare hat pad bass lead |
-| A02 | SPLICE | Autechre | IDM, abstract electro | 104 | E phrygian | a low metal rhythm that mutates on an odd length (56 steps), over an open chord | kick perc hat lead pad bass |
-| A03 | RIBBON | Aphex Twin | drill'n'bass | 168 | F minor | ratcheting breaks over a pedal F and a detuned, dark line; every second loop the drums drop out | kick snare hat lead pad bass |
-| A04 | FACETS | Aleksi Perälä | raw digital ambient | 124 | A minor | a low, bit-crushed machine pulse on A over a crushed dark pad (Am(add9), Dm7), its filter and place moving at random | kick hat lead pad bass - |
-| A05 | SMOKE | Basic Channel | dub techno | 120 | C minor | one dark Cm7 stab on the offbeats into a long, swelling ping-pong echo | kick hat perc chord bass - |
-| A06 | TORQUE | Ben Sims | hardgroove | 134 | E minor | a looped drum groove, toms tuned to the key rolling round the kick and hats | kick hat snare perc lead bass |
-| A07 | TUNNEL | Overmono | UK breakbeat techno | 130 | G minor | a driving broken beat under warm minor chords, a low vocal chop | kick snare hat pad voice bass |
-| A08 | MOTEL | Anthony Naples | lo-fi house | 122 | B dorian | a loose, dusty groove; a bass walking under a muffled dub stab | kick snare hat chord bass - |
+| A01 | HAZE | 2 | Boards of Canada | 88 | D minor | a dark, wobbling one-chord vamp and a dusty beat; four low notes over it | kick snare hat pad bass lead |
+| A02 | SPLICE | v2 | Autechre | 104 | E phrygian | (brief v2, to be redone) | kick perc hat lead pad bass |
+| A03 | RIBBON | v2 | Aphex Twin | 168 | F minor | (brief v2, to be redone) | kick snare hat lead pad bass |
+| A04 | FACETS | v2 | Aleksi Perälä | 124 | A minor | (brief v2, to be redone) | kick hat lead pad bass - |
+| A05 | SMOKE | v2 | Basic Channel | 120 | C minor | (brief v2, to be redone) | kick hat perc chord bass - |
+| A06 | TORQUE | v2 | Ben Sims | 134 | E minor | (brief v2, to be redone) | kick hat snare perc lead bass |
+| A07 | TUNNEL | v2 | Overmono | 130 | G minor | (brief v2, to be redone) | kick snare hat pad voice bass |
+| A08 | MOTEL | v2 | Anthony Naples | 122 | B dorian | (brief v2, to be redone) | kick snare hat chord bass - |
+| A09 | PYLONS | 2 | Boards of Canada | 84 | G minor | a deep SWAV-SAW bass walking under Gm9, Ebmaj7, Cm7, its sub on G1 Eb1 C2; a four-note motif, G D C Bb | kick snare hat pad bass lead |
+| A10 | RIVETS | 1 | Autechre | 118 | C# minor | the drums lead, a swung broken funk: kick on the off-beats, ghost snares, accented hats, an FM clank; a punchy SWAV-SAW bass in 3 3 4 3 3, its sub on C#1-C#2 | kick snare hat perc bass perc |
+| A11 | SYRUP | old | (the bank before) | 96 | A major | a favourite of the owner's, kept | kick snare hat pad lead bass |
+| A12 | SPU | old | (the bank before) | 84 | C major | kept for now | hat pad lead voice lead bass |
+| A13 | GROOVE | old | (the bank before) | 124 | G minor | kept for now | kick snare hat chord bass perc |
+| A14 | ORCHARD | 2 | Boards of Canada | 92 | E dorian | a four-note call, G A B E, answered by the dorian C#; Em7, A7; a driven sine bass, its sub on E1 A1 B1 | kick snare hat pad bass lead |
+| A15 | SPLINTR | 1 | Aphex Twin | 160 | F minor | drill breaks with pitched snare retrigs dropping out every second loop, over a huge sustained SWAV-SAW bass, its subs on F1 Ab1 Db1 Eb1 | kick snare hat perc bass lead |
 
-Leads sit low (C3 to C4, never over C5) on the owner's darker and warmer waves, low-passed and worn (light drive, a
-lower sample rate or fewer bits); they are fragments of a few long notes, or a sequence that is the texture. The
-rhythm, the bass and the atmosphere carry each part.
+After the DIST fix (each machine clipping at its own ceiling, as the Monomachine's do), HAZE, SPLICE and RIBBON were
+set to sound as they were approved: a lower DIST on their DIGI-WAV leads, so the clip starts where it did, and the
+level lost back on VOL. Each renders within −44 to −50 dB of its approved version. SPLINTR's bass was revoiced an
+octave up with SUB2 off, by the sub rule, its subs no longer under 30 Hz, and heard and approved so.
 
 ## Detune
 
-Only where it's the point: HAZE's tape (TAPE 80, about ±10 c, slow) and its pad's chorus; RIBBON's line, its
-second oscillator 12.5 c sharp of the first, so it beats. A touch of tape for the dust in SMOKE, TUNNEL and MOTEL
-(TAPE 16-32, ±1.6-2.5 c). Equal temperament everywhere, Aleksi Perälä's part
-included.
+Only where it's the point: the tape's wobble in HAZE (TAPE 80), PYLONS (72) and ORCHARD (76), about ±10 c, slow, and
+HAZE's pad chorus; SPLINTR's bass, a little of SWAV-SAW's unison. Equal temperament everywhere.

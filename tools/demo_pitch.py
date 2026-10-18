@@ -9,6 +9,8 @@
 #            rings a quarter tone off the scale
 #   notes    each melodic track's pitch classes against the pattern's declared key; voices sounding together a
 #            semitone or a tritone apart, on different tracks
+#   basses   the demo rules (docs/bank-a.md): SWAV-SAW's subs (SUBX and SUB1 an octave under the note, SUB2 two) all
+#            within 30-80 Hz on every trig; no SID bass while SID stands 7 dB over the Monomachine's (README)
 #   .venv/bin/python tools/demo_pitch.py build/pitch [--steps] [--ea69d53]
 # SWAV-ENS's acceptance is regress.py's ens_accept: bank A's parts as they stood (tools/ref/fixtures), converted,
 # each voice against the Monomachine's (tools/ref/chain_ensacc.spec, ens_voices.py)
@@ -32,6 +34,7 @@ MODES = {"major": [0, 2, 4, 5, 7, 9, 11], "minor": [0, 2, 3, 5, 7, 8, 10], "dori
          "phrygian": [0, 1, 3, 5, 7, 8, 10], "lydian": [0, 2, 4, 6, 7, 9, 11]}
 FLAT = {"Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#"}
 DRUMS = {"kick", "snare", "hat", "perc"}
+SUB_HZ = (30, 80)
 
 
 def bank_table(path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "bank-a.md")):
@@ -47,7 +50,7 @@ def bank_table(path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..
             r = dict(zip(head, c))
             key, mode = r["key"].split()[:2]
             out[int(c[0][1:])] = dict(name=r["name"], key=FLAT.get(key, key), mode=mode, bpm=int(r["bpm"]),
-                                      roles=r["tracks"].split())
+                                      roles=r["tracks"].split(), flavour=r.get("flavour", ""))
     return out
 def _table(name):
     import re
@@ -236,6 +239,15 @@ def main():
             lines.append(f"     notes {' '.join(NAMES[c] for c in pcs)}" +
                          (f"  OUT OF KEY: {' '.join(out_key)}" if out_key and (kick or not drum) else "") +
                          (f"  rings {'; '.join(rtxt)}" if rtxt else ""))
+            if m == M_SAW:                          # where the subs land, every trig as played
+                subs = [hz(voices(m, e)[0] - 12 * k) for e in ev for k, on in ((1, e["eff"][P_SYN + 4] or e["eff"][P_SYN + 5]),
+                                                                                (2, e["eff"][P_SYN + 6])) if on]
+                if subs:
+                    bad = [f for f in subs if not SUB_HZ[0] <= f <= SUB_HZ[1]]
+                    lines.append(f"     subs {min(subs):.1f}-{max(subs):.1f} Hz" +
+                                 (f"  SUBS OUTSIDE {SUB_HZ[0]}-{SUB_HZ[1]} Hz: {len(bad)} of {len(subs)}" if bad else ""))
+            if m == M_SID and roles[t - 1] == "bass":
+                lines.append("     A SID BASS: none until SID's level gap (7 dB over the Monomachine's) is fixed")
             if show_steps:
                 for r in res:
                     lines.append(f"       f{r['step']['frame']:7d} n{r['step']['note']:3d} {r['cents']:+6.1f} c " +

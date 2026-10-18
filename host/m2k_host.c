@@ -70,10 +70,13 @@ static const ev_t TOUR[] = {
     {18500, 'x', 0, 0, 0},
 };
 
-/* render seconds of pattern p with the tracks in mask; peak and rms (dB) */
+/* render seconds of pattern p with the tracks in mask; peak and rms (dB). demo_dry: without the bus's drive (a
+ * part balanced under the knee before the bank's master drive) */
+static int demo_dry;
 static void measure(int p, int mask, double sec, int16_t *keep, double *pk_db, double *rms_db)
 {
     m2k_init(2000);
+    if (demo_dry) pat[p].glob[G_DRIV] = 0;
     cur_pat = p;
     sq.queued = (uint8_t)p;
     pat[p].mute = (uint8_t)(~mask & 0x3F);
@@ -841,13 +844,14 @@ static int selftest(void)
     CHECK(project_save(2) == 0, "a project too big for an image is refused, not corrupted");
     CHECK(!strcmp(m2k_project_name(2), "P3"), "the refused slot is untouched");
     /* a store saved before today's demos: the slots still holding the ones its revision shipped take today's, the
-     * owner's stay. Revision 0 (before the store kept one: A16 was INIT, the owner's once written in), 1 and 2 */
-    for (int rev = 0; rev < 3; rev++) {
-        static const char *const OLDN[3] = {"SPU RM", "DAYDRM", "GLITCH"};
-        int sl = rev == 2 ? 4 : 2;                           /* a slot the next revision replaced */
+     * owner's stay. Revision 0 (before the store kept one: A16 was INIT, the owner's once written in), 1, 2 and 3 */
+    for (int rev = 0; rev < 4; rev++) {
+        static const char *const OLDN[4] = {"SPU RM", "DAYDRM", "GLITCH", "DREXC"};
+        int sl = rev == 2 ? 4 : rev == 3 ? 8 : 2;            /* a slot the next revision replaced */
         m2k_init(11);
-        m2k_pattern_t keep2 = pat[sl], keep15 = pat[15];
+        m2k_pattern_t keep2 = pat[sl], keep15 = pat[15], keep0 = pat[0];
         s_cpy(pat[sl].name, OLDN[rev]);                      /* an old demo, as shipped */
+        if (rev == 3) pat[0].kit[5][P_DIST] = 74;            /* HAZE as revision 3 shipped it: its lead at DIST 74 */
         s_cpy(pat[3].name, "MYSONG");                        /* the owner's */
         if (rev) {
             s_cpy(pat[15].name, "SHARDS");                   /* revision 1's A16: a demo */
@@ -872,6 +876,8 @@ static int selftest(void)
                       : !strcmp(pat[15].name, "INIT") && (pat[15].step[0][0].flags & ST_TRIG);
         CHECK(!strcmp(pat[3].name, "MYSONG") && a16, rev ? "store: the owner's kept, an earlier revision's A16 today's"
                                                          : "store: the owner's patterns are kept");
+        if (rev == 3)
+            CHECK(!memcmp(pat[0].kit, keep0.kit, sizeof keep0.kit), "store: a demo kept by its name (HAZE) takes today's settings");
     }
     printf("%s (%d failed)\n", fails ? "SELFTEST FAILED" : "selftest passed", fails);
     return fails != 0;
@@ -895,6 +901,7 @@ int main(int argc, char **argv)
     if (argc > 2 && !strcmp(argv[2], "--export-bank")) return bank_export(out);
     if (argc > 2 && !strcmp(argv[2], "--bus")) return bus_measure(out);
     if (argc > 2 && !strcmp(argv[2], "--demo")) return demo_render(out, argc, argv);     /* [SECONDS] [SLOT ...] */
+    if (argc > 2 && !strcmp(argv[2], "--demo-dry")) { demo_dry = 1; return demo_render(out, argc, argv); }
     /* 1: the three factory patterns, 12 s each */
     for (int p = 0; p < 3; p++) {
         m2k_init(2000);
