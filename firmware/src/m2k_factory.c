@@ -280,7 +280,7 @@ static void fm_v9(m2k_pattern_t *p)
         m_cpy(o, k, 8);
         for (int i = 0; i < M2K_LOCKS; i++) {
             m2k_lock_t *l = &p->lock[i];
-            if (l->trk != t || l->param >= P_SYN + 8 || l->param < P_SYN) continue;
+            if (l->trk != t || l->param >= P_SYN + 8) continue;   /* P_SYN is 0: none under it */
             int prm = l->param - P_SYN, to = FM_TO[dyn][prm];
             if (prm == 1 && !dyn && o[2] < 127) to = -1;          /* STAT's 1ENV holds the decay */
             if (prm == 4 && dyn && o[5] < 127) to = -1;           /* and DYN's 2ENV */
@@ -346,7 +346,7 @@ static void sid_v10(m2k_pattern_t *p)
         m_cpy(o, k, 8);
         for (int i = 0; i < M2K_LOCKS; i++) {
             m2k_lock_t *l = &p->lock[i];
-            if (l->trk != t || l->param < P_SYN || l->param >= P_SYN + 8) continue;
+            if (l->trk != t || l->param >= P_SYN + 8) continue;   /* P_SYN is 0: none under it */
             int prm = l->param - P_SYN;
             if (SID_TO[prm] < 0) { l->trk = 0xFF; continue; }
             l->val = (uint8_t)sid_val(prm, l->val);
