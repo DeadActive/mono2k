@@ -197,3 +197,8 @@ FM-1 is M-VAVE's.
 
 The 64-wave bank (`assets/waves/mono2k64/`) is the project owner's own waveforms, licensed with the project
 (GPL-3.0-only) unless the owner says otherwise.
+
+Two of bank A's demos take their chord progressions from other artists' music, credited here: A04 TENFOUR, after
+Radiohead, "Everything in Its Right Place" (Kid A, 2000), and A16 FOUNDRY, after Boards of Canada, "Kaini
+Industries" (FOUNDRY its bass notes too). Their melodies, rhythms, sounds and arrangements are MONO2K's own. The MIDI
+files the progressions were read from are not in this repository.

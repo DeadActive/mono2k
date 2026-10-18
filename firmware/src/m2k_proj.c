@@ -323,8 +323,9 @@ uint8_t *m2k_store_buf(int *max)
 /* the factory's revision: a store saved before it carries the demos it replaced, by revision. 1: the bank rewritten
  * on the Monomachine's chain (version 5); 2: bank A's first four parts after the brief (docs/bank-a.md: HAZE,
  * SPLICE, RIBBON, FACETS); 3: the next four (SMOKE, TORQUE, TUNNEL, MOTEL); 4: brief v3's first four (PYLONS,
- * RIVETS, ORCHARD, SPLINTR), and HAZE, SPLICE and RIBBON set to sound on the per-machine DIST as they did */
-#define FACTORY_REV 4
+ * RIVETS, ORCHARD, SPLINTR), and HAZE, SPLICE and RIBBON set to sound on the per-machine DIST as they did; 5: A04
+ * TENFOUR and A16 FOUNDRY, after Radiohead and Boards of Canada */
+#define FACTORY_REV 5
 static const char *const OLD_DEMO[FACTORY_REV][16] = {
     {"LATEX", "PVC", "SPU RM", "ELECTRO", "GLITCH", "CHROME", "ACID", "2STEP", "GROOVE", "HYPRPOP", "DUB", "CHIP",
      "HARDGRV", "IDM", "DUBSTEP", "INIT"},
@@ -334,6 +335,8 @@ static const char *const OLD_DEMO[FACTORY_REV][16] = {
      "GROOVE", "ROBOT", "BRAIN", "SHARDS"},
     {"HAZE", "SPLICE", "RIBBON", "FACETS", "SMOKE", "TORQUE", "TUNNEL", "MOTEL", "DREXC", "STUTTR", "SYRUP", "SPU",
      "GROOVE", "ROBOT", "BRAIN", "SHARDS"},
+    {"HAZE", "SPLICE", "RIBBON", "FACETS", "SMOKE", "TORQUE", "TUNNEL", "MOTEL", "PYLONS", "RIVETS", "SYRUP", "SPU",
+     "GROOVE", "ORCHARD", "SPLINTR", "SHARDS"},
 };
 
 static int name_is(const char *a, const char *b)

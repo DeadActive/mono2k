@@ -33,7 +33,7 @@ beside HAZE's.
 | A01 | HAZE | 2 | Boards of Canada | 88 | D minor | a dark, wobbling one-chord vamp and a dusty beat; four low notes over it | kick snare hat pad bass lead |
 | A02 | SPLICE | v2 | Autechre | 104 | E phrygian | (brief v2, to be redone) | kick perc hat lead pad bass |
 | A03 | RIBBON | v2 | Aphex Twin | 168 | F minor | (brief v2, to be redone) | kick snare hat lead pad bass |
-| A04 | FACETS | v2 | Aleksi Perälä | 124 | A minor | (brief v2, to be redone) | kick hat lead pad bass - |
+| A04 | TENFOUR | 2 | Radiohead | 108 | F minor | after "Everything in Its Right Place": its opening progression, C Dbmaj7 Eb6 with C on top, over four bars (6, 4, 4 beats, then 2), swelling on a tape-worn crushed pad; a driven sine bass, its sub on C1 Db1 Eb1; a four-bar line from the first step, held and sliding; drums that never quite repeat | kick snare hat pad bass lead |
 | A05 | SMOKE | v2 | Basic Channel | 120 | C minor | (brief v2, to be redone) | kick hat perc chord bass - |
 | A06 | TORQUE | v2 | Ben Sims | 134 | E minor | (brief v2, to be redone) | kick hat snare perc lead bass |
 | A07 | TUNNEL | v2 | Overmono | 130 | G minor | (brief v2, to be redone) | kick snare hat pad voice bass |
@@ -45,6 +45,13 @@ beside HAZE's.
 | A13 | GROOVE | old | (the bank before) | 124 | G minor | kept for now | kick snare hat chord bass perc |
 | A14 | ORCHARD | 2 | Boards of Canada | 92 | E dorian | a four-note call, G A B E, answered by the dorian C#; Em7, A7; a driven sine bass, its sub on E1 A1 B1 | kick snare hat pad bass lead |
 | A15 | SPLINTR | 1 | Aphex Twin | 160 | F minor | drill breaks with pitched snare retrigs dropping out every second loop, over a huge sustained SWAV-SAW bass, its subs on F1 Ab1 Db1 Eb1 | kick snare hat perc bass lead |
+| A16 | FOUNDRY | 2 | Boards of Canada | 102 | G# dorian | after "Kaini Industries": its four bars and their bass notes, G#m7/B C#sus4 G#m9 C#9, under a four-bar line on a deep, gritty SWAV-SAW lead bass, its sub on C#1-D#2; drums that never quite repeat, a shaker and metal percussion in a dotted echo | kick snare hat pad bass perc |
+
+A04 TENFOUR and A16 FOUNDRY are after two tracks the owner chose: Radiohead's "Everything in Its Right Place" and
+Boards of Canada's "Kaini Industries". Their chord progressions come from the owner's MIDI files (`reference/midi/`,
+kept out of the repository); the lines over them, the rhythms and the sounds are MONO2K's own. Each line was checked
+against its file so that no melody follows it: FOUNDRY's shares no two intervals in a row with it, TENFOUR's no more
+than two.
 
 After the DIST fix (each machine clipping at its own ceiling, as the Monomachine's do), HAZE, SPLICE and RIBBON were
 set to sound as they were approved: a lower DIST on their DIGI-WAV leads, so the clip starts where it did, and the
@@ -53,5 +60,6 @@ octave up with SUB2 off, by the sub rule, its subs no longer under 30 Hz, and he
 
 ## Detune
 
-Only where it's the point: the tape's wobble in HAZE (TAPE 80), PYLONS (72) and ORCHARD (76), about ±10 c, slow, and
+Only where it's the point: the tape's wobble in HAZE (TAPE 80), PYLONS (72), ORCHARD (76), TENFOUR (70) and FOUNDRY
+(76), about ±10 c, slow, and
 HAZE's pad chorus; SPLINTR's bass, a little of SWAV-SAW's unison. Equal temperament everywhere.
