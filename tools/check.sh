@@ -7,7 +7,9 @@
 #     division (__aeabi_ldivmod / __aeabi_uldivmod, __divdi3 ...); its section sizes are printed
 #  3. sanitizers: the self-test, every screen, every bank A track, every reference spec and the power test's loop
 #     under ASan + UBSan; any report fails the run
-#  4. the wave banks (tools/wave_check.py); the bus's controls, every value as recorded and every old value as it
+#  4. the pattern format's conversions mutated (tools/ref/mutate_formats.py): the self-test catches every mutant of
+#     fm_v9 and sid_v10 but the equivalent one
+#  5. the wave banks (tools/wave_check.py); the bus's controls, every value as recorded and every old value as it
 #     sounded once converted (tools/bus_curves.py)
 set -u
 B=build/check
@@ -57,6 +59,9 @@ mkdir -p "$B/screens" "$B/pitch" "$B/ref"
 } > "$B/san.log" 2>&1
 rep=$(grep -E "runtime error|ERROR: AddressSanitizer|SELFTEST FAILED" "$B/san.log" | sort | uniq -c)
 if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  self-test, screens, bank A, $(ls tools/ref/*.spec | wc -l | tr -d ' ') specs, the power loop: clean"; fi
+
+echo "== the format's conversions, mutated"
+.venv/bin/python tools/ref/mutate_formats.py > "$B/mutate.log" 2>&1 && tail -1 "$B/mutate.log" | sed 's/^/  /' || { grep -E "SURVIVED|unmutated" "$B/mutate.log"; FAIL=1; }
 
 echo "== the wave banks"
 .venv/bin/python tools/wave_check.py > "$B/waves.log" 2>&1 && tail -1 "$B/waves.log" | sed 's/^/  /' || { cat "$B/waves.log"; FAIL=1; }

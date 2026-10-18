@@ -597,38 +597,48 @@ static int selftest(void)
             m_set(&w, 0, sizeof w);
             pat_init(&w, "OLDFM");
             w.machine[1] = M_FMS; w.machine[2] = M_FMD;
-            /* STAT: ratio 2 (T_RATIO 6), 1.41 (4: to 1.5, the nearest step); DEP1 static, DEP2, feedback */
-            const uint8_t os[8] = {24, 60, 127, 16, 90, 40, 50, 0}, od[8] = {12, 80, 60, 40, 30, 127, 20, 96};
+            /* STAT: ratio 1.41 (T_RATIO 4: a step and 1FIN), 2 (6); DEP1 static, DEP2, feedback */
+            const uint8_t os[8] = {16, 30, 127, 24, 90, 40, 50, 0}, od[8] = {12, 80, 60, 40, 30, 127, 20, 96};
             m_cpy(&w.kit[1][P_SYN], os, 8);
             m_cpy(&w.kit[2][P_SYN], od, 8);                  /* DYN: ratio 1, 3.5; DEP1 decaying, SWEP up */
             lk(&w, 1, 3, P_SYN + 0, 37);                     /* RAT1 to 3.0 (T_RATIO 9) */
             lk(&w, 1, 5, P_SYN + 2, 40);                     /* DEC1: goes */
             lk(&w, 2, 7, P_SYN + 4, 70);                     /* DEP2, held: to 2ENV */
+            lk(&w, 1, 9, P_SYN + 1, 20);                     /* STAT's DEP1: to 1ENV */
+            lk(&w, 1, 11, P_SYN + 6, 40);                    /* its FDBK: to 1FB */
             w.kit[0][P_LFO + L_TRCK] = 1 * 128 / M2K_TRACKS + 1; w.kit[0][P_LFO + L_DEST] = P_SYN + 4 + 1;   /* T2's DEP2 */
             int wn = pat_pack_v(&w, wb, 9);
             int ok = pat_unpack(&w2, wb, wn);
             const uint8_t *s2 = &w2.kit[1][P_SYN], *d2 = &w2.kit[2][P_SYN];
-            ok = ok && (s2[0] * 24) >> 7 == 19 && s2[1] == 64 && (s2[4] * 24) >> 7 == 17 &&
-                 s2[2] == near_u32(T_FMB, 0, 64, T_FMK[60]) && s2[5] == near_u32(T_FMB, 0, 127, T_FMK[90]) &&
+            double r1 = T_FMR24[(s2[0] * 24) >> 7] / 65536.0 * (192 + s2[1]) / 256;
+            ok = ok && fabs(r1 / 1.41 - 1) < 0.01 && s2[1] != 64 && (s2[4] * 24) >> 7 == 19 &&
+                 s2[2] == near_u32(T_FMB, 0, 64, T_FMK[30]) && s2[5] == near_u32(T_FMB, 0, 127, T_FMK[90]) &&
                  s2[3] == near_u32(T_FMFB, 0, 127, T_FMK[50] >> 1) && s2[6] == 64 && s2[7] == 64;
-            CHECK(ok, "format: version 9 -> 10, an old FM+STAT's ratios to the 24 steps, its depths and feedback to the laws");
+            CHECK(ok, "format: version 9 -> 10, an old FM+STAT's ratios to the 24 steps (1FIN the rest), its depths and feedback");
             int vl = near_u32(T_FMDEC, 1, 63, T_ENV_COEF[60]);
             ok = d2[0] == 64 && d2[4] == 119 && d2[3] == 64 + vl && d2[1] > 64 && d2[5] == near_u32(T_FMDV, 0, 64, T_FMK[30]) &&
                  d2[2] == CLAMP(near_u32(T_FMDV, 0, 256, T_FMK[80]) - (vl < 32 ? 4 * vl : 128), 0, 127) && d2[7] == 64;
             CHECK(ok, "format: an old FM+DYN's ratios to /64 and squared /64, its decay to 1VEN, SWEP to 1FEN up");
-            int lr = 0, ld = 0, l2 = 0;
+            int lr = 0, ld = 0, l2 = 0, l1 = 0, lf = 0;
             for (int i = 0; i < M2K_LOCKS; i++) {
                 const m2k_lock_t *l = &w2.lock[i];
                 if (l->trk == 1 && l->step == 3) lr = l->param == P_SYN + 0 && (l->val * 24) >> 7 == 21;
                 if (l->trk == 1 && l->step == 5) ld = 1;
                 if (l->trk == 2 && l->step == 7) l2 = l->param == P_SYN + 5 && l->val == near_u32(T_FMDV, 0, 64, T_FMK[70]);
+                if (l->trk == 1 && l->step == 9) l1 = l->param == P_SYN + 2 && l->val == near_u32(T_FMB, 0, 64, T_FMK[20]);
+                if (l->trk == 1 && l->step == 11) lf = l->param == P_SYN + 3 && l->val == near_u32(T_FMFB, 0, 127, T_FMK[40] >> 1);
             }
-            CHECK(lr && !ld && l2 && w2.kit[0][P_LFO + L_DEST] == P_SYN + 5 + 1,
+            CHECK(lr && !ld && l2 && l1 && lf && w2.kit[0][P_LFO + L_DEST] == P_SYN + 5 + 1,
                   "format: an FM lock goes with its parameter (RAT1 to 1FRQ, DEP2 to 2ENV), DEC1's goes; an LFO follows");
             static uint8_t wb2[BLOB_MAX];
             wn = pat_pack(&w2, wb);
             int wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
             CHECK(wn2 == wn && !memcmp(wb, wb2, (size_t)wn), "format: version 11 loads unchanged");
+            w2.machine[3] = M_GSIN;                         /* (a version-10 SID page is the old one: none here) */
+            wn = pat_pack_v(&w2, wb, 10);                   /* and a version-10 pattern: its FM pages already the new ones */
+            wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
+            int wn3 = pat_pack(&w2, wb);
+            CHECK(wn2 == wn3 && !memcmp(wb, wb2, (size_t)wn3), "format: version 10's FM pages load unconverted");
         }
         /* SID's page (11): an old SID (WAV1 PW PWM WAV2 DTN2 FINE MODE MIX) carried over */
         {
@@ -637,20 +647,22 @@ static int selftest(void)
             m_set(&w, 0, sizeof w);
             pat_init(&w, "OLDSID");
             w.machine[2] = M_SID;
-            const uint8_t os[8] = {32, 32, 40, 0, 88, 64, 70, 64};   /* PUL, duty 1/4, PWM, -, +9 semi, -, RING, - */
+            const uint8_t os[8] = {32, 16, 40, 0, 88, 64, 70, 100};  /* PUL, duty 1/8, PWM, -, +9 semi, -, RING, a MIX */
             m_cpy(&w.kit[2][P_SYN], os, 8);
             lk(&w, 2, 4, P_SYN + 0, 70);                             /* WAV1 to T+S: MIX */
             lk(&w, 2, 6, P_SYN + 5, 70);                             /* FINE: goes */
+            w.kit[0][P_LFO + 8 + L_TRCK] = 2 * 128 / M2K_TRACKS + 1; w.kit[0][P_LFO + 8 + L_DEST] = P_SYN + 1 + 1;   /* T3's PW */
             int wn = pat_pack_v(&w, wb, 10);
             const uint8_t *k = &w2.kit[2][P_SYN];
-            int ok = pat_unpack(&w2, wb, wn) && (k[3] * 5) >> 7 == 2 && k[0] == 32 && k[1] == 20 && k[2] >= 64 &&
+            int ok = pat_unpack(&w2, wb, wn) && (k[3] * 5) >> 7 == 2 && k[0] == 48 && k[1] == 20 && k[2] >= 64 &&
                      k[4] >> 5 == 1 && k[5] < 64 && k[6] == 32 + 9 * 32 / 12 && k[7] == 64;
             int lw = 0, lf = 0;
             for (int i = 0; i < M2K_LOCKS; i++) {
                 if (w2.lock[i].trk == 2 && w2.lock[i].step == 4) lw = w2.lock[i].param == P_SYN + 3 && (w2.lock[i].val * 5) >> 7 == 3;
                 if (w2.lock[i].trk == 2 && w2.lock[i].step == 6) lf = 1;
             }
-            CHECK(ok && lw && !lf, "format: version 10 -> 11, an old SID's wave, duty, sweep, ring and interval to SID-6581's page");
+            CHECK(ok && lw && !lf && w2.kit[0][P_LFO + 8 + L_DEST] == P_SYN + 0 + 1,
+                  "format: version 10 -> 11, an old SID's wave, duty, sweep, ring, interval to SID-6581's page; an LFO follows");
         }
         /* the FX machines (MONO2K's own designs, no reference to hold them to): a SWAV-SAW on T1, out of the mix by its
          * VOL, into an FX on T2 opened with each of its trigs; CHORUS widens by WID, RING changes the sound by MIX, DYNAMIX

@@ -28,11 +28,13 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   edits the factory; `build/host/m2k_host DIR --demo [SECONDS] [SLOT ...]` renders patterns for listening. New
   demos go to the owner in batches of four as ~30 s WAVs with their notes rows, and are committed once approved.
 - Web: `sh web/build.sh`, serve `web/` (`.claude/launch.json`: mono2k-web on port 8742).
-- Checks: `sh tools/check.sh` (~6 min): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core
-  built for armv7m soft float calls no float helper and no 64-bit division (flash / RAM printed); the self-test,
-  every screen, bank A and every reference spec under ASan + UBSan, clean; the wave banks (`tools/wave_check.py`);
-  the bus's controls (`tools/bus_curves.py`: `m2k_host DIR --bus` measures every value of GLCH HISS ADPC DRIV TAPE,
-  held to `tools/ref/bus_m2k.json`, and each old value through `T_V9_*` to the old engine's, `tools/ref/bus_v8.json`).
+- Checks: `sh tools/check.sh` (~6 min): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core built
+  for armv7m soft float calls no float helper and no 64-bit division (flash / RAM printed); the self-test, every
+  screen, bank A and every reference spec under ASan + UBSan, clean; the format's conversions mutated
+  (`tools/ref/mutate_formats.py`: every mutant of `fm_v9` / `sid_v10` caught by the self-test but the one equivalent);
+  the wave banks (`tools/wave_check.py`); the bus's controls (`tools/bus_curves.py`: `m2k_host DIR --bus` measures
+  every value of GLCH HISS ADPC DRIV TAPE, held to `tools/ref/bus_m2k.json`, and each old value through `T_V9_*` to
+  the old engine's, `tools/ref/bus_v8.json`).
 - Calibration (README, Calibration): `tools/ref/mm_ref` (gearmulator, the user's OS image at a path, never in the
   repo; it logs to stdout, so send stdout to /dev/null) against `host/m2k_ref.c`, same specs in `tools/ref/*.spec`.
   Pattern format: 2 amp ATK/HOLD/DEC/REL on the measured curve; 4 SWAV-SAW's page; 5 the track chain on the
