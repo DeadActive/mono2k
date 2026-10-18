@@ -471,56 +471,94 @@ static void factory(void)
          36, 36, 31, 36, 36, 39, 36, 36, 31, 36, 43, 39);
     trim(p, 85);
 
-    /* A06 TORQUE, hardgroove after Ben Sims: E minor at 134. The idea is the loop of drums: a hard kick, sixteenth
-     * hats with open ones on the offbeats, a clap, and toms tuned to the key rolling a tribal figure around them; a
-     * short low riff on one of the owner's buzzing waves, crushed and driven, a few notes; a rolling offbeat bass */
-    p = pat_v5(5, "TORQUE", 134, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_GSIN, M_WAV, M_SID));
-    p->glob[G_LEN] = 64; p->glob[G_SWNG] = 12; p->glob[G_DRIV] = 48; p->glob[G_ADPC] = 20; p->glob[G_GLCH] = 16;
-    p->glob[G_GSIZ] = GSIZE(2); p->glob[G_VERB] = 30; p->glob[G_DAMP] = 50;
-    SET(p, 0, SE, 56, SF, 22, SG, 20, SC, 24, P_DEC, 34, P_REL, 6, P_DIST, 72, P_VOL, 127);
-    BEAT(p, 0, "x...x...x...x...|x...x...x...x...|x...x...x...x...|x...x...x..xx.x.", 40);
-    SET(p, 1, SA, 112, SG, 30, P_DEC, 10, P_REL, 4, P_BASE, 44, P_VOL, 68, P_PAN, 56);
-    BEAT(p, 1, "x?xxx?xxx?xxx?xx|x?xxx?xxx?xxx?x2|x?xxx?xxx?xxx?xx|x?xxx?xxx?xx2?xx", 60);
-    for (int st = 2; st < 64; st += 4) lk(p, 1, st, P_DEC, 28);             /* the open hats, on the offbeats */
-    SET(p, 2, SA, 74, SC, 40, SD, 60, SG, 30, P_DEC, 30, P_REL, 12, P_BASE, 22, P_SPU, 30, P_VOL, 96);
-    BEAT(p, 2, "....x.......x...|....x.......x..q|....x.......x...|....x..q....x.x.", 60);
-    SET(p, 3, SE, 30, SF, 30, SG, 30, SC, 0, P_DEC, 24, P_REL, 8, P_DIST, 70, P_VOL, 66, P_PAN, 54);
-    BEAT(p, 3, "..x..x....x..x..|..x..x..x.x..x.x|..x..x....x..x..|..x.xx..x.x.3x.x", 47, 43, 40, 43, 52);
-    SET(p, 4, SA, OS(40), SB, 64, SC, 127, SE, 50, SF, 64, SG, 0, SH, 0, P_WBNK, 127, P_DEC, 36, P_REL, 14, P_GATE, 8,
-        P_WDTH, 30, P_DIST, 76, P_SRR, 30, P_DTIM, 32, P_DSND, 34, P_DFB, 36, P_DWID, 30, P_SPU, 30, P_VOL, 104,
-        P_PAN, 74);
-    BEAT(p, 4, "x.....x...x.....|..x.....x.......|x.....x...x.....|..x...h.x.......", 52, 52, 55, 50, 52, 52, 52, 55, 50, 57, 52);
-    SET(p, 5, SA, SIDW(2), SB, 40, SC, 20, SD, SIDW(0), SE, 64, SF, 64, SG, MODE4(0), SH, 30, P_DEC, 20, P_REL, 6,
-        P_GATE, 4, P_WDTH, 40, P_LPQ, 0, P_FDEC, 20, P_WOF, 66, P_DIST, 74, P_VOL, 96);
-    BEAT(p, 5, "..x.x.x...x.x.x.|..x.x.x...x.x.x.|..x.x.x...x.x.x.|..x.x.x...x.x.xx",
-         28, 40, 28, 28, 40, 28, 28, 40, 28, 28, 40, 28, 28, 40, 28, 28, 40, 28, 28, 40, 28, 28, 40, 28, 31);
-    trim(p, 61);
+    /* A06 CAROM, flavour 1, after Aphex Twin (the late 90s, "Bucephalus Bouncing Ball"): A minor at 160. The drums lead.
+     * The idea is a ball: a metal FM hit bouncing through each bar, the bounces closing in (eight steps, then six,
+     * four, two, then ratchets), each shorter and brighter, a new run every bar, settling at the end of the loop.
+     * Around it a dense industrial beat: the kick folded and driven, ratcheting into the turn; a crushed snare with
+     * ghosts round every hit, rolls into the last bar, its crack and rate changing; hats in thirty-second rolls whose
+     * decay wanders; a metal rim thrown into an echo. Under it a wave-folded sine bass that boings down onto each note,
+     * its fold new every hit, closed down to its growl, jumping octaves, locked with the kick, A1 to A2; no melody */
+    p = pat_v5(5, "CAROM", 160, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_FMS, M_GSIN, M_GNOI));
+    p->glob[G_LEN] = 64; p->glob[G_SWNG] = 8; p->glob[G_GLCH] = 24; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 32;
+    p->glob[G_TAPE] = 40; p->glob[G_HISS] = 40; p->glob[G_VERB] = 30; p->glob[G_DAMP] = 60; p->glob[G_ACNT] = 60;
+    p->glob[G_DRIV] = BANK_DRIVE;
+    SET(p, 0, SB, 20, SE, 64, SF, 18, SG, 50, SC, 40, P_DEC, 26, P_REL, 6, P_DIST, 84, P_SRR, 12, P_VOL, 127);
+    BEAT(p, 0, "X..x..x.X..x.x..|X..x..x.X.x.x.2.|X..x..x.X..x.x..|X.x.x2x.X3..x4..", 45);
+    SET(p, 1, SA, 96, SC, 40, SD, 60, SG, 60, P_DEC, 16, P_REL, 6, P_BASE, 26, P_DIST, 80, P_BITS, 40, P_SRR, 32,
+        P_SPU, 30, P_VOL, 98);
+    BEAT(p, 1, "....X..x....X.x.|....X..x.3..X..x|....X..x....X.x.|..x.X..x.2..X433", 60);
+    static const uint8_t ghost6[] = {7, 14, 23, 31, 39, 46, 50, 55};
+    for (unsigned i = 0; i < sizeof ghost6; i++) lk(p, 1, ghost6[i], P_VOL, 56);     /* the ghosts, 9 dB down */
+    lk(p, 1, 28, P_DEC, 28); lk(p, 1, 44, SC, 100); lk(p, 1, 44, SD, 90);
+    lfo(p, 1, 0, P_SRR, 6, 3, 40, 80, 0);
+    SET(p, 2, SA, 116, SG, 80, P_ATK, 0, P_DEC, 4, P_REL, 3, P_BASE, 44, P_SRR, 44, P_BITS, 44, P_VOL, 58, P_PAN, 60);
+    BEAT(p, 2, "x2xXx2xXx2xXx2x3|x2xXx3xXx2xXx4xX|x2xXx2xXx2xXx2x3|x3xXx2xXx4xXx2x4", 60);
+    lfo(p, 2, 0, P_DEC, 6, 3, 56, 84, 0);
+    lfo(p, 2, 1, P_PAN, 0, 1, 20, 84, 0);
+    for (int st = 13; st < 64; st += 16) { lk(p, 2, st, SC, 110); lk(p, 2, st, SD, 90); }
+    SET(p, 3, SA, RATIO(13), SB, 70, SC, 40, SD, RATIO(17), SE, 50, SF, 16, SG, 30, SH, MODE4(0), P_DEC, 24, P_REL, 6,
+        P_GATE, 2, P_DIST, 76, P_SPU, 30, P_VOL, 66, P_PAN, 50);
+    BEAT(p, 3, "x.......x...x.x.|x.....x...x.x.xx|x...x..x.x.x2x3.|x.x.x2x3x4......", 57);
+    static const uint8_t ball[] = {0, 8, 12, 14, 16, 22, 26, 28, 30, 31, 32, 36, 39, 41, 43, 44, 45, 46,
+                                   48, 50, 52, 53, 54, 55, 56, 57};
+    for (unsigned i = 0, k = 0; i < sizeof ball; i++, k++) {                /* each bounce shorter and brighter */
+        if (i && ball[i] / 16 != ball[i - 1] / 16) k = 0;                   /* a new run every bar */
+        lk(p, 3, ball[i], SC, (uint8_t)(k < 7 ? 40 - k * 5 : 6));
+        lk(p, 3, ball[i], SB, (uint8_t)(k < 11 ? 70 + k * 5 : 127));
+    }
+    SET(p, 4, SB, 40, SC, 0, SE, 40, SF, 30, SG, 0, SH, 20, P_HOLD, 20, P_DEC, 50, P_REL, 10, P_GATE, 8, P_WDTH, 24,
+        P_DIST, 76, P_VOL, 118);
+    BEAT(p, 4, "x..x..x.x..x.x..|x..x..x.x.x.x.2.|x..x..x.x..x.x..|x.x.x2x.x3..x4..",
+         33, 33, 45, 33, 36, 38, 33, 33, 45, 40, 38, 36, 31, 33, 33, 45, 33, 36, 38, 33, 45, 33, 33, 36, 38, 40, 43, 45);
+    lfo(p, 4, 0, SB, 6, 3, 48, 90, 0);                                      /* its fold, new every hit */
+    SET(p, 5, SA, 90, SC, 100, SD, 90, SF, 10, P_DEC, 10, P_REL, 4, P_BASE, 32, P_DIST, 76, P_BITS, 40, P_SRR, 40,
+        P_DTIM, 48, P_DSND, 40, P_DFB, 40, P_DWID, 30, P_SPU, 30, P_VOL, 72, P_PAN, 40);
+    BEAT(p, 5, "...x..x...x..x..|.x....x..x...x.x|...x..x...x..x..|.x..x.x.x.x.x.x.", 72);
+    trim(p, 55);
 
-    /* A07 TUNNEL, after Overmono: UK breakbeat techno in G minor at 130. The idea is the broken beat, a kick and a
-     * snare with ghosts and shuffled hats driving it, under warm minor chords that swell each bar, Gm7 then Cm7; a low
-     * vocal chop calling on its two notes, through a dotted echo; a sub rolling with the kick */
-    p = pat_v5(6, "TUNNEL", 130, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_VOX, M_GSIN));
-    p->glob[G_LEN] = 64; p->glob[G_SWNG] = 12; p->glob[G_DRIV] = 36; p->glob[G_ADPC] = 12; p->glob[G_VERB] = 62;
-    p->glob[G_DAMP] = 60; p->glob[G_TAPE] = 16;
-    SET(p, 0, SE, 62, SF, 22, SG, 40, SC, 26, P_DEC, 30, P_REL, 8, P_DIST, 72, P_VOL, 127);
-    BEAT(p, 0, "x.........x.....|x.......x.x.....|x.........x.....|x.......x...x...", 43);
-    SET(p, 1, SA, 70, SC, 44, SD, 56, SE, 36, SF, 18, SG, 40, P_DEC, 30, P_REL, 12, P_BASE, 20, P_EQG, 70, P_SPU, 40,
-        P_VOL, 99);
-    BEAT(p, 1, "....x..q.x..x...|....x....x..x.q.|....x..q.x..x...|..q.x....x..x.2.", 60);
-    SET(p, 2, SA, 110, P_DEC, 10, P_REL, 4, P_BASE, 42, P_VOL, 71, P_PAN, 66);
-    BEAT(p, 2, "x.xx.xx.x.xx.xx.|x.xx.xxqx.xx.xx.|x.xx.xx.x.xx.xx.|x.xx.xx.x.x2.xx.", 60);
-    SET(p, 3, SA, PCH(3), SB, PCH(7), SC, PCH(10), SD, 20, P_ATK, 70, P_HOLD, 127, P_DEC, 127, P_REL, 80,
-        P_GATE, 127, P_WDTH, 32, P_LPQ, 0, P_SPU, 80, P_VOL, 77);
-    BEAT(p, 3, "x...............|x...............|x...............|x...............", 43, 43, 48, 48);
-    SET(p, 4, SA, VOWEL(0), SB, 70, SC, 50, SD, 64, SE, 30, SF, 60, SG, 30, SH, 0, P_ATK, 10, P_DEC, 50, P_REL, 30,
-        P_GATE, 16, P_WDTH, 36, P_DIST, 70, P_SRR, 20, P_DTIM, 48, P_DSND, 92, P_DFB, 40, P_SPU, 60, P_VOL, 126, P_LEVL, 107,
-        P_PAN, 60);
-    BEAT(p, 4, "......x.......x.|......x.....x...|......x.......x.|......x.....h...", 58, 55, 58, 53, 60, 58, 60, 55);
-    SET(p, 5, SE, 0, SC, 40, SG, 0, SH, 0, P_HOLD, 127, P_DEC, 127, P_REL, 24, P_GATE, 24, P_WDTH, 24, P_DIST, 70,
-        P_VOL, 70);
-    BEAT(p, 5, "x..x......x..x..|x..x......x.....|x..x......x..x..|x..x......x.....",
-         31, 31, 43, 31, 31, 31, 43, 36, 36, 48, 36, 36, 36, 43);
-    trim(p, 80);
+    /* A07 VESPER, flavour 2, after Plaid (the late 90s): F# minor at 152, the beat in half time. The idea is an
+     * intricate line: four bars from the first step, one six-note figure turned through F#m7, Dmaj7, Bm9 and C#7sus4,
+     * on one of the owner's waves, crushed, its filter moving, held on the bars' first notes; the chords rootless,
+     * swelling on a chorused pad, driven and worn by the tape. Under it an FM bass, its ratio falling into each note,
+     * fed back, on the roots and their fifths, C#1 to C#2, locked with the kick; busy dusty drums under the half-time
+     * snare: ghost rolls, hats in sixteenths whose decay wanders, rolling and ratcheting, metal ticks among them */
+    p = pat_v5(6, "VESPER", 152, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_FMD, M_WAV));
+    p->glob[G_LEN] = 64; p->glob[G_SWNG] = 16; p->glob[G_TAPE] = 66; p->glob[G_HISS] = 50; p->glob[G_ADPC] = 30;
+    p->glob[G_GLCH] = 10; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_VERB] = 56; p->glob[G_DAMP] = 76; p->glob[G_ACNT] = 50;
+    p->glob[G_DRIV] = BANK_DRIVE;
+    SET(p, 0, SE, 60, SF, 22, SG, 36, SC, 40, P_DEC, 32, P_REL, 6, P_DIST, 80, P_SRR, 12, P_VOL, 127);
+    BEAT(p, 0, "x.....x...x.....|x..x......x..x..|x.....x...x.....|x..x....x.x...x.", 42);
+    SET(p, 1, SA, 92, SC, 30, SD, 50, SG, 50, P_DEC, 20, P_REL, 6, P_BASE, 26, P_DIST, 78, P_BITS, 34, P_SRR, 30,
+        P_SPU, 40, P_VOL, 94);
+    BEAT(p, 1, "........X..x...x|...x....X..x.x..|........X..x...x|...x....X..x.3.4", 60);
+    static const uint8_t ghost7[] = {11, 15, 19, 27, 29, 43, 47, 51, 59};
+    for (unsigned i = 0; i < sizeof ghost7; i++) lk(p, 1, ghost7[i], P_VOL, 56);
+    lfo(p, 1, 0, P_SRR, 6, 3, 40, 80, 0);
+    SET(p, 2, SA, 116, SG, 80, P_ATK, 0, P_DEC, 4, P_REL, 3, P_BASE, 44, P_SRR, 44, P_BITS, 40, P_VOL, 65, P_PAN, 60);
+    BEAT(p, 2, "x?xXx?x2x?xXx?x3|x?xXx2x.x3xXx?x2|x?xXx?x2x?xXx?x3|x2xXx3x.x?xXx4x4", 60);
+    lfo(p, 2, 0, P_DEC, 6, 3, 56, 84, 0);
+    lfo(p, 2, 1, P_PAN, 0, 1, 20, 84, 0);
+    for (int st = 9; st < 64; st += 18) { lk(p, 2, st, SC, 110); lk(p, 2, st, SD, 90); }
+    SET(p, 3, SA, PCH(4), SB, PCH(7), SC, PCH(12), SD, 40, SF, 50, SG, 30, P_ATK, 60, P_HOLD, 127, P_DEC, 127,
+        P_REL, 70, P_GATE, 127, P_WDTH, 30, P_LPQ, 0, P_DIST, 72, P_SRR, 16, P_BITS, 12, P_SPU, 60, P_VOL, 109);
+    BEAT(p, 3, "x...............|x...............|x...............|x...............", 45, 42, 50, 44);
+    chord(p, 3, 16, 3, 7, 12);                                              /* Dmaj7, rootless: F# A C# */
+    chord(p, 3, 32, 4, 7, 11);                                              /* Bm9, rootless: D F# A C# */
+    chord(p, 3, 48, 3, 5, 10);                                              /* C#7sus4: G# B C# F# */
+    lfo(p, 3, 0, P_WDTH, 1, 0, 24, 74, 0);
+    SET(p, 4, SA, RATIO(3), SB, 60, SC, 40, SD, RATIO(6), SE, 30, SF, 30, SG, 30, SH, 100, P_HOLD, 127, P_DEC, 127,
+        P_REL, 30, P_GATE, 40, P_WDTH, 34, P_DIST, 78, P_BITS, 16, P_VOL, 80);
+    BEAT(p, 4, "x.....x...x.....|x..x......x..x..|x.....x...x.....|x..x....x.x...x.",
+         30, 30, 37, 26, 26, 33, 26, 35, 35, 30, 25, 25, 32, 37, 32);
+    lfo(p, 4, 0, SB, 1, 1, 16, 80, 0);                                      /* its depth, breathing */
+    SET(p, 5, SA, OS(40), SB, 64, SC, 127, SE, 30, SF, 64, SG, 0, SH, 0, P_WBNK, 127, P_ATK, 10, P_HOLD, 127,
+        P_DEC, 127, P_REL, 50, P_GATE, 40, P_WDTH, 30, P_DIST, 68, P_SRR, 30, P_BITS, 24, P_DTIM, 64, P_DSND, 32,
+        P_DFB, 44, P_DBAS, 10, P_DWID, 30, P_SPU, 56, P_VOL, 84, P_PAN, 64);
+    BEAT(p, 5, "x..x..x.x..x..x.|x..x..x.x..x..x.|x..x..x.x..x..x.|x..x..x.x..x..x.",
+         54, 57, 61, 59, 57, 52, 57, 54, 61, 57, 54, 52, 61, 57, 54, 52, 54, 57, 56, 59, 61, 59, 56, 61);
+    for (int st = 0; st < 64; st += 16) lk(p, 5, st, P_GATE, 100);
+    lfo(p, 5, 0, P_WDTH, 1, 1, 20, 76, 0);
+    trim(p, 67);
 
     /* A08 MOTEL, lo-fi house after Anthony Naples: B dorian at 122, loose and swung. A few things: a kick tuned to B, a
      * clap in a small room, open hats sampled down; a muffled, crushed stab, Bm7 then E7sus4, off the beat into a dull
@@ -630,58 +668,83 @@ static void factory(void)
     BEAT(p, 5, "x.....x...x.....|x.....x...x.....|x.....x...x.....|x.....x...x...x.", 45, 45, 52, 42, 42, 49, 38, 38, 45, 40, 40, 47, 44);
     trim(p, 74);
 
-    /* A12 SPU: a PlayStation menu at night, C major: a big slow pad through Cmaj9 Am9 Fmaj7 G6, glass bells in
-     * eighths, a choir holding the chord tones, an FM pluck answering, a sub; a brush; the SPU's reverb and grain */
-    p = pat_v5(11, "SPU", 84, MACHINES(M_GNOI, M_ENS, M_WAV, M_VOX, M_FMS, M_GSIN));
-    p->glob[G_LEN] = 64; p->glob[G_ADPC] = 50; p->glob[G_VERB] = 110; p->glob[G_DAMP] = 40; p->glob[G_TAPE] = 10;
-    SET(p, 0, SA, 100, P_DEC, 18, P_REL, 8, P_BASE, 32, P_SPU, 60, P_VOL, 22, P_PAN, 40);
-    BEAT(p, 0, "x.q.x.q.x.q.x.qx|x.q.x.q.x.q.x.q.|x.q.x.q.x.q.x.qx|x.q.x.q.x.qxx.q.", 60);
-    SET(p, 1, SA, SEMI(4), SB, SEMI(11), SC, SEMI(14), SD, 60, SE, 30, SG, 100, SH, 10, P_ATK, 90, P_HOLD, 127,
-        P_DEC, 127, P_REL, 100, P_GATE, 127, P_WDTH, 36, P_LPQ, 10, P_WOF, 76, P_FATK, 100, P_FDEC, 100, P_SPU, 110,
-        P_VOL, 56);
-    BEAT(p, 1, "x...............|x...............|x...............|x...............", 48, 45, 53, 55);
-    lk(p, 1, 16, SA, SEMI(3)); lk(p, 1, 16, SB, SEMI(10));                                /* Am9 */
-    lk(p, 1, 32, SB, SEMI(7)); lk(p, 1, 32, SC, SEMI(11));                                /* Fmaj7 */
-    lk(p, 1, 48, SB, SEMI(7)); lk(p, 1, 48, SC, SEMI(9));                                 /* G6 */
-    MOD(p, 1, 0, 12, 100, 70);
-    SET(p, 2, SA, WAVE(5), SB, 70, SC, 50, SE, 30, SF, 66, SG, 60, P_DEC, 60, P_REL, 50, P_GATE, 10, P_DTIM, 96,
-        P_DSND, 94, P_DFB, 50, P_SPU, 100, P_VOL, 58, P_PAN, 70);
-    BEAT(p, 2, "x.x.x.x.x.x.x.x.|x.x.x.x.x.x.x.x.|x.x.x.x.x.x.x.x.|x.x.x.x.x.x.x.x.",
-         72, 76, 79, 83, 86, 83, 79, 76, 69, 72, 76, 79, 83, 79, 76, 72, 65, 69, 72, 76, 79, 76, 72, 69, 67, 71, 74, 76, 79, 76, 74, 71);
-    SET(p, 3, SA, VOWEL(6), SB, 64, SC, 80, SE, 50, SF, 60, SG, 20, SH, 40, P_ATK, 80, P_HOLD, 127, P_DEC, 127,
-        P_REL, 90, P_GATE, 127, P_SPU, 120, P_VOL, 46);
-    BEAT(p, 3, "x...............|x...............|x...............|x...............", 64, 64, 69, 67);
-    SET(p, 4, SA, RATIO(6), SB, 40, SC, 40, SD, RATIO(9), SE, 20, SF, 30, SH, MODE4(0), P_DEC, 56, P_REL, 40,
-        P_GATE, 10, P_DTIM, 64, P_DSND, 40, P_DFB, 40, P_SPU, 80, P_VOL, 86, P_PAN, 56);
-    BEAT(p, 4, "......x.......x.|..........x.....|......x.......x.|..........x...x.", 79, 76, 76, 81, 79, 74, 72);
-    SET(p, 5, SC, 30, SH, 10, P_HOLD, 127, P_DEC, 127, P_REL, 60, P_GATE, 127, P_WDTH, 22, P_VOL, 65);
-    BEAT(p, 5, "x...............|x...............|x...............|x.......x.......", 36, 33, 29, 31, 38);
-    trim(p, 87);
+    /* A12 CUTUP, flavour 1, after Prefuse 73 (2001): D minor at 156, the beat in half time, swung hard. The drums lead, a
+     * hip-hop beat cut up: a fat kick and a crushed snare stuttering into ratchets and rolls, hats chopped in
+     * thirty-seconds; VO-6 cut to short vowel chops that stutter, a new vowel each; a dusty chord stab chopped off the
+     * beat, Dm9 then Bbmaj7 over D. Under it an FM bass that zaps down onto each note, fed back and crushed, locked
+     * with the kick, D1 to D2; the bus repeating slices; no melody */
+    p = pat_v5(11, "CUTUP", 156, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_VOX, M_FMD, M_ENS));
+    p->glob[G_LEN] = 64; p->glob[G_SWNG] = 24; p->glob[G_GLCH] = 30; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 36;
+    p->glob[G_TAPE] = 50; p->glob[G_HISS] = 50; p->glob[G_VERB] = 34; p->glob[G_DAMP] = 70; p->glob[G_ACNT] = 50;
+    p->glob[G_DRIV] = BANK_DRIVE;
+    SET(p, 0, SB, 12, SE, 60, SF, 26, SG, 30, SC, 50, P_DEC, 36, P_REL, 8, P_DIST, 82, P_SRR, 16, P_VOL, 127);
+    BEAT(p, 0, "X.....x...x....x|..x.......x.2...|X.....x...x....x|..x...x.x.3.4...", 38);
+    SET(p, 1, SA, 84, SC, 30, SD, 50, SG, 60, P_DEC, 20, P_REL, 6, P_BASE, 24, P_DIST, 80, P_BITS, 40, P_SRR, 36,
+        P_SPU, 30, P_VOL, 93);
+    BEAT(p, 1, "........X.....x.|...x....X..x..2.|........X.....x.|...x....X.3.x4.4", 60);
+    static const uint8_t ghost12[] = {14, 19, 27, 46, 51, 60};
+    for (unsigned i = 0; i < sizeof ghost12; i++) lk(p, 1, ghost12[i], P_VOL, 56);
+    lk(p, 1, 30, P_SRR, 80); lk(p, 1, 58, P_PTCH, 70);
+    lfo(p, 1, 0, P_SRR, 6, 3, 40, 80, 0);
+    SET(p, 2, SA, 112, SG, 80, P_ATK, 0, P_DEC, 5, P_REL, 3, P_BASE, 42, P_SRR, 44, P_BITS, 44, P_VOL, 68, P_PAN, 64);
+    BEAT(p, 2, "x2x.x3xxx2x.x3x.|x2x.x3x2x2x.x4x.|x2x.x3xxx2x.x3x.|x2xxx3x.x2x4x4x4", 60);
+    lfo(p, 2, 0, P_DEC, 6, 3, 56, 84, 0);
+    lfo(p, 2, 1, P_PAN, 0, 1, 24, 90, 0);
+    SET(p, 3, SA, VOWEL(0), SB, 70, SC, 30, SD, 64, SE, 20, SF, 70, SG, 40, SH, 0, P_ATK, 0, P_DEC, 30, P_REL, 10,
+        P_GATE, 4, P_WDTH, 40, P_DIST, 74, P_BITS, 30, P_SRR, 30, P_DTIM, 32, P_DSND, 40, P_DFB, 30, P_SPU, 40,
+        P_VOL, 123, P_PAN, 56);
+    BEAT(p, 3, "......x2......4.|..x.......3...2.|......x2......4.|..x...2...3.4.3.",
+         57, 50, 53, 60, 57, 53, 50, 53, 57, 53, 50, 57, 50, 53);
+    static const uint8_t chop[] = {6, 7, 14, 18, 26, 30, 38, 39, 46, 50, 54, 58, 60, 62};
+    for (unsigned i = 0; i < sizeof chop; i++) lk(p, 3, chop[i], SA, VOWEL((i * 3) % 8));   /* a new vowel each */
+    SET(p, 4, SA, RATIO(3), SB, 70, SC, 30, SD, RATIO(9), SE, 40, SF, 24, SG, 50, SH, 110, P_HOLD, 20, P_DEC, 60,
+        P_REL, 14, P_GATE, 10, P_WDTH, 36, P_DIST, 80, P_BITS, 30, P_XOR, 10, P_VOL, 85);
+    BEAT(p, 4, "x.....x...x....x|..x.......x.2...|x.....x...x....x|..x...x.x.3.4...",
+         26, 26, 29, 31, 33, 34, 33, 34, 34, 38, 36, 34, 38, 36, 33, 31);
+    SET(p, 5, SA, PCH(4), SB, PCH(7), SC, PCH(11), SD, 40, SF, 40, SG, 30, P_ATK, 0, P_HOLD, 10, P_DEC, 40, P_REL, 20,
+        P_GATE, 6, P_WDTH, 30, P_LPQ, 0, P_DIST, 74, P_BITS, 30, P_SRR, 30, P_DTIM, 48, P_DSND, 34, P_DFB, 40,
+        P_SPU, 50, P_VOL, 126, P_LEVL, 108, P_PAN, 70);
+    BEAT(p, 5, ".......x.x......|...x.......2....|.......x.x......|...x...3........", 53, 53, 53, 53, 50, 50, 50, 50);
+    chords(p, 5, 32, 64, 3, 7, 12);                                         /* Bbmaj7 over D: D F A */
+    trim(p, 61);
 
-    /* A13 GROOVE: dub techno that swings, G minor: a minor-ninth stab answering the kick, thrown into the echo,
-     * turning to Ebmaj7 at the end; a SID bass that walks, a pitched hand drum, hats opening, a clap */
-    p = pat_v5(12, "GROOVE", 124, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_SID, M_GNOI));
-    p->glob[G_LEN] = 64; p->glob[G_SWNG] = 30; p->glob[G_VERB] = 60; p->glob[G_DAMP] = 70; p->glob[G_HISS] = 10;
-    SET(p, 0, SE, 70, SF, 30, SG, 30, SC, 30, P_DEC, 36, P_REL, 10, P_VOL, 127);
-    BEAT(p, 0, "x...x...x...x...|x...x...x...x...|x...x...x...x...|x...x...x...x.x.", 36);
-    SET(p, 1, SA, 72, SC, 30, P_DEC, 30, P_REL, 14, P_BASE, 20, P_SPU, 60, P_VOL, 85, P_PAN, 60);
-    BEAT(p, 1, "....x.......x...|....x.......x..q|....x.......x...|....x..q....x.x.", 60);
-    SET(p, 2, SA, 104, P_DEC, 14, P_REL, 8, P_BASE, 34, P_VOL, 48, P_PAN, 52);
-    BEAT(p, 2, "xqXqxqXqxqXqxqXq|xqXqxqXqxqXqxqXq|xqXqxqXqxqXqxqXq|xqXqxqXqxqXqxqXx", 60);
-    for (int st = 2; st < 64; st += 4) lk(p, 2, st, P_DEC, 36);
-    SET(p, 3, SA, SEMI(3), SB, SEMI(10), SC, SEMI(14), SD, 50, SE, 10, SG, 100, P_DEC, 36, P_REL, 20, P_GATE, 6,
-        P_WDTH, 36, P_LPQ, 30, P_WOF, 82, P_FDEC, 28, P_DTIM, 48, P_DSND, 96, P_DFB, 50, P_DBAS, 40, P_DWID, 40,
-        P_SPU, 60, P_VOL, 127, P_LEVL, 105);
-    BEAT(p, 3, "..x.....x..x....|..x.....x..x..x.|..x.....x..x....|..x.....x..x.x..", 55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 51, 51, 51);
-    for (int st = 56; st < 64; st++) if (p->step[3][st].flags) { lk(p, 3, st, SA, SEMI(4)); lk(p, 3, st, SB, SEMI(7)); lk(p, 3, st, SC, SEMI(11)); }
-    lfo(p, 3, 0, P_WDTH, 0, 0, 8, 74, 0);
-    SET(p, 4, SA, SIDW(2), SB, 30, SC, 30, SD, SIDW(1), SE, 32, SF, 64, SG, MODE4(0), SH, 50, P_DEC, 34, P_REL, 10,
-        P_GATE, 10, P_PORT, 14, P_WDTH, 26, P_LPQ, 40, P_WOF, 82, P_FDEC, 30, P_DIST, 72, P_VOL, 126);
-    BEAT(p, 4, "x..x..x...x.x..x|x..x..x...x.x...|x..x..x...x.x..x|x..x..x...x.x.xs",
-         43, 43, 55, 43, 46, 50, 43, 43, 55, 46, 41, 43, 43, 55, 43, 46, 50, 39, 39, 51, 39, 43, 46, 41);
-    SET(p, 5, SA, 50, SB, 40, SC, 20, P_DEC, 32, P_REL, 12, P_BASE, 8, P_SPU, 40, P_VOL, 62, P_PAN, 80);
-    BEAT(p, 5, "...x..x....x.x..|...x..x....x..x.|...x..x....x.x..|...x..x.x..x.x.x", 60, 67, 63, 67, 60, 67, 63, 60, 60, 67, 63, 67, 60, 67, 63, 67, 60, 63);
-    trim(p, 70);
+    /* A13 GRISTLE, flavour 1, after Clark (Warp, the 2000s), with SOPHIE's metal: E minor at 168, a slow industrial
+     * groove in half time with everything fast on top. The skeleton holds, swung: a hard punchy kick with a click,
+     * folded and driven, locked with the bass; a metal crack of a snare on the half-time beat, ghost rolls round it.
+     * Over it, busy and aggressive: hats on nearly every step, ratcheting, their decay wandering; FM metal boings, their
+     * ratio zapping down hard, a new sweep each hit; pitch-drop zaps answering the snare. Under it a rubbery FM bass,
+     * its ratio rising into each note, fed back and crushed, sliding between E1 and E2 and through the minor; no melody */
+    p = pat_v5(12, "GRISTLE", 168, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_FMD, M_FMD, M_GSIN));
+    p->glob[G_LEN] = 64; p->glob[G_SWNG] = 18; p->glob[G_GLCH] = 16; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 36;
+    p->glob[G_TAPE] = 36; p->glob[G_HISS] = 40; p->glob[G_VERB] = 34; p->glob[G_DAMP] = 60; p->glob[G_ACNT] = 70;
+    p->glob[G_DRIV] = BANK_DRIVE;
+    SET(p, 0, SB, 28, SE, 64, SF, 18, SG, 70, SC, 50, P_DEC, 32, P_REL, 6, P_DIST, 88, P_SRR, 12, P_VOL, 127);
+    BEAT(p, 0, "X.....x...x..x..|x.x.....x.x...2.|X.....x...x..x..|x.x...x.x.3.x.4.", 40);
+    SET(p, 1, SA, 90, SC, 100, SD, 90, SG, 70, P_DEC, 26, P_REL, 8, P_BASE, 22, P_DIST, 86, P_BITS, 40, P_SRR, 30,
+        P_SPU, 36, P_VOL, 94);
+    BEAT(p, 1, "........X..x..x.|...x....X..x.x.x|........X..x..x.|...x....X.3.x4.4", 60);
+    static const uint8_t ghost13[] = {11, 14, 19, 27, 29, 31, 43, 46, 51, 60};
+    for (unsigned i = 0; i < sizeof ghost13; i++) lk(p, 1, ghost13[i], P_VOL, 52);   /* the ghosts, 9 dB down */
+    lk(p, 1, 56, P_DEC, 40);
+    lfo(p, 1, 0, P_SRR, 6, 3, 40, 80, 0);
+    SET(p, 2, SA, 114, SG, 80, P_ATK, 0, P_DEC, 4, P_REL, 3, P_BASE, 44, P_SRR, 44, P_BITS, 44, P_VOL, 62, P_PAN, 60);
+    BEAT(p, 2, "x2X2x3X2x2X2x3X4|x2X2x3X2x2X3x2X4|x2X2x3X2x2X2x3X4|x3X2x4X2x2X3x4X4", 60);
+    lfo(p, 2, 0, P_DEC, 6, 3, 56, 84, 0);
+    lfo(p, 2, 1, P_PAN, 0, 1, 20, 84, 0);
+    SET(p, 3, SA, RATIO(17), SB, 100, SC, 20, SD, RATIO(26), SE, 60, SF, 10, SG, 60, SH, 120, P_DEC, 14, P_REL, 4,
+        P_GATE, 2, P_DIST, 82, P_BITS, 24, P_SPU, 30, P_VOL, 55, P_PAN, 40);
+    BEAT(p, 3, ".x..x.3..x.x.2..|x..2.x...x3..x.x|.x..x.3..x.x.2..|x.2..x.3.x.4.x.4", 52, 59, 55, 59, 52, 55);
+    lfo(p, 3, 0, SH, 6, 3, 48, 100, 0);                                     /* the zap, new each hit */
+    lfo(p, 3, 1, P_PAN, 6, 3, 40, 100, 0);
+    SET(p, 4, SA, RATIO(3), SB, 80, SC, 36, SD, RATIO(6), SE, 40, SF, 30, SG, 40, SH, 30, P_HOLD, 127, P_DEC, 127,
+        P_REL, 20, P_GATE, 30, P_WDTH, 34, P_DIST, 82, P_BITS, 16, P_VOL, 111);
+    BEAT(p, 4, "X.....s...x..x..|x.x.....s.x...2.|X.....s...x..x..|x.x...s.x.3.x.4.",
+         28, 40, 28, 31, 28, 31, 40, 35, 33, 28, 40, 28, 33, 28, 40, 28, 31, 33, 35, 38);
+    lfo(p, 4, 0, SB, 1, 1, 16, 80, 0);                                      /* its depth, breathing */
+    SET(p, 5, SE, 110, SF, 20, SG, 60, SC, 20, P_DEC, 16, P_REL, 4, P_DIST, 84, P_BITS, 30, P_SRR, 20, P_SPU, 30,
+        P_VOL, 74, P_PAN, 80);
+    BEAT(p, 5, "......x.......x.|..x.......x.x...|......x.......x.|..x...x...x.x.x.", 52, 47, 52, 47, 52, 47, 52);
+    trim(p, 56);
 
     /* A14 ORCHARD, flavour 2, after Boards of Canada: E dorian at 92, bouncing. The idea is a four-note call, G A B
      * and down to E, answered in the last bar by the dorian C#, on one of the owner's warm waves, worn and wobbling, its
@@ -794,7 +857,7 @@ static void factory(void)
 
     /* A11 A12 A13 A16, still the bank before (ea69d53), were written on SWAV-ENS's old page and the bus's old laws:
      * onto today's, once (every other part is written on today's) */
-    static const uint8_t OLD_SLOTS[] = {10, 11, 12};
+    static const uint8_t OLD_SLOTS[] = {10};
     for (unsigned i = 0; i < sizeof OLD_SLOTS; i++) {
         ens_v6(&pat[OLD_SLOTS[i]]);
         bus_v9(&pat[OLD_SLOTS[i]]);

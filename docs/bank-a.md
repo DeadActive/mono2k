@@ -35,14 +35,14 @@ beside HAZE's.
 | A03 | RIBBON | v2 | Aphex Twin | 168 | F minor | (brief v2, to be redone) | kick snare hat lead pad bass |
 | A04 | TENFOUR | 2 | Radiohead | 108 | F minor | after "Everything in Its Right Place": its opening progression, C Dbmaj7 Eb6 with C on top, over four bars (6, 4, 4 beats, then 2), swelling on a tape-worn crushed pad; a driven sine bass, its sub on C1 Db1 Eb1; a four-bar line from the first step, held and sliding; drums that never quite repeat | kick snare hat pad bass lead |
 | A05 | SMOKE | v2 | Basic Channel | 120 | C minor | (brief v2, to be redone) | kick hat perc chord bass - |
-| A06 | TORQUE | v2 | Ben Sims | 134 | E minor | (brief v2, to be redone) | kick hat snare perc lead bass |
-| A07 | TUNNEL | v2 | Overmono | 130 | G minor | (brief v2, to be redone) | kick snare hat pad voice bass |
+| A06 | CAROM | 1 | Aphex Twin | 160 | A minor | a metal hit bouncing through each bar, closing in, over a dense industrial beat with rolls; a wave-folded sine bass boinging onto each note, A1-A2 | kick snare hat perc bass perc |
+| A07 | VESPER | 2 | Plaid | 152 | F# minor | half time: an intricate four-bar line, one figure through F#m7 Dmaj7 Bm9 C#7sus4; an FM bass falling into each note, C#1-C#2; busy dusty drums | kick snare hat pad bass lead |
 | A08 | MOTEL | v2 | Anthony Naples | 122 | B dorian | (brief v2, to be redone) | kick snare hat chord bass - |
 | A09 | PYLONS | 2 | Boards of Canada | 84 | G minor | a deep SWAV-SAW bass walking under Gm9, Ebmaj7, Cm7, its sub on G1 Eb1 C2; a four-note motif, G D C Bb | kick snare hat pad bass lead |
 | A10 | RIVETS | 1 | Autechre | 118 | C# minor | the drums lead, a swung broken funk: kick on the off-beats, ghost snares, accented hats, an FM clank; a punchy SWAV-SAW bass in 3 3 4 3 3, its sub on C#1-C#2 | kick snare hat perc bass perc |
 | A11 | SYRUP | old | (the bank before) | 96 | A major | a favourite of the owner's, kept | kick snare hat pad lead bass |
-| A12 | SPU | old | (the bank before) | 84 | C major | kept for now | hat pad lead voice lead bass |
-| A13 | GROOVE | old | (the bank before) | 124 | G minor | kept for now | kick snare hat chord bass perc |
+| A12 | CUTUP | 1 | Prefuse 73 | 156 | D minor | half time: a swung hip-hop beat cut up, stuttering kick and snare, chopped hats, VO-6 vowel chops, a chopped stab (Dm9, Bbmaj7/D); an FM bass zapping onto each note, D1-D2 | kick snare hat voice bass chord |
+| A13 | GRISTLE | 1 | Clark, SOPHIE | 168 | E minor | a slow industrial half-time groove, everything fast on top: a punchy kick, a metal-crack snare with ghost rolls, hats on nearly every step, FM metal boings and pitch-drop zaps; a rubbery FM bass sliding E1-E2 | kick snare hat perc bass perc |
 | A14 | ORCHARD | 2 | Boards of Canada | 92 | E dorian | a four-note call, G A B E, answered by the dorian C#; Em7, A7; a driven sine bass, its sub on E1 A1 B1 | kick snare hat pad bass lead |
 | A15 | SPLINTR | 1 | Aphex Twin | 160 | F minor | drill breaks with pitched snare retrigs dropping out every second loop, over a huge sustained SWAV-SAW bass, its subs on F1 Ab1 Db1 Eb1 | kick snare hat perc bass lead |
 | A16 | FOUNDRY | 2 | Boards of Canada | 102 | G# dorian | after "Kaini Industries": its four bars and their bass notes, G#m7/B C#sus4 G#m9 C#9, under a four-bar line on a deep, gritty SWAV-SAW lead bass, its sub on C#1-D#2; drums that never quite repeat, a shaker and metal percussion in a dotted echo | kick snare hat pad bass perc |

@@ -105,11 +105,12 @@ def balance(s, slot, name, roles, res):
     a, e = block(s, slot, name)
     seg = s[a:e]
     ref = roles.index("kick")
-    errs = {}
+    errs, base = {}, {}
     for t, role in enumerate(roles):
         if t == ref or role == "-":
             continue
         err = peak[ref] + PEAK[role] - peak[t] if role in PEAK else rms[ref] + RMS[role] - rms[t]
+        base[t] = err
         if role == "bass":                         # the low end at least HAZE's: the bass carries the deficit
             if low < low_h:
                 err = max(err, min(6.0, max(0.5, 10 * math.log10((low_h / (1 - low_h)) / (low / (1 - low))))))
@@ -118,12 +119,14 @@ def balance(s, slot, name, roles, res):
         errs[t] = err
     # a part already at VOL and LEV 127 short of its target (a SWAV-SAW bass: its clip's ceiling is 10.5 dB under
     # GND-SIN's, as the Monomachine's): every other track comes down by the shortfall instead, the kick too, and the
-    # trim takes the mix back to HAZE's level
+    # trim takes the mix back to HAZE's level. Its level target only, never the low end's push (a bass whose energy
+    # sits over 120 Hz, a folded one, cannot reach the low end by level: chasing it ran every other track down), and
+    # 6 dB a round at most
     def vol_lev(t):
         st = re.search(r"SET\(p, %d,.*?\);" % t, seg, re.S).group(0)
         lm = re.search(r"P_LEVL, (\d+)", st)
         return int(re.search(r"P_VOL, (\d+)", st).group(1)), int(lm.group(1)) if lm else 100
-    short = max([0.0] + [e - 40 * math.log10(127 * 127 / vol_lev(t)[1] / vol_lev(t)[0]) for t, e in errs.items()])
+    short = min(6.0, max([0.0] + [e - 40 * math.log10(127 * 127 / vol_lev(t)[1] / vol_lev(t)[0]) for t, e in base.items()]))
     if short > 0.1:
         errs = {t: e - short for t, e in errs.items()}
         errs[ref] = -short

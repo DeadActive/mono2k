@@ -844,17 +844,17 @@ static int selftest(void)
     CHECK(project_save(2) == 0, "a project too big for an image is refused, not corrupted");
     CHECK(!strcmp(m2k_project_name(2), "P3"), "the refused slot is untouched");
     /* a store saved before today's demos: the slots still holding the ones its revision shipped take today's, the
-     * owner's stay. Revision 0 (before the store kept one: A16 was INIT, the owner's once written in), 1, 2, 3 and 4 */
-    for (int rev = 0; rev < 5; rev++) {
-        static const char *const OLDN[5] = {"SPU RM", "DAYDRM", "GLITCH", "DREXC", "FACETS"};
-        int sl = rev == 2 ? 4 : rev == 3 ? 8 : rev == 4 ? 3 : 2;   /* a slot the next revision replaced */
+     * owner's stay. Revision 0 (before the store kept one: A16 was INIT, the owner's once written in), 1 to 5 */
+    for (int rev = 0; rev < 6; rev++) {
+        static const char *const OLDN[6] = {"SPU RM", "DAYDRM", "GLITCH", "DREXC", "FACETS", "TORQUE"};
+        int sl = rev == 2 ? 4 : rev == 3 ? 8 : rev == 4 ? 3 : rev == 5 ? 5 : 2;   /* a slot the next revision replaced */
         m2k_init(11);
         m2k_pattern_t keep2 = pat[sl], keep15 = pat[15], keep0 = pat[0];
         s_cpy(pat[sl].name, OLDN[rev]);                      /* an old demo, as shipped */
         if (rev == 3) pat[0].kit[5][P_DIST] = 74;            /* HAZE as revision 3 shipped it: its lead at DIST 74 */
         s_cpy(pat[6].name, "MYSONG");                        /* the owner's */
         if (rev) {
-            s_cpy(pat[15].name, "SHARDS");                   /* revision 1's A16: a demo */
+            s_cpy(pat[15].name, rev >= 5 ? "FOUNDRY" : "SHARDS");   /* the A16 its revision shipped: a demo */
         } else {
             pattern_init_blank(&pat[15]);
             pat[15].step[0][0].flags = ST_TRIG;              /* A16 INIT, but written in: the owner's */
