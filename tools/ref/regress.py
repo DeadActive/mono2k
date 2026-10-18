@@ -306,6 +306,25 @@ def cases():
     for sig in ("sid", "fms", "fmd", "wav", "vox"):
         for d in (112, 127):
             add("dist_loud", "chain_dist21", f"d21m_{sig}_d{d:03d}", "rms", {"t": (0.3, 0.95)}, 1.0)
+    # each machine's own level, clean (DIST 64, chain_dist21): the machines measured so far match; the rest are the
+    # calibration still to do (README, the next steps), each gap held at its size
+    for sig in ("sin", "saw", "saw_s1_040", "saw_s1_080", "saw_uni", "ens1", "ens4"):
+        add("machine_level", "chain_dist21", f"d21_{sig}_d064", "rms", {"t": (0.3, 0.95)}, 1.0)
+    sub = "SWAV-SAW's sine sub at C1 (33 Hz) at SUB1 127: MONO2K 1.1-1.2 dB under (0.6 at SUB1 80)"
+    for sig in ("saw_s1_127", "saw_subs"):
+        add("machine_level", "chain_dist21", f"d21_{sig}_d064", "rms", {"t": (0.3, 0.95)}, 1.0, xfail=sub)
+    add("machine_level", "chain_dist21", "d21_nois_d064", "rms", {"t": (0.3, 0.95)}, 1.0,
+        xfail="GND-NOIS: MONO2K 2.9 dB louder")
+    for sig in ("sid", "sid48"):
+        add("machine_level", "chain_dist21", f"d21m_{sig}_d064", "rms", {"t": (0.3, 0.95)}, 1.0,
+            xfail="SID-8BIT: MONO2K 6.9-7.0 dB louder (C2 and C3)")
+    for sig in ("fms", "fmd"):
+        add("machine_level", "chain_dist21", f"d21m_{sig}_d064", "rms", {"t": (0.3, 0.95)}, 1.0,
+            xfail="FM+STAT and FM+DYN: MONO2K 6.5-6.6 dB louder")
+    add("machine_level", "chain_dist21", "d21m_vox_d064", "rms", {"t": (0.3, 0.95)}, 1.0,
+        xfail="VO-6: MONO2K 5.3 dB quieter")
+    add("machine_level", "chain_dist21", "d21m_wav_d064", "rms", {"t": (0.3, 0.95)}, 1.0, info=True)   # not the
+    # same waves: DIGI-WAV plays MONO2K's own, the Monomachine's DPRO-WAVE its DigiPro set (never copied)
     for v in range(0, 31, 2):
         add("filter_mag", "chain_filt2", f"hp_{v:03d}", "h1_rel", {"note": 48, "ref": "hp_000"}, 0.5)
     for v in range(32, 45, 2):                          # the HP's far stopband: MONO2K's 1-2 dB steeper

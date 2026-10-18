@@ -60,8 +60,9 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
    images move to the 1 MiB flash (`m2k_proj.c` get / put), and RAM keeps the playing bank, not all 64 patterns.
 2. **Calibration against the Monomachine**, machine by machine: levels, spectra, the machines' own envelopes. The amp
    envelope, SWAV-SAW and the whole track chain are done (below); SWAV-ENS, SID, FM+, VO-6 and GND-NOIS are next.
-   Their levels, measured with DIST at 64 (`tools/ref/chain_dist21.spec`): SID 6.9 dB and FM+ 6.6 dB louder than the
-   Monomachine's, GND-NOIS 2.9 dB louder, VO-6 5.3 dB quieter. Driven hard, all of them meet its ceilings.
+   Their levels, measured with DIST at 64 (`tools/ref/chain_dist21.spec`, `regress.py` group `machine_level`, known
+   gaps below): SID 7 dB and FM+ 6.6 dB louder than the Monomachine's, GND-NOIS 2.9 dB louder, VO-6 5.3 dB quieter.
+   Driven hard, all of them meet its ceilings. Until SID's is fixed, bank A has no SID bass.
 3. More machines (DPRO-BBOX, FX machines that take the previous track), songs, MIDI out and clock.
 
 ## Author
@@ -151,7 +152,11 @@ Done so far, all measured on OS 1.32B:
   dimensions, an octave a column), fitted on resonant sweeps at several notes, and the saturation inside the
   resonance. The delay keeps half-rate
   8-bit lines, so ping-pong past 0.37 s (and any delay past 0.74 s) slows the line's clock and darkens, where the
-  Monomachine stays bright; SWAV-SAW's top harmonics at C7 are 2–6 dB short.
+  Monomachine stays bright; SWAV-SAW's top harmonics at C7 are 2–6 dB short. Each machine's own level, clean (DIST
+  64, group `machine_level`): GND-SIN, SWAV-SAW (alone, with unison, with SUB1 up to 80) and SWAV-ENS within 0.8 dB;
+  the rest still to calibrate: SID-8BIT 6.9–7.0 dB louder, FM+STAT and FM+DYN 6.5–6.6 dB louder, GND-NOIS 2.9 dB
+  louder, VO-6 5.3 dB quieter, and SWAV-SAW's sine sub at C1 1.1–1.2 dB under at SUB1 127. DIGI-WAV is not compared:
+  it plays MONO2K's own waves, not the DigiPro's.
 
 Patterns saved before are moved onto each new scale as they load (version 1: the envelope; 5: the chain, each old
 setting to the one giving the same Hz, dB or time, the filter placed against the note each track plays most; 6:
