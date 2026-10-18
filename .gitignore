@@ -4,3 +4,6 @@ build/
 .claude/
 .DS_Store
 __pycache__/
+
+# the owner's reference MIDI files (other artists' music): never committed
+reference/midi/
