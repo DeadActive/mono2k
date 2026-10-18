@@ -14,7 +14,7 @@ enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOWL, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
     K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD,
-    K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ
+    K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ, K_ONOFF, K_MSRC, K_MFRQ
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -67,9 +67,9 @@ static const mi_t MI[M_COUNT] = {
     {"GND-NOIS", "GND", "NOISE", "PERC", {3, 4, 1},
      {{"COLR", "COLOUR", K_BI}, {"S&H", "PITCHED HOLD", K_NUM}, {"META", "METAL MIX", K_NUM}, {"MSPR", "METAL SPREAD", K_NUM},
       {"PDEP", "PITCH DROP", K_NUM}, {"PDEC", "DROP TIME", K_TIME}, {"GRIT", "8-BIT GRIT", K_NUM}, {"-", "-", K_NUM}}},
-    {"SID-8BIT", "SID", "CHIP", "SYNTH", {3, 2, 4},
-     {{"WAV1", "OSC 1 WAVE", K_SIDW}, {"PW", "PULSE WIDTH", K_NUM}, {"PWM", "PWM DEPTH", K_NUM}, {"WAV2", "OSC 2 WAVE", K_SIDW},
-      {"DTN2", "OSC 2 TUNE", K_SEMI24}, {"FINE", "OSC 2 FINE", K_FINE}, {"MODE", "SYNC / RING", K_SIDM}, {"MIX", "OSC MIX", K_NUM}}},
+    {"SID-6581", "SID", "CHIP", "SYNTH", {3, 2, 4},
+     {{"PW", "PULSE WIDTH", K_NUM}, {"PWAD", "PW SWEEP", K_NUM}, {"PWRS", "SWEEP RESET", K_ONOFF}, {"WAVE", "WAVE", K_SIDW},
+      {"MOD", "RING / SYNC", K_SIDM}, {"MSRC", "MOD SOURCE", K_MSRC}, {"MFRQ", "MOD FREQUENCY", K_MFRQ}, {"TUNE", "TUNE", K_TUN2}}},
     {"FM+STAT", "FM+", "STATIC", "SYNTH", {4, 5, 3},
      {{"1FRQ", "RATIO 1", K_FR24}, {"1FIN", "FINE 1", K_BI}, {"1ENV", "DEPTH / DECAY 1", K_BI}, {"1FB", "FEEDBACK 1", K_NUM},
       {"2FRQ", "RATIO 2", K_FR24}, {"2VOL", "DEPTH 2", K_NUM}, {"TONE", "TONE", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
@@ -88,13 +88,13 @@ static const mi_t MI[M_COUNT] = {
     {"VOX-6", "VOX", "VOICE", "VOICE", {1, 2, 5},
      {{"VOWL", "VOWEL", K_VOWL}, {"VSWP", "VOWEL SWEEP", K_BI}, {"VTIM", "SWEEP TIME", K_TIME}, {"SHFT", "FORMANT SHIFT", K_BI},
       {"BRTH", "BREATH", K_NUM}, {"RESO", "RESONANCE", K_NUM}, {"BUZZ", "BUZZ", K_NUM}, {"VIBR", "VIBRATO", K_NUM}}},
-    {"FM+PAR", "FM+", "PARALLEL", "SYNTH", {4, 5, 3},
+    {"FM+PAR", "FM+", "TRIPLE", "SYNTH", {4, 5, 3},
      {{"1FRQ", "RATIO 1", K_FR24}, {"1ENV", "DEPTH / DECAY 1", K_BI}, {"2FRQ", "RATIO 2", K_FR24}, {"2ENV", "DEPTH / DECAY 2", K_BI},
       {"3FRQ", "RATIO 3", K_FR24}, {"3ENV", "DEPTH / DECAY 3", K_BI}, {"TONE", "TONE", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
 };
 
-static const char *const SIDW_N[8] = {"TRI", "SAW", "PUL", "NOI", "T+S", "T+P", "S+P", "ALL"};
-static const char *const SIDM_N[4] = {"OFF", "SYNC", "RING", "S+R"};
+static const char *const SIDW_N[5] = {"TRI", "SAW", "PULS", "MIX", "NOIS"};
+static const char *const SIDM_N[4] = {"OFF", "RING", "SYNC", "R+S"};
 static const char *const ALGO_N[4] = {"STCK", "PAR", "2CAR", "RING"};
 static const char *const LWAV_N[7] = {"TRI", "SIN", "SQR", "SAW", "EXP", "RMP", "RND"};
 static const char *const LTRG_N[5] = {"FREE", "TRIG", "HOLD", "ONE", "HALF"};
@@ -122,7 +122,8 @@ static int kind_choices(int k)
     switch (k) {
     case K_RATIO: case K_WAVE: return 32;
     case K_FR24: return 24;
-    case K_SIDW: return 8;
+    case K_SIDW: return 5;
+    case K_ONOFF: case K_MSRC: return 2;
     case K_SIDM: case K_ALGO: case K_ASPD: case K_ARNG: return 4;
     case K_SCRN: return 2;
     case K_MODT: return 3;
@@ -259,6 +260,9 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_INT25: { char *e = s_cpy(out, "+"); s_int(e, c); *unit = "SEMI"; break; }
     case K_SIDW: s_cpy(out, SIDW_N[c]); break;
     case K_SIDM: s_cpy(out, SIDM_N[c]); break;
+    case K_ONOFF: s_cpy(out, c ? "ON" : "OFF"); break;
+    case K_MSRC: s_cpy(out, c ? "PRCH" : "MFRQ"); *unit = c ? "PREV TRACK" : ""; break;
+    case K_MFRQ: s_note(out, 48 + (v * 3 + 4) / 8); *unit = "NOTE"; break;     /* C3 at 0, an octave every 32 */
     case K_ALGO: s_cpy(out, ALGO_N[c]); break;
     case K_VOIC: s_int(out, c + 1); *unit = "VOICES"; break;
     case K_WAVE: s_cpy(out, (pat[cur_pat].kit[t][P_WBNK] * 2) >> 7 ? T_WAVE64_NAME[v >> 1 > 63 ? 63 : v >> 1] : T_WAVE_NAME[c]); break;

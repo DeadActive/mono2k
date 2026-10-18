@@ -318,6 +318,53 @@ static void fm_v9(m2k_pattern_t *p)
         }
 }
 
+/* SID took the Monomachine's SID-6581 page (version 11). The old one was MONO2K's own, two oscillators: WAV1 PW PWM
+ * WAV2 DTN2 FINE MODE MIX. Carried over as near as the new page goes: the first oscillator's wave (a combination to
+ * MIX), its duty (PW now a distance from 64), PWM to the sweep, MODE to MOD, the second oscillator's interval to MFRQ
+ * (where it stood over C4; MFRQ is the same at every note). WAV2, FINE and MIX have no place; a lock goes with its
+ * parameter, an LFO too */
+static const int8_t SID_TO[8] = {3, 0, 1, -1, 6, -1, 4, -1};
+
+static int sid_val(int prm, int v)
+{
+    static const uint8_t W[8] = {0, 40, 64, 115, 90, 90, 90, 90}, M[4] = {0, 64, 32, 100};
+    switch (prm) {
+    case 0: return W[(v * 8) >> 7];
+    case 1: { int m = v < 128 - v ? v : 128 - v; return CLAMP(64 - m, 0, 127); }
+    case 2: return v >> 1;
+    case 4: return CLAMP(32 + ((v - 64) * 24 / 64) * 32 / 12, 0, 127);
+    case 6: return M[(v * 4) >> 7];
+    default: return 64;
+    }
+}
+
+static void sid_v10(m2k_pattern_t *p)
+{
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        if (p->machine[t] != M_SID) continue;
+        uint8_t *k = &p->kit[t][P_SYN], o[8];
+        m_cpy(o, k, 8);
+        for (int i = 0; i < M2K_LOCKS; i++) {
+            m2k_lock_t *l = &p->lock[i];
+            if (l->trk != t || l->param < P_SYN || l->param >= P_SYN + 8) continue;
+            int prm = l->param - P_SYN;
+            if (SID_TO[prm] < 0) { l->trk = 0xFF; continue; }
+            l->val = (uint8_t)sid_val(prm, l->val);
+            l->param = (uint8_t)(P_SYN + SID_TO[prm]);
+        }
+        k[0] = (uint8_t)sid_val(1, o[1]); k[1] = (uint8_t)sid_val(2, o[2]); k[2] = 127; k[3] = (uint8_t)sid_val(0, o[0]);
+        k[4] = (uint8_t)sid_val(6, o[6]); k[5] = 0; k[6] = (uint8_t)sid_val(4, o[4]); k[7] = 64;
+    }
+    for (int t = 0; t < M2K_TRACKS; t++)
+        for (int l = 0; l < 3; l++) {
+            uint8_t *b = &p->kit[t][P_LFO + 8 * l];
+            int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1;
+            if (p->machine[to] != M_SID || dest < P_SYN || dest >= P_SYN + 8) continue;
+            int n = SID_TO[dest - P_SYN];
+            b[L_DEST] = (uint8_t)(n < 0 ? 0 : P_SYN + n + 1);
+        }
+}
+
 static void lk(m2k_pattern_t *p, int t, int s, int prm, int v)
 {
     for (int i = 0; i < M2K_LOCKS; i++)

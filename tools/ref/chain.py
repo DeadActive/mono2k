@@ -4,7 +4,8 @@
 # one control. A sine (GND-SIN) for the levels, the distortion and the sample rate reduction; noise (GND-NOIS) for the
 # filter and the EQ, whose responses are read as the ratio to the clean noise at the same note (the filter follows the
 # note); a short sine blip for the delay.
-#   .venv/bin/python tools/ref/chain.py specs|specs2|specs3|fm26 tools/ref   writes chain_*.spec (rounds one to three; FM+)
+#   .venv/bin/python tools/ref/chain.py specs|specs2|specs3|fm26|sid36 tools/ref   writes chain_*.spec (rounds one to three;
+#   FM+; SID-6581)
 import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -453,8 +454,28 @@ def fm26():
     return out
 
 
+def sid36():
+    """SID-6581 (3) on the Monomachine's page: the waves up the keyboard, PW's duty, PWAD's sweep, RING / SYNC / R+S
+    against MFRQ (and MFRQ the same at every note), TUNE. Each line sends the page"""
+    I = {48: 0, 49: 0, 50: 127, 51: 0, 52: 0, 53: 0, 54: 64, 55: 64}
+    W = {"tri": 0, "saw": 40, "pul": 64, "mix": 90, "noi": 115}
+    out = ["# SID-6581: PW PWAD PWRS WAVE | MOD MSRC MFRQ TUNE (init 0 0 127 0 0 0 64 64)"]
+    out += [line(f"s36_w_{w}_n{n}", 3, n, {**I, 51: v}, gate=1.0) for w, v in W.items() for n in (36, 48, 72)]
+    out += [line(f"s36_pw_{v:03d}", 3, 48, {**I, 51: 64, 48: v}, gate=1.0) for v in (16, 32, 48, 56, 96)]
+    out += [line(f"s36_pwad_{v:03d}", 3, 48, {**I, 51: 64, 48: 64, 49: v}, gate=1.6) for v in (16, 64, 127)]
+    for m, mv in (("ring", 32), ("sync", 64), ("rs", 100)):
+        out += [line(f"s36_{m}_{f:03d}", 3, 48, {**I, 51: 40, 52: mv, 54: f}, gate=1.0) for f in (48, 80, 112)]
+    out += [line(f"s36_ringtri_080", 3, 48, {**I, 51: 0, 52: 32, 54: 80}, gate=1.0)]
+    out += [line(f"s36_mfrq_n{n}", 3, n, {**I, 51: 40, 52: 64, 54: 80}, gate=1.0) for n in (36, 60)]
+    out += [line(f"s36_tune_{v:03d}", 3, 48, {**I, 55: v}, gate=1.0) for v in (0, 127)]
+    return out
+
+
 if __name__ == "__main__":
-    if sys.argv[1] == "fm26":
+    if sys.argv[1] == "sid36":
+        with open(os.path.join(sys.argv[2], "chain_sid36.spec"), "w") as fh:
+            fh.write("\n".join(sid36()) + "\n")
+    elif sys.argv[1] == "fm26":
         with open(os.path.join(sys.argv[2], "chain_fm26.spec"), "w") as fh:
             fh.write("\n".join(fm26()) + "\n")
     elif sys.argv[1] == "specs":

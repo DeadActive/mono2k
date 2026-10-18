@@ -465,7 +465,7 @@ static int selftest(void)
         lk(&a, 0, 8, P_SYN + 1, 99);
         lk(&a, 0, 12, P_SYN, 65);
         int n = pat_pack(&a, bl);
-        CHECK(bl[1] == 10, "format: patterns are written as version 10");
+        CHECK(bl[1] == 11, "format: patterns are written as version 11");
         n = pat_pack_v(&a, bl, 4);
         CHECK(pat_unpack(&b, bl, n), "format: a version-4 pattern loads");
         CHECK(b.kit[0][P_DIST] == T_V5_DIST[34] && b.kit[0][P_DTIM] == 32 && b.kit[0][P_DSND] == 64 &&
@@ -505,14 +505,15 @@ static int selftest(void)
                 n = pat_pack_v(&pat[d], bl, ver);
                 if (!pat_unpack(&c, bl, n)) { moved++; continue; }
                 for (int t = 0; t < M2K_TRACKS; t++) {               /* SWAV-ENS's page converts at 7, FM+'s at 10 */
-                    int conv = pat[d].machine[t] == M_ENS || pat[d].machine[t] == M_FMS || pat[d].machine[t] == M_FMD;
+                    int conv = pat[d].machine[t] == M_ENS || pat[d].machine[t] == M_FMS || pat[d].machine[t] == M_FMD ||
+                               pat[d].machine[t] == M_SID;
                     moved += c.kit[t][P_PTCH] != pat[d].kit[t][P_PTCH] || (!conv && memcmp(c.kit[t], pat[d].kit[t], 8) != 0);
                     for (int s = 0; s < M2K_STEPS; s++)
                         moved += c.step[t][s].note != pat[d].step[t][s].note || c.step[t][s].flags != pat[d].step[t][s].flags;
                 }
                 for (int i = 0; i < M2K_LOCKS; i++) {
                     int m = pat[d].lock[i].trk != 0xFF ? pat[d].machine[pat[d].lock[i].trk] : M_ENS;
-                    if (m != M_ENS && m != M_FMS && m != M_FMD && (pat[d].lock[i].param < 8 || pat[d].lock[i].param == P_PTCH))
+                    if (m != M_ENS && m != M_FMS && m != M_FMD && m != M_SID && (pat[d].lock[i].param < 8 || pat[d].lock[i].param == P_PTCH))
                         moved += c.lock[i].val != pat[d].lock[i].val;
                 }
             }
@@ -605,7 +606,29 @@ static int selftest(void)
             static uint8_t wb2[BLOB_MAX];
             wn = pat_pack(&w2, wb);
             int wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
-            CHECK(wn2 == wn && !memcmp(wb, wb2, (size_t)wn), "format: version 10 loads unchanged");
+            CHECK(wn2 == wn && !memcmp(wb, wb2, (size_t)wn), "format: version 11 loads unchanged");
+        }
+        /* SID's page (11): an old SID (WAV1 PW PWM WAV2 DTN2 FINE MODE MIX) carried over */
+        {
+            static m2k_pattern_t w, w2;
+            static uint8_t wb[BLOB_MAX];
+            m_set(&w, 0, sizeof w);
+            pat_init(&w, "OLDSID");
+            w.machine[2] = M_SID;
+            const uint8_t os[8] = {32, 32, 40, 0, 88, 64, 70, 64};   /* PUL, duty 1/4, PWM, -, +9 semi, -, RING, - */
+            m_cpy(&w.kit[2][P_SYN], os, 8);
+            lk(&w, 2, 4, P_SYN + 0, 70);                             /* WAV1 to T+S: MIX */
+            lk(&w, 2, 6, P_SYN + 5, 70);                             /* FINE: goes */
+            int wn = pat_pack_v(&w, wb, 10);
+            const uint8_t *k = &w2.kit[2][P_SYN];
+            int ok = pat_unpack(&w2, wb, wn) && (k[3] * 5) >> 7 == 2 && k[0] == 32 && k[1] == 20 && k[2] >= 64 &&
+                     k[4] >> 5 == 1 && k[5] < 64 && k[6] == 32 + 9 * 32 / 12 && k[7] == 64;
+            int lw = 0, lf = 0;
+            for (int i = 0; i < M2K_LOCKS; i++) {
+                if (w2.lock[i].trk == 2 && w2.lock[i].step == 4) lw = w2.lock[i].param == P_SYN + 3 && (w2.lock[i].val * 5) >> 7 == 3;
+                if (w2.lock[i].trk == 2 && w2.lock[i].step == 6) lf = 1;
+            }
+            CHECK(ok && lw && !lf, "format: version 10 -> 11, an old SID's wave, duty, sweep, ring and interval to SID-6581's page");
         }
         /* the bank on the screen: a DIGI-WAV track's SYN has a third page, BANK; the wave knob names the bank's waves */
         {

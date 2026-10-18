@@ -25,13 +25,13 @@ REF_JSON = os.path.join(HERE, "regress_ref.json")
 GAPS_JSON = os.path.join(HERE, "regress_gaps.json")
 SPECS = ["chain_levels", "chain_dist2", "chain_filt2", "chain_map3", "chain_clip3", "chain_eq2", "chain_srr2",
          "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14", "chain_ens20", "chain_ensacc", "chain_dist21",
-         "chain_fm26"]
+         "chain_fm26", "chain_sid36"]
 MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2": "mm_cfilt2", "chain_map3": "mm_cmap3",
           "chain_clip3": "mm_cclip3", "chain_eq2": "mm_ceq2", "chain_srr2": "mm_csrr2", "chain_delay": "mm_cdelay",
           "chain_delay2": "mm_cdelay2", "chain_ftime5": "mm_cftime5", "chain_res6": "mm_cres6",
           "chain_drive12": "mm_cdrive12", "chain_tune13": "mm_ctune13",
           "chain_sidbend14": "mm_csidbend14", "chain_ens20": "mm_cens20", "chain_ensacc": "mm_censacc",
-          "chain_dist21": "mm_cdist21", "chain_fm26": "mm_cfm26"}
+          "chain_dist21": "mm_cdist21", "chain_fm26": "mm_cfm26", "chain_sid36": "mm_csid36"}
 
 
 def db(v):
@@ -382,9 +382,8 @@ def cases():
         add("machine_level", "chain_dist21", f"d21_{sig}_d064", "rms", {"t": (0.3, 0.95)}, 1.0, xfail=sub)
     add("machine_level", "chain_dist21", "d21_nois_d064", "rms", {"t": (0.3, 0.95)}, 1.0,
         xfail="GND-NOIS: MONO2K 2.9 dB louder")
-    for sig in ("sid", "sid48"):
-        add("machine_level", "chain_dist21", f"d21m_{sig}_d064", "rms", {"t": (0.3, 0.95)}, 1.0,
-            xfail="SID-8BIT: MONO2K 6.9-7.0 dB louder (C2 and C3)")
+    for sig in ("sid", "sid48"):                   # on SID-6581's page
+        add("machine_level", "chain_dist21", f"d21m_{sig}_d064", "rms", {"t": (0.3, 0.95)}, 1.0)
     for sig in ("fms", "fmd", "fmp"):              # on the Monomachine's pages: the carrier at half GND-SIN's
         add("machine_level", "chain_dist21", f"d21m_{sig}_d064", "rms", {"t": (0.3, 0.95)}, 1.0)
     add("machine_level", "chain_dist21", "d21m_vox_d064", "rms", {"t": (0.3, 0.95)}, 1.0,
@@ -582,6 +581,38 @@ def cases():
     add("fm", "chain_fm26", "f26d_fen_032", "fen_hz", {"note": 48, "at": [0.03, 0.08, 0.6, 1.2], "mode": "peak"}, "4%")
     for v in (0, 127):
         add("fm", "chain_fm26", f"f26d_tune_{v:03d}", "pitch_c", {"note": 48}, 1.0)
+    # SID-6581 on the Monomachine's page (chain_sid36)
+    mix = "SID's MIX: MONO2K's is the chip's triangle AND saw; the Monomachine's combines them otherwise (its level matches)"
+    top = ("SID's top: the Monomachine's dips ~2.5 dB around 4-5 kHz and stops at 15 kHz (its noise quieter as it"
+           " climbs); MONO2K's is flat to its band-limiting's roll-off")
+    for w in ("tri", "saw", "pul", "mix", "noi"):
+        add("sid", "chain_sid36", f"s36_w_{w}_n48", "rms", {}, 0.5)
+        if w == "noi":
+            continue
+        for n in (36, 72):
+            add("sid", "chain_sid36", f"s36_w_{w}_n{n}", "fm_side", {"hz": [f0_of(n) * k for k in range(1, 9)]}, 1.5,
+                xfail=mix if w == "mix" else top if n == 72 else None)
+    for n in (36, 72):
+        add("sid", "chain_sid36", f"s36_w_noi_n{n}", "rms", {}, 1.0, xfail=top if n == 72 else None)
+    for v in (16, 32, 48, 56, 96):                 # the duty: |PW - 64| / 128
+        add("sid", "chain_sid36", f"s36_pw_{v:03d}", "rms", {}, 0.5)
+        add("sid", "chain_sid36", f"s36_pw_{v:03d}", "fm_side", {"hz": [fc * k for k in range(1, 9)]}, 1.5)
+    for v in (16, 64, 127):                        # PWAD's sweep: the level a pulse's duty gives, over time
+        for a in (0.1, 0.35, 0.75, 1.3):
+            add("sid", "chain_sid36", f"s36_pwad_{v:03d}", "rms", {"t": (a, a + 0.06)}, 1.5)
+    for f in (48, 80, 112):                        # MFRQ: C3 at 0, an octave every 32
+        fm = fc * 2 ** (f / 32)
+        add("sid", "chain_sid36", f"s36_ring_{f:03d}", "fm_side", {"hz": [fc, fm - fc, fm, fm + fc]}, 2.0)
+        near = sorted(range(1, 40), key=lambda k: abs(k * fc - fm))[:3]
+        for m in ("sync", "rs"):
+            add("sid", "chain_sid36", f"s36_{m}_{f:03d}", "fm_side", {"hz": [k * fc for k in sorted(near)]}, 3.0)
+    add("sid", "chain_sid36", "s36_ringtri_080", "fm_side", {"hz": [fc, 740 - fc, 740, 740 + fc]}, 2.0)
+    for n in (36, 60):                             # the same MFRQ at every note
+        f0n = f0_of(n)
+        near = sorted(range(1, 40), key=lambda k: abs(k * f0n - fc * 2 ** 2.5))[:2]
+        add("sid", "chain_sid36", f"s36_mfrq_n{n}", "fm_side", {"hz": [k * f0n for k in sorted(near)]}, 3.0)
+    for v in (0, 127):
+        add("sid", "chain_sid36", f"s36_tune_{v:03d}", "pitch_c", {"note": 48}, 1.0)
     for m in ("p",):                               # FM+PAR: three of FM+STAT's operators side by side
         add("fm", "chain_fm26", f"f26{m}_carrier", "rms", {}, 0.3)
     for j in (1, 2, 3):

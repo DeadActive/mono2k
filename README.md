@@ -33,7 +33,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 
 | | |
 |---|---|
-| Machines | GND-SIN, GND-NOIS, SID-8BIT, FM+STAT, FM+PAR, FM+DYN, SWAV-SAW, SWAV-ENS, DIGI-WAV, VOX-6: clean-room designs after the Monomachine's families, integer only |
+| Machines | GND-SIN, GND-NOIS, SID-6581, FM+STAT, FM+PAR, FM+DYN, SWAV-SAW, SWAV-ENS, DIGI-WAV, VOX-6: clean-room designs after the Monomachine's families, integer only |
 | Per track | the Monomachine's chain and pages: SYN A–H · AMP (ATK HOLD DEC REL DIST VOL PAN PORT) · FILT (HP / LP as base and width following the note, resonance, envelope) · FX (EQ, SRR, a delay of its own in 8-bit mu-law, ping-pong on positive sends) · DSTR (bits, fold, xor, SPU send) · 3 LFOs (any track's parameter) · ARP |
 | Projects | the modern Elektron way: 4 projects × 4 banks (A–D) × 16 patterns, each pattern with its own sounds. SAVE keeps the pattern (its reload point), GLO + SAVE reloads it, SAVE held keeps the project; GLO + REC / PLAY / SEQ copy, paste, clear (the pattern on HOME, the track's sound on its pages); GLO > SET picks and loads a project. On the web: a project picker, export / import as `.m2kp` files. Stored packed (a typical pattern 0.5–1 KB; the DEMO project 32 KB) |
 | Factory | project DEMO, bank A: sixteen parts after the late-90s and 2000s digital era, written in batches of four, each heard and approved (`docs/bank-a.md`: reference, genre, key and idea of each). So far HAZE (after Boards of Canada), SPLICE (Autechre), RIBBON (Aphex Twin), FACETS (Aleksi Perälä), SMOKE (dub techno), TORQUE (hardgroove), TUNNEL (Overmono), MOTEL (Anthony Naples); A09–A16 hold the bank before until theirs. Banks B–D blank. A store saved with earlier demos takes the new ones where the old still stand |
@@ -59,11 +59,10 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
    the second core as CS-1 does, the 1-bit framebuffer blitted in strips with the palette's two colours. The projects'
    images move to the 1 MiB flash (`m2k_proj.c` get / put), and RAM keeps the playing bank, not all 64 patterns.
 2. **Calibration against the Monomachine**, machine by machine: levels, spectra, the machines' own envelopes. The amp
-   envelope, SWAV-SAW, SWAV-ENS, the three FM+ and the whole track chain are done (below); SID, VO-6 and GND-NOIS are
-   next. Their levels, measured with DIST at 64 (`tools/ref/chain_dist21.spec`,
-   `regress.py` group `machine_level`, known gaps below): SID 7 dB louder than the Monomachine's, GND-NOIS 2.9 dB
-   louder, VO-6 5.3 dB quieter.
-   Driven hard, all of them meet its ceilings. Until SID's is fixed, bank A has no SID bass.
+   envelope, SWAV-SAW, SWAV-ENS, the three FM+, SID-6581 and the whole track chain are done (below); VO-6 and GND-NOIS
+   are next. Their levels, measured with DIST at 64 (`tools/ref/chain_dist21.spec`, `regress.py` group
+   `machine_level`, known gaps below): GND-NOIS 2.9 dB louder than the Monomachine's, VO-6 5.3 dB quieter.
+   Driven hard, all of them meet its ceilings.
 3. More machines (DPRO-BBOX, FX machines that take the previous track), songs, MIDI out and clock.
 
 ## Author
@@ -127,6 +126,15 @@ Done so far, all measured on OS 1.32B:
   Known gaps: from about 44 of feedback the Monomachine's carrier moves off the note (by 0.14 of it at 48, a quarter
   at 56–72, noise above) where MONO2K's stays harmonic until it aliases; a deep 1VEN cut (under 32) at 1VOL over 64
   recovers through the low depths up to 0.4 of the index apart for a few hundred ms.
+- **SID-6581** on its page (`tools/ref/chain_sid36.spec`, group `sid`; PW PWAD PWRS WAVE | MOD MSRC MFRQ TUNE): an
+  oscillator on the note, TRI SAW PULS MIX NOIS at one peak level (a square 2.3 dB under full scale), band-limited.
+  The pulse's duty is |PW − 64| / 128: a square at 0 and 127, silent at 64. PWAD sweeps PW on from the trig at 2.70
+  steps a second a step, round and round; PWRS ON starts it again at each trig. A second oscillator at MFRQ (C3 at 0,
+  an octave every 32 steps, the same at every note) or on the previous track's note (MSRC PRCH): SYNC plays it in the
+  wave, hard-synced to the note; RING multiplies the two triangles, unipolar, whatever the wave; R+S rings with the
+  second synced. NOIS is the chip's 23-bit register clocked by the cycle, MIX the triangle AND the saw. Levels within
+  0.3 dB (the 7 dB gap closes), duty and sweep within 0.5 dB, ring and sync partials within 1–3 dB. Known gap: MIX's
+  spectrum (the Monomachine combines the two waves otherwise; its level matches).
 - **The track chain** (`tools/ref/chain.py` writes the specs, `chain_anal.py` reads them), in the Monomachine's order:
   - VOL and LEV squared; PAN cos / sin; the track clips per channel after the pan, just under full scale at LEV 127.
     MONO2K matches within 0.02 dB.
@@ -182,7 +190,7 @@ Done so far, all measured on OS 1.32B:
   8-bit lines, so ping-pong past 0.37 s (and any delay past 0.74 s) slows the line's clock and darkens, where the
   Monomachine stays bright; SWAV-SAW's top harmonics at C7 are 2–6 dB short. Each machine's own level, clean (DIST
   64, group `machine_level`): GND-SIN, SWAV-SAW (alone, with unison, with SUB1 up to 80) and SWAV-ENS within 0.8 dB;
-  the three FM+ within 0.2 dB; the rest still to calibrate: SID-8BIT 6.9–7.0 dB louder, GND-NOIS 2.9 dB
+  the three FM+ and SID-6581 within 0.2 dB; the rest still to calibrate: GND-NOIS 2.9 dB
   louder, VO-6 5.3 dB quieter, and SWAV-SAW's sine sub at C1 1.1–1.2 dB under at SUB1 127. DIGI-WAV is not compared:
   it plays MONO2K's own waves, not the DigiPro's.
 
@@ -196,7 +204,8 @@ has OFF and an octave down in it; 8: the wave bank's choice, MONO2K's 32 for eve
 controls on their new laws, each old value to the new one that measures the same, HISS by its crackle; 10: FM+STAT's
 and FM+DYN's pages, MONO2K's old ones carried over as near as the new pages go, not as they sounded: the old
 operators ran in series, the new side by side; each ratio, depth, decay and feedback to the new page's nearest, SWEP
-to 1FEN; a lock goes with its parameter where it has a place).
+to 1FEN; a lock goes with its parameter where it has a place; 11: SID's page, the first oscillator's wave, duty and
+PWM, MODE and the second's interval carried over, WAV2, FINE and MIX without a place).
 
 The bus's controls are MONO2K's own, so their laws are a design choice, made by measurement (`m2k_host DIR --bus`,
 `tools/bus_curves.py`: every value of each on a reference loop). Before, most of each range sat past where it was
