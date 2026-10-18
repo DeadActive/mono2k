@@ -1022,24 +1022,22 @@ static void focus_left(int code)
     else if (sq.rec && sq.playing && code < 0x80) tag(x, 104, "REC", (ui.now >> 8) & 1);
 }
 
-/* the machine card, after Model:Cycles' engine screens: a rounded ink card, its class, style and stats */
+/* the machine card, after Model:Cycles' engine screens: its name, class, style and stats, in ink on the page */
 static void machine_card(void)
 {
     const mi_t *mi = &MI[pat[cur_pat].machine[ui.trk]];
-    rbox(2, FOCUS_Y + 1, GX - 6, 90, 7, PT_SOLID);
-    rect_grad(2, FOCUS_Y + 91, GX - 6, 12, 60, 0, 1);
-    text(&F_M, 10, FOCUS_Y + 7, mi->name, 0, 1);
+    text(&F_M, 10, FOCUS_Y + 7, mi->name, 1, 1);
     char o[24];
     s_cpy(s_cpy(o, "CLASS:"), mi->cls);
-    text(&F_S, 10, FOCUS_Y + 27, o, 0, 1);
+    text(&F_S, 10, FOCUS_Y + 27, o, 1, 1);
     s_cpy(s_cpy(o, "STYLE:"), mi->style);
-    text(&F_S, 10, FOCUS_Y + 39, o, 0, 1);
+    text(&F_S, 10, FOCUS_Y + 39, o, 1, 1);
     static const char *const ST[3] = {"PNCH", "MTL", "PLST"};
     uint32_t age = ui.card_t ? ui.now - ui.card_t : 1000;
     for (int r = 0; r < 3; r++) {
         int y = FOCUS_Y + 53 + r * 12;
-        text(&F_S, 10, y, ST[r], 0, 1);
-        text(&F_S, 46, y, ":", 0, 0);
+        text(&F_S, 10, y, ST[r], 1, 1);
+        text(&F_S, 46, y, ":", 1, 0);
         for (int i = 0; i < 5; i++) {
             int shown = age > (uint32_t)(60 + (r * 5 + i) * 25);
             int full = i < mi->stat[r];
@@ -1048,7 +1046,7 @@ static void machine_card(void)
             for (int j = -3; j <= 3; j++) {
                 int w = 3 - (j < 0 ? -j : j);
                 for (int q = -w; q <= w; q++)
-                    if (full || q == -w || q == w) px(cx + q, cy + j, 0);
+                    if (full || q == -w || q == w) px(cx + q, cy + j, 1);
             }
         }
     }
