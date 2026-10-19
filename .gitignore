@@ -7,3 +7,6 @@ __pycache__/
 
 # the owner's reference MIDI files (other artists' music): never committed
 reference/midi/
+
+# the owner's reference audio (other artists' recordings, measured locally): never committed
+reference/audio/
