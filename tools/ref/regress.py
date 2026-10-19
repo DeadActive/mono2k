@@ -25,13 +25,14 @@ REF_JSON = os.path.join(HERE, "regress_ref.json")
 GAPS_JSON = os.path.join(HERE, "regress_gaps.json")
 SPECS = ["chain_levels", "chain_dist2", "chain_filt2", "chain_map3", "chain_clip3", "chain_eq2", "chain_srr2",
          "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14", "chain_ens20", "chain_ensacc", "chain_dist21",
-         "chain_fm26", "chain_sid36", "chain_pul38"]
+         "chain_fm26", "chain_sid36", "chain_pul38", "chain_kick40"]
 MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2": "mm_cfilt2", "chain_map3": "mm_cmap3",
           "chain_clip3": "mm_cclip3", "chain_eq2": "mm_ceq2", "chain_srr2": "mm_csrr2", "chain_delay": "mm_cdelay",
           "chain_delay2": "mm_cdelay2", "chain_ftime5": "mm_cftime5", "chain_res6": "mm_cres6",
           "chain_drive12": "mm_cdrive12", "chain_tune13": "mm_ctune13",
           "chain_sidbend14": "mm_csidbend14", "chain_ens20": "mm_cens20", "chain_ensacc": "mm_censacc",
-          "chain_dist21": "mm_cdist21", "chain_fm26": "mm_cfm26", "chain_sid36": "mm_csid36", "chain_pul38": "mm_cpul38"}
+          "chain_dist21": "mm_cdist21", "chain_fm26": "mm_cfm26", "chain_sid36": "mm_csid36", "chain_pul38": "mm_cpul38",
+          "chain_kick40": "mm_ckick40"}
 
 
 def db(v):
@@ -327,6 +328,41 @@ def m_fen_hz(x, a, ld):                   # FM+DYN's first operator's frequency 
     return out
 
 
+def _hit(x):                             # a one-shot from its onset, 300 ms, both channels' mean
+    m = x.mean(axis=1)
+    on = int(np.argmax(np.abs(m) > 0.05 * np.abs(m).max()))
+    return m[on:on + int(0.3 * SR)]
+
+
+def _hit_spec(s):
+    X = np.abs(np.fft.rfft(s, 1 << 16)) ** 2
+    return X, np.fft.rfftfreq(1 << 16, 1 / SR)
+
+
+def m_kick(x, a, ld):                     # a one-shot: rms over 300 ms, its 60-120 and 200-500 Hz shares (dB), its body
+    s = _hit(x)                           # (ms from its peak to -20 dB under 150 Hz)
+    X, f = _hit_spec(s)
+    tot = X.sum()
+    sh = lambda lo, hi: float(10 * np.log10(X[(f >= lo) & (f < hi)].sum() / tot + 1e-12))
+    Y = np.fft.rfft(s, 1 << 16)
+    Y[f >= 150] = 0
+    lo = np.fft.irfft(Y, 1 << 16)[:len(s)]
+    e = np.sqrt(np.convolve(lo ** 2, np.ones(128) / 128, "same"))
+    k = int(np.argmax(e))
+    after = np.where(e[k:] < 0.1 * e[k])[0]
+    return [db(np.sqrt(np.mean(s ** 2))), sh(60, 120), sh(200, 500), 1000.0 * (after[0] if len(after) else len(e) - k) / SR]
+
+
+def m_onset_hf(x, a, ld):                 # a one-shot's first 4 ms over 2 kHz against the whole hit, dB (its click)
+    m = x.mean(axis=1)
+    on = int(np.argmax(np.abs(m) > 1e-4 * np.abs(m).max()))
+    s = m[on:on + int(0.3 * SR)]
+    n4 = int(0.004 * SR)
+    X = np.abs(np.fft.rfft(s[:n4], 1 << 16)) ** 2
+    f = np.fft.rfftfreq(1 << 16, 1 / SR)
+    return [float(10 * np.log10(X[f > 2000].sum() / (np.sum(s ** 2) * (1 << 16) / 2) + 1e-15))]
+
+
 def m_grit(x, a, ld):                     # the energy off the note's harmonics, dB under the whole (character.py)
     import character
     return [character.analyse_x(x, a["note"])["grit"]]
@@ -336,7 +372,8 @@ METRICS = {"res_fit": m_res_fit, "rms": m_rms, "h1": m_h1, "h1_rel": m_h1_rel, "
            "res_db": m_res_db, "resp_at": m_resp_at, "srr_image": m_srr_image, "level_at": m_level_at, "echo_ms": m_echo_ms,
            "echoes": m_echoes, "echo_bands": m_echo_bands, "fenv_ms": m_fenv_ms, "tone_rel": m_tone_rel, "pitch_c": m_pitch_c, "bend_c": m_bend_c,
            "ens_voice": m_ens_voice, "c3_partials": m_c3_partials, "chorus_mix": m_chorus_mix, "lr_corr": m_lr_corr,
-           "ens_voices": m_ens_voices, "fm_side": m_fm_side, "fm_beta": m_fm_beta, "fen_hz": m_fen_hz, "grit": m_grit}
+           "ens_voices": m_ens_voices, "fm_side": m_fm_side, "fm_beta": m_fm_beta, "fen_hz": m_fen_hz, "grit": m_grit,
+           "kick": m_kick, "onset_hf": m_onset_hf}
 
 
 # ------------------------------------------------------------------------------------------------------ cases
@@ -613,6 +650,23 @@ def cases():
         add("sid", "chain_sid36", f"s36_mfrq_n{n}", "fm_side", {"hz": [k * f0n for k in sorted(near)]}, 3.0)
     for v in (0, 127):
         add("sid", "chain_sid36", f"s36_tune_{v:03d}", "pitch_c", {"note": 48}, 1.0)
+    # GND-SIN kicks (chain_kick40): the Monomachine's GND-SIN is a sine with TUNE alone (CC 55); its MIDI notes play
+    # alike at any velocity; a sine through decays 40 and 60, clean and driven, keeps its level, body and bands. A clean
+    # kick's 200-500 Hz share follows the Monomachine's start (its two renders of one setting differ by 5 dB): 6 dB
+    onset = ("the Monomachine's sine starts each note where its free-running phase is, after a ~0.5 ms burst (up to"
+             " +-0.7 of the peak): 14-28 dB more over 2 kHz in a kick's first 4 ms than MONO2K's, which starts at zero."
+             " Not modelled (it may be the emulator's): MONO2K's CLIK is its kick's click")
+    clean, driven = [0.5, 1.0, 6.0, 10.0], [0.5, 1.0, 1.5, 10.0]
+    for v in (64, 100):
+        add("kick", "chain_kick40", f"k40_vel_{v:03d}", "kick", {}, clean)
+    add("kick", "chain_kick40", "k40_tune_064", "level_at", {"hz": [2 * f0_of(60)]}, 3.0)
+    add("kick", "chain_kick40", "k40_init", "kick", {}, clean)
+    for d in (20, 40, 60):
+        for x in (64, 100, 127):
+            add("kick", "chain_kick40", f"k40_d{d:03d}_x{x:03d}", "kick", {}, clean if x == 64 else driven,
+                xfail=onset if d == 20 else None)
+    for c in ("k40_d040_x064", "k40_d040_x100", "k40_d060_x127"):
+        add("kick", "chain_kick40", c, "onset_hf", {}, 3.0, xfail=onset)
     # SWAVE-PULS (chain_pul38): a pulse, its duty PW / 128, the sweep, the unison, the sine subs, its DIST ceiling
     for n in (36, 48, 72):
         add("pul", "chain_pul38", f"p38_lev_n{n}", "rms", {}, 0.5)

@@ -41,10 +41,13 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   Monomachine's (DIST/DSND/EQG bipolar, the filter follows the note); 6 GND-SIN's TUNE +-2 semitones (3.125 c a step);
   7 SWAV-ENS on SWAVE-ENS's page (`ens_v6`); 8 the wave bank's choice (`P_WBNK`, kits 71 wide; the self-test packs the
   older layouts with `pat_pack_v`); 9 the bus's controls on new laws (`bus_v9`, tables `T_V9_*`); 10 FM+STAT's and
-  FM+DYN's pages (`fm_v9`); 11 SID-6581's page (`sid_v10`). Older ones are converted on load; bank A's slots still
-  holding the bank before (A11 so far) are written on SWAV-ENS's old page and the bus's old laws and converted once at
-  build (`ens_v6`, `bus_v9` in `factory()`), until the new bank's parts replace them; the parts with an FM+ or a SID
-  track (`FM_OLD`, `SID_OLD`) are converted so (`fm_v9`, `sid_v10`) until voiced on the new pages. A batch that
+  FM+DYN's pages (`fm_v9`); 11 SID-6581's page (`sid_v10`); 12 GND-SIN's page (TUNE on H, CC 55, as the
+  Monomachine's; MONO2K's own FOLD..HARM on A..G, nothing at init: `gsin_v11`). Older ones are converted on load.
+  Every part of bank A is written on GND-SIN's old page (`pat_v5` lays its old init, `GSIN_V11`) and turned at build;
+  slots still holding the bank before (A11 so far) are written on SWAV-ENS's old page and the bus's old laws and
+  converted once at build (`ens_v6`, `bus_v9` in `factory()`), until the new bank's parts replace them; the parts
+  with an FM+ or a SID track (`FM_OLD`, `SID_OLD`) are converted so (`fm_v9`, `sid_v10`) until voiced on the new
+  pages. A batch that
   replaces demos bumps `FACTORY_REV` and adds the names it replaced to `OLD_DEMO` (m2k_proj.c), so a saved store takes
   the new parts where the old still stand (a demo whose name stays and whose settings change, as HAZE's after the DIST
   fix, takes them the same way). The reference renderer writes 32-bit float WAVs; `tools/ref/sweep.py`'s `load` reads

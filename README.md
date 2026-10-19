@@ -153,6 +153,15 @@ Done so far, all measured on OS 1.32B:
   at each trig; a unison pair ∓0.211 c a step of UNIW off (SWAV-SAW's extended pair's spread), each as loud as UNIL
   says; sine subs an octave and two down, the first up to full scale. Its DIST ceiling sits 2.75 dB under GND-SIN's.
   Levels within 0.3 dB, the unison's beating and the sweep's timing as the Monomachine's.
+- **GND-SIN** on its page (`tools/ref/chain_kick40.spec`, group `kick`): the Monomachine's GND-SIN is a sine with
+  TUNE alone, its page's eighth knob (CC 55). MONO2K's TUNE sits there too (format 12); FOLD SUB NOIS PDEP PDEC CLIK
+  HARM on A..G are its own (a fold, a sine sub an octave down, noise, a pitch drop of up to 24 semitones and its time,
+  a click, a second harmonic), nothing at init, so a new track is the Monomachine's sine. As a kick, through decays 40
+  and 60, clean and driven, it keeps the Monomachine's level (0.5 dB), body (10 ms) and bands (1-1.5 dB). Known gap:
+  the Monomachine's sine starts each note where its free-running phase is, after a ~0.5 ms burst: 14-28 dB more over
+  2 kHz in a kick's first 4 ms than MONO2K's, which starts at zero (not modelled: it may be the emulator's; CLIK is
+  MONO2K's kick's click), and so its shortest kicks (decay 20) differ by about 1 dB. Its beatbox kicks (DPRO-BBOX,
+  samples) sweep from about 175-315 Hz to 65-100 Hz in 25 ms; MONO2K's PDEP 127 with PDEC 60 sweeps 190 to 80 Hz.
 - **The track chain** (`tools/ref/chain.py` writes the specs, `chain_anal.py` reads them), in the Monomachine's order:
   - VOL and LEV squared; PAN cos / sin; the track clips per channel after the pan, just under full scale at LEV 127.
     MONO2K matches within 0.02 dB.

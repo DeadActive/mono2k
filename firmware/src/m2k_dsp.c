@@ -254,14 +254,15 @@ static void mach_block(int ti, int m, int32_t pitch)
     const uint8_t *e = t->eff;
     (void)e;
     switch (m) {
-    case M_GSIN: {                     /* TUNE FOLD SUB NOIS PDEP PDEC CLIK HARM */
+    case M_GSIN: {                     /* FOLD SUB NOIS PDEP PDEC CLIK HARM TUNE: the Monomachine's page is TUNE alone, on
+                                        * H (CC 55); A..G are MONO2K's own, nothing at init (a sine, as its) */
         int32_t env = (int32_t)(t->menv[0] >> 15);
-        int32_t pq = pitch + (PB8(t, P_SYN + 0) >> 7) + ((P7(t, P_SYN + 4) * 24 * env) >> 15);   /* TUNE: +-2 semitones */
+        int32_t pq = pitch + (PB8(t, P_SYN + 7) >> 7) + ((P7(t, P_SYN + 3) * 24 * env) >> 15);   /* TUNE: +-2 semitones */
         uint32_t inc = inc_of(pq);
-        t->menv[0] = mulu_hi(t->menv[0], T_ENV_COEF[P7(t, P_SYN + 5)], 31);
-        int32_t fold = P8(t, P_SYN + 1), sub = T_VOL[P7(t, P_SYN + 2)], noi = T_VOL[P7(t, P_SYN + 3)] >> 1;
-        int32_t harm = T_VOL[P7(t, P_SYN + 7)];
-        int32_t clk = (int32_t)(t->menv[1] >> 15) * P7(t, P_SYN + 6) >> 7;
+        t->menv[0] = mulu_hi(t->menv[0], T_ENV_COEF[P7(t, P_SYN + 4)], 31);
+        int32_t fold = P8(t, P_SYN + 0), sub = T_VOL[P7(t, P_SYN + 1)], noi = T_VOL[P7(t, P_SYN + 2)] >> 1;
+        int32_t harm = T_VOL[P7(t, P_SYN + 6)];
+        int32_t clk = (int32_t)(t->menv[1] >> 15) * P7(t, P_SYN + 5) >> 7;
         t->menv[1] = mulu_hi(t->menv[1], 1700000000u, 31);
         for (int i = 0; i < M2K_SUB; i++) {
             int32_t s = sinp(t->ph[0]);
@@ -1031,7 +1032,7 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     int32_t ow = (int32_t)((((int64_t)7 * dw * (dw < 0 ? -dw : dw)) >> 16) * fe >> 15);
     int32_t sb = P8(t, P_BASE) + ob, sl = sb + P8(t, P_WDTH) + ow;          /* steps, Q8 */
     int32_t key = t->note * 8 * 256;
-    if (m == M_GSIN) key += (PB8(t, P_SYN + 0) >> 7) * 32;               /* and GND-SIN's TUNE (chain_tune13) */
+    if (m == M_GSIN) key += (PB8(t, P_SYN + 7) >> 7) * 32;               /* and GND-SIN's TUNE (chain_tune13) */
     int32_t ph = key + 12 * (sb - 16 * 256), pl = key + 12 * (sl - 16 * 256);
     int lq = P7(t, P_LPQ), hq = P7(t, P_HPQ);
     zsvf_set(&t->lp1, fg_at(T_FG, pl + T_LPC[lq]), T_LPK[lq]);

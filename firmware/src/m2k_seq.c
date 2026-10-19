@@ -315,7 +315,7 @@ void m2k_midi(int status, int d1, int d2)
 static inline uint8_t enc(int i, int n) { return (uint8_t)((i * 128 + 64) / n); }
 
 static const uint8_t MACH_DEF[M_COUNT][8] = {
-    /* GND-SIN  */ {64, 0, 0, 0, 40, 40, 30, 0},
+    /* GND-SIN  */ {0, 0, 0, 0, 40, 0, 0, 64},     /* the Monomachine's init: a sine (its page TUNE alone, on H) */
     /* GND-NOIS */ {64, 0, 0, 40, 0, 40, 0, 0},
     /* SID-6581 */ {0, 0, 127, 0, 0, 0, 64, 64},   /* the Monomachine's init: a triangle, the sweep reset at each trig */
     /* FM+STAT  */ {61, 64, 80, 32, 82, 64, 64, 64},  /* the Monomachine's init: 1/2, 1; a slow decay, a little feedback */

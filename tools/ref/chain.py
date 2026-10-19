@@ -4,8 +4,8 @@
 # one control. A sine (GND-SIN) for the levels, the distortion and the sample rate reduction; noise (GND-NOIS) for the
 # filter and the EQ, whose responses are read as the ratio to the clean noise at the same note (the filter follows the
 # note); a short sine blip for the delay.
-#   .venv/bin/python tools/ref/chain.py specs|specs2|specs3|fm26|sid36|pul38 tools/ref   writes chain_*.spec (rounds one to
-#   three; FM+; SID-6581; SWAVE-PULS)
+#   .venv/bin/python tools/ref/chain.py specs|specs2|specs3|fm26|sid36|pul38|kick40 tools/ref   writes chain_*.spec (rounds
+#   one to three; FM+; SID-6581; SWAVE-PULS; GND-SIN kicks)
 import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -244,11 +244,11 @@ def drive12():
 
 def tune13():
     out = ["# does the filter follow GND-SIN's TUNE? A C4 sine on a resonant LP / HP at the note (WDTH / BASE 16, Q 64:"
-           " settles in ~30 ms), DIST 16 (linear), TUNE across +-100 c: the Monomachine's on CC 55, MONO2K's on A (CC 48),"
-           " both 3.125 c a step. Tracking keeps the level; a fixed filter loses ~10 dB at 100 c"]
+           " settles in ~30 ms), DIST 16 (linear), TUNE across +-100 c, on CC 55 on both (MONO2K's on H since format 12),"
+           " 3.125 c a step. Tracking keeps the level; a fixed filter loses ~10 dB at 100 c"]
     for kind, filt in (("lp", {73: 16, 75: 64}), ("hp", {72: 16, 74: 64})):
         for t in (32, 40, 48, 56, 64, 72, 80, 88, 95):
-            out.append(line(f"t13_{kind}_{t:03d}", SIN, 60, {60: 16, **filt}, gate=1.0, tail=0.05) + f" mm:55={t} m2k:48={t}")
+            out.append(line(f"t13_{kind}_{t:03d}", SIN, 60, {60: 16, **filt}, gate=1.0, tail=0.05) + f" 55={t}")
     return out
 
 
@@ -486,8 +486,26 @@ def pul38():
     return out
 
 
+def kick40():
+    """GND-SIN as a kick on both instruments. The Monomachine's GND-SIN is a sine with TUNE alone (its page's eighth
+    knob, CC 55): velocity's level (its MIDI notes play alike at any velocity), TUNE's centre (a sine and nothing else),
+    the init page (the same sine), and the sine through short and long amp decays, clean and driven: its level, its
+    body and where its energy sits"""
+    K = {57: 0, 59: 0}
+    out = ["# GND-SIN kicks: velocity, TUNE's centre, the init page, decay x drive (HOLD 0, REL 0, D2)"]
+    out += [line(f"k40_vel_{v:03d}", SIN, 38, {**K, 58: 40}, gate=0.5, tail=0.3, vel=v) for v in (64, 100, 127)]
+    out += [line("k40_tune_064", SIN, 60, {55: 64}, gate=1.0)]
+    out += [line("k40_init", SIN, 38, {**K, 58: 40}, gate=0.5, tail=0.3)]
+    out += [line(f"k40_d{d:03d}_x{x:03d}", SIN, 38, {**K, 58: d, 60: x}, gate=0.5, tail=0.3)
+            for d in (20, 40, 60) for x in (64, 100, 127)]
+    return out
+
+
 if __name__ == "__main__":
-    if sys.argv[1] == "pul38":
+    if sys.argv[1] == "kick40":
+        with open(os.path.join(sys.argv[2], "chain_kick40.spec"), "w") as fh:
+            fh.write("\n".join(kick40()) + "\n")
+    elif sys.argv[1] == "pul38":
         with open(os.path.join(sys.argv[2], "chain_pul38.spec"), "w") as fh:
             fh.write("\n".join(pul38()) + "\n")
     elif sys.argv[1] == "sid36":

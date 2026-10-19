@@ -278,7 +278,8 @@ static void tape_pitch_at(int tape, double *wow_c, double *flut_c)
     m2k_init(7);
     cur_pat = 16;                                  /* B01, the blank kit */
     pat[16].machine[0] = M_GSIN;
-    pat[16].kit[0][P_SYN + 4] = 0;                 /* no pitch envelope */
+    pat[16].kit[0][P_SYN + 3] = 0;                 /* no pitch envelope */
+    pat[16].kit[0][P_SYN + 5] = 30;                /* the click the bus's references were measured with (GND-SIN's init before 12) */
     pat[16].kit[0][P_HOLD] = 127;
     pat[16].kit[0][P_DEC] = 127;
     pat[16].glob[G_TAPE] = (uint8_t)tape;
@@ -329,7 +330,8 @@ static void bus_ref(int tracks, int ctl, int v, int gsiz)
     if (tracks) {
         static const uint8_t M[4] = {M_GSIN, M_GNOI, M_SAW, M_ENS}, LEV[4] = {87, 55, 87, 66};
         for (int t = 0; t < 4; t++) { kit_default(p, t, M[t]); p->kit[t][P_LEVL] = LEV[t]; p->kit[t][P_VOL] = 127; }
-        p->kit[0][P_SYN + 4] = 60; p->kit[0][P_DEC] = 30;
+        p->kit[0][P_SYN + 3] = 60; p->kit[0][P_SYN + 4] = 40; p->kit[0][P_SYN + 5] = 30;   /* PDEP PDEC CLIK (page 12) */
+        p->kit[0][P_DEC] = 30;
         p->kit[1][P_SYN] = 112; p->kit[1][P_DEC] = 12; p->kit[1][P_BASE] = 40;
         p->kit[2][P_DEC] = 44; p->kit[2][P_WDTH] = 40;
         p->kit[3][P_HOLD] = 127; p->kit[3][P_DEC] = 127; p->kit[3][P_GATE] = 127; p->kit[3][P_WDTH] = 40;
@@ -437,7 +439,8 @@ static int bus_measure(const char *dir)
             m2k_init(7);
             cur_pat = 16;
             pat[16].machine[0] = M_GSIN;
-            pat[16].kit[0][P_SYN + 4] = 0;
+            pat[16].kit[0][P_SYN + 3] = 0;
+            pat[16].kit[0][P_SYN + 5] = 30;
             pat[16].kit[0][P_HOLD] = 127;
             pat[16].kit[0][P_DEC] = 127;
             pat[16].glob[G_TAPE] = (uint8_t)v;
@@ -487,32 +490,33 @@ static int selftest(void)
         lk(&a, 0, 8, P_SYN + 1, 99);
         lk(&a, 0, 12, P_SYN, 65);
         int n = pat_pack(&a, bl);
-        CHECK(bl[1] == 11, "format: patterns are written as version 11");
+        CHECK(bl[1] == 12, "format: patterns are written as version 12");
         n = pat_pack_v(&a, bl, 4);
         CHECK(pat_unpack(&b, bl, n), "format: a version-4 pattern loads");
         CHECK(b.kit[0][P_DIST] == T_V5_DIST[34] && b.kit[0][P_DTIM] == 32 && b.kit[0][P_DSND] == 64 &&
               b.kit[0][P_DFB] == (64 * 270 * 64 + 16384) >> 15 && b.kit[0][P_VOL] == T_V5_VOL[100],
               "format: version 4 -> 5 converts the chain (DIST, DTIM, DSND, DFB, VOL)");
         CHECK(b.kit[0][P_BASE] == v5_base(T_V5_FPOS[40], 36), "format: the filter is placed against the track's note");
-        CHECK(b.kit[0][P_SYN + 2] == 77 && b.kit[0][P_LFO + L_SPD] == 21 && b.kit[0][P_BITS] == 9 &&
+        /* (GND-SIN's page since version 12: TUNE on H, its other knobs one earlier, values as they were) */
+        CHECK(b.kit[0][P_SYN + 1] == 77 && b.kit[0][P_LFO + L_SPD] == 21 && b.kit[0][P_BITS] == 9 &&
               !memcmp(b.kit[1], a.kit[1], 8) && b.step[0][4].note == 36 && b.step[0][4].flags == ST_TRIG,
               "format: machine, LFO and MONO2K's own settings, trigs untouched");
         int lock_ok = 0;
         for (int i = 0; i < M2K_LOCKS; i++) {
             if (b.lock[i].trk == 0 && b.lock[i].param == P_DTIM && b.lock[i].val == 64) lock_ok |= 1;
-            if (b.lock[i].trk == 0 && b.lock[i].param == P_SYN + 1 && b.lock[i].val == 99) lock_ok |= 2;
+            if (b.lock[i].trk == 0 && b.lock[i].param == P_SYN + 0 && b.lock[i].val == 99) lock_ok |= 2;
         }
         CHECK(lock_ok == 3, "format: a chain lock converts, a machine lock does not");
         int tl = -1;
-        for (int i = 0; i < M2K_LOCKS; i++) if (b.lock[i].trk == 0 && b.lock[i].param == P_SYN) tl = b.lock[i].val;
-        CHECK(b.kit[0][P_SYN] == 32 && tl == 96 && b.kit[1][P_SYN] == 63,
+        for (int i = 0; i < M2K_LOCKS; i++) if (b.lock[i].trk == 0 && b.lock[i].param == P_SYN + 7) tl = b.lock[i].val;
+        CHECK(b.kit[0][P_SYN + 7] == 32 && tl == 96 && b.kit[1][P_SYN] == 63,
               "format: version 5 -> 6 keeps GND-SIN's TUNE in semitones (-1: 32, a lock +1: 96), SWAV-SAW's A as it was");
         CHECK(pat_unpack(&c, bl, n) && !memcmp(&b, &c, sizeof b), "format: the conversion is deterministic");
         int n2 = pat_pack(&b, bl2);
         CHECK(pat_unpack(&c, bl2, n2) && !memcmp(b.kit, c.kit, sizeof b.kit) && !memcmp(b.lock, c.lock, sizeof b.lock),
               "format: version 6 loads unchanged (no second conversion)");
         n = pat_pack_v(&a, bl, 5);
-        CHECK(pat_unpack(&c, bl, n) && c.kit[0][P_SYN] == 32 && c.kit[0][P_DTIM] == 8,
+        CHECK(pat_unpack(&c, bl, n) && c.kit[0][P_SYN + 7] == 32 && c.kit[0][P_DTIM] == 8,
               "format: version 5 takes only the TUNE");
         n = pat_pack_v(&a, bl, 3);
         CHECK(pat_unpack(&c, bl, n) && c.kit[1][0] == 0 && c.kit[1][7] == 64 && c.kit[0][P_DTIM] == 32,
@@ -528,7 +532,7 @@ static int selftest(void)
                 if (!pat_unpack(&c, bl, n)) { moved++; continue; }
                 for (int t = 0; t < M2K_TRACKS; t++) {               /* SWAV-ENS's page converts at 7, FM+'s at 10 */
                     int conv = pat[d].machine[t] == M_ENS || pat[d].machine[t] == M_FMS || pat[d].machine[t] == M_FMD ||
-                               pat[d].machine[t] == M_SID;
+                               pat[d].machine[t] == M_SID || pat[d].machine[t] == M_GSIN;
                     moved += c.kit[t][P_PTCH] != pat[d].kit[t][P_PTCH] || (!conv && memcmp(c.kit[t], pat[d].kit[t], 8) != 0);
                     for (int s = 0; s < M2K_STEPS; s++)
                         moved += c.step[t][s].note != pat[d].step[t][s].note || c.step[t][s].flags != pat[d].step[t][s].flags;
@@ -554,6 +558,7 @@ static int selftest(void)
             static m2k_pattern_t w, w2;
             static uint8_t wb[BLOB_MAX];
             m_cpy(&w, &pat[4], sizeof w);                             /* A05: a DIGI-WAV track among others */
+            for (int t = 0; t < M2K_TRACKS; t++) if (w.machine[t] == M_GSIN) w.machine[t] = M_GNOI;   /* (no page that converts) */
             for (int t = 0; t < M2K_TRACKS; t++) for (int k = 0; k < P_WBNK; k++) w.kit[t][k] = (uint8_t)((t * 31 + k * 7) & 127);
             int wn = pat_pack_v(&w, wb, 7);
             int same = pat_unpack(&w2, wb, wn);
@@ -633,8 +638,9 @@ static int selftest(void)
             static uint8_t wb2[BLOB_MAX];
             wn = pat_pack(&w2, wb);
             int wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
-            CHECK(wn2 == wn && !memcmp(wb, wb2, (size_t)wn), "format: version 11 loads unchanged");
-            w2.machine[3] = M_GSIN;                         /* (a version-10 SID page is the old one: none here) */
+            CHECK(wn2 == wn && !memcmp(wb, wb2, (size_t)wn), "format: today's version loads unchanged");
+            for (int t = 0; t < M2K_TRACKS; t++)             /* (a version-10 SID or GND-SIN page is the old one: none) */
+                if (w2.machine[t] == M_GSIN || w2.machine[t] == M_SID) w2.machine[t] = M_GNOI;
             wn = pat_pack_v(&w2, wb, 10);                   /* and a version-10 pattern: its FM pages already the new ones */
             wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
             int wn3 = pat_pack(&w2, wb);
@@ -664,6 +670,52 @@ static int selftest(void)
             CHECK(ok && lw && !lf && w2.kit[0][P_LFO + 8 + L_DEST] == P_SYN + 0 + 1,
                   "format: version 10 -> 11, an old SID's wave, duty, sweep, ring, interval to SID-6581's page; an LFO follows");
         }
+        /* bank A is written on GND-SIN's old page and turned at build: every GND-SIN track's TUNE where it went, H, at
+         * its centre (as every part has it) */
+        {
+            int gs = 0, gok = 0;
+            m2k_init(2000);
+            for (int d = 0; d < 16; d++)
+                for (int t = 0; t < M2K_TRACKS; t++)
+                    if (pat[d].machine[t] == M_GSIN) { gs++; gok += pat[d].kit[t][P_SYN + 7] == 64; }
+            CHECK(gs > 0 && gok == gs, "factory: bank A's GND-SIN tracks on today's page (TUNE on H)");
+        }
+        /* GND-SIN onto the Monomachine's page (12): TUNE to H, the other knobs one earlier, values as they were; its
+         * locks and an LFO aimed at it from another track go with them; another machine's page stays */
+        {
+            static m2k_pattern_t w, w2;
+            static uint8_t wb[BLOB_MAX];
+            m_cpy(&w, &pat[0], sizeof w);
+            w.machine[0] = M_GSIN; w.machine[1] = M_SAW; w.machine[3] = M_SID;
+            const uint8_t og[8] = {60, 11, 22, 33, 44, 55, 66, 77};               /* TUNE FOLD SUB NOIS PDEP PDEC CLIK HARM */
+            m_cpy(&w.kit[0][P_SYN], og, 8);
+            m_cpy(&w.kit[1][P_SYN], og, 8);
+            m_cpy(&w.kit[3][P_SYN], og, 8);                                       /* a version-11 SID page: today's */
+            for (int i = 0; i < M2K_LOCKS; i++) w.lock[i].trk = 0xFF;
+            lk(&w, 0, 2, P_SYN + 0, 70);                                          /* a TUNE lock */
+            lk(&w, 0, 3, P_SYN + 6, 99);                                          /* a CLIK lock */
+            lk(&w, 1, 3, P_SYN + 0, 50);                                          /* SWAV-SAW's A: stays */
+            w.kit[2][P_LFO + L_TRCK] = enc(0, M2K_TRACKS); w.kit[2][P_LFO + L_DEST] = P_SYN + 4 + 1;   /* T3's LFO on T1's PDEP */
+            w.kit[2][P_LFO + 8 + L_TRCK] = enc(1, M2K_TRACKS); w.kit[2][P_LFO + 8 + L_DEST] = P_SYN + 4 + 1;   /* and T2's E */
+            int wn = pat_pack_v(&w, wb, 11);
+            const uint8_t ng[8] = {11, 22, 33, 44, 55, 66, 77, 60};               /* FOLD SUB NOIS PDEP PDEC CLIK HARM TUNE */
+            int ok = pat_unpack(&w2, wb, wn) && !memcmp(&w2.kit[0][P_SYN], ng, 8) && !memcmp(&w2.kit[1][P_SYN], og, 8) &&
+                     !memcmp(&w2.kit[3][P_SYN], og, 8);
+            int lt = 0, lc = 0, ls = 0;
+            for (int i = 0; i < M2K_LOCKS; i++) {
+                const m2k_lock_t *l = &w2.lock[i];
+                if (l->trk == 0 && l->step == 2) lt = l->param == P_SYN + 7 && l->val == 70;
+                if (l->trk == 0 && l->step == 3) lc = l->param == P_SYN + 5 && l->val == 99;
+                if (l->trk == 1 && l->step == 3) ls = l->param == P_SYN + 0 && l->val == 50;
+            }
+            CHECK(ok && lt && lc && ls && w2.kit[2][P_LFO + L_DEST] == P_SYN + 3 + 1 && w2.kit[2][P_LFO + 8 + L_DEST] == P_SYN + 4 + 1,
+                  "format: version 11 -> 12, GND-SIN's TUNE to H and the rest a knob earlier, its locks and an LFO with them;"
+                  " SWAV-SAW's and SID-6581's pages as they were");
+            static uint8_t wb2[BLOB_MAX];
+            wn = pat_pack(&w2, wb);
+            int wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
+            CHECK(wn2 == wn && !memcmp(wb, wb2, (size_t)wn), "format: version 12 loads unchanged (no second conversion)");
+        }
         /* the FX machines (MONO2K's own designs, no reference to hold them to): a SWAV-SAW on T1, out of the mix by its
          * VOL, into an FX on T2 opened with each of its trigs; CHORUS widens by WID, RING changes the sound by MIX, DYNAMIX
          * brings a soft hit up to a loud one */
@@ -671,7 +723,9 @@ static int selftest(void)
             static int16_t kb[4 * M2K_SR + 512];
             double pk, rm;
             const int fp = 47;                                         /* C16, a scratch slot */
+            static const uint8_t GSRC[8] = {0, 0, 0, 40, 40, 30, 0, 64};    /* a GND-SIN source as these were written on */
             #define FXPAT(fxm, src, vl) do { m2k_init(2000); pat_init(&pat[fp], "FXT"); kit_default(&pat[fp], 0, src); kit_default(&pat[fp], 1, fxm); \
+                if ((src) == M_GSIN) m_cpy(&pat[fp].kit[0][P_SYN], GSRC, 8); \
                 pat[fp].kit[0][P_VOL] = 0; pat[fp].kit[1][P_HOLD] = 127; pat[fp].glob[G_DRIV] = 0; \
                 for (int s_ = 0; s_ < 16; s_ += 4) { pat[fp].step[0][s_].flags = ST_TRIG; pat[fp].step[0][s_].note = 48; \
                     pat[fp].step[1][s_].flags = ST_TRIG; pat[fp].step[1][s_].note = 48; } (void)(vl); } while (0)
@@ -817,8 +871,9 @@ static int selftest(void)
                   "format: a chord LEV 0 silenced but locks raise keeps its voices there, OFF on the other trigs");
             CHECK(off3[8] == 3 && !off3[0] && !off3[4] && g.kit[3][P_SYN] == 62 && g.kit[3][P_SYN + 1] == 62,
                   "format: a LEV lock to 0 is an OFF trig; a chord never raised is OFF");
-            CHECK(g.kit[0][P_LFO + L_DEST] == 0 && g.kit[0][P_LFO + 8 + L_DEST] == P_SYN + 1 && g.kit[0][P_LFO + 16 + L_DEST] == P_ATK + 1 &&
-                  lfo_dest_lock == 0, "format: an LFO aimed at an ENS interval is cleared (also a step's lock onto one); others kept");
+            CHECK(g.kit[0][P_LFO + L_DEST] == 0 && g.kit[0][P_LFO + 8 + L_DEST] == P_SYN + 7 + 1 && g.kit[0][P_LFO + 16 + L_DEST] == P_ATK + 1 &&
+                  lfo_dest_lock == 0, "format: an LFO aimed at an ENS interval is cleared (also a step's lock onto one); others kept"
+                  " (the one on T5's GND-SIN TUNE where TUNE went, H)");
         }
         /* and every chord of bank A as it stood at ea69d53 (the fixture, version 6) keeps its notes at every trig */
         {

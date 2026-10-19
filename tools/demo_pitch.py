@@ -92,8 +92,8 @@ def voices(m, e):
     """the pitches (MIDI, fractional) a trig means to sound: the fundamental first"""
     k = e["eff"]
     n = e["note"] + (k[P_PTCH] - 64)
-    if m == M_GSIN:
-        return [n + (k[P_SYN] - 64) * 2 / 64]
+    if m == M_GSIN:                    # TUNE on H since format 12
+        return [n + (k[P_SYN + 7] - 64) * 2 / 64]
     if m == M_SAW:
         return [n + (k[P_SYN + 7] - 64) * 2 / 64]
     if m == M_ENS:                     # the Monomachine's page (format 7): PCH2..4 off its table, TUNE on all
@@ -206,7 +206,7 @@ def main():
             if m == M_GNOI or not ev:
                 continue
             x = load(os.path.join(d, f"p{p:02d}_t{t}.wav"))[:, 0]
-            drum = roles[t - 1] in DRUMS if roles[t - 1] else m == M_GSIN and ev[0]["eff"][P_SYN + 4] > 0 and ev[0]["eff"][P_DEC] < 40
+            drum = roles[t - 1] in DRUMS if roles[t - 1] else m == M_GSIN and ev[0]["eff"][P_SYN + 3] > 0 and ev[0]["eff"][P_DEC] < 40
             res = [measure(x, ev, i, len(x), m) for i in range(len(ev))]
             res = [r for r in res if r]
             if not res:

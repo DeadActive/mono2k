@@ -338,6 +338,32 @@ static int sid_val(int prm, int v)
     }
 }
 
+/* format 12: GND-SIN on the Monomachine's page, TUNE on its eighth knob (CC 55) and MONO2K's own before it. A..H were
+ * TUNE FOLD SUB NOIS PDEP PDEC CLIK HARM, are FOLD SUB NOIS PDEP PDEC CLIK HARM TUNE: the kit, its locks and every LFO
+ * aimed at one of them (from any track) move, values as they were */
+static int gsin_to(int k) { return k == 0 ? 7 : k - 1; }
+
+static void gsin_v11(m2k_pattern_t *p)
+{
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        if (p->machine[t] != M_GSIN) continue;
+        uint8_t *k = &p->kit[t][P_SYN], o[8];
+        m_cpy(o, k, 8);
+        for (int i = 0; i < 8; i++) k[gsin_to(i)] = o[i];
+        for (int i = 0; i < M2K_LOCKS; i++) {
+            m2k_lock_t *l = &p->lock[i];
+            if (l->trk == t && l->param < P_SYN + 8) l->param = (uint8_t)(P_SYN + gsin_to(l->param - P_SYN));
+        }
+    }
+    for (int t = 0; t < M2K_TRACKS; t++)
+        for (int l = 0; l < 3; l++) {
+            uint8_t *b = &p->kit[t][P_LFO + 8 * l];
+            int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1;
+            if (p->machine[to] != M_GSIN || dest < P_SYN || dest >= P_SYN + 8) continue;
+            b[L_DEST] = (uint8_t)(P_SYN + gsin_to(dest - P_SYN) + 1);
+        }
+}
+
 static void sid_v10(m2k_pattern_t *p)
 {
     for (int t = 0; t < M2K_TRACKS; t++) {
@@ -390,11 +416,15 @@ static void lfo(m2k_pattern_t *p, int t, int l, int dest, int wave, int mult, in
     b[L_TRIG] = enc(trig, 5);
 }
 
+/* GND-SIN's old page's init (TUNE first, a pitch drop and a click): what the parts and the older formats were written on */
+static const uint8_t GSIN_V11[8] = {64, 0, 0, 0, 40, 40, 30, 0};
+
 /* the blank kit of MONO2K's chain before version 5: what an old pattern was written against (the self-test's) */
 static void kit_v4(m2k_pattern_t *p, int t, int m)
 {
     static const uint8_t D[] = {0, 0, 64, 64, 0, 100, 64, 0, 0, 127, 0, 0, 0, 64, 64, 64, 64, 64, 0, 12, 0, 50, 0, 110};
     kit_default(p, t, m);
+    if (m == M_GSIN) m_cpy(&p->kit[t][P_SYN], GSIN_V11, 8);
     m_cpy(&p->kit[t][P_ATK], D, sizeof D);
     p->kit[t][P_LEVL] = 110;
 }
@@ -407,7 +437,10 @@ static m2k_pattern_t *pat_v5(int i, const char *name, int bpm, const uint8_t *ma
 {
     m2k_pattern_t *p = &pat[i];
     pat_init(p, name);
-    for (int t = 0; t < M2K_TRACKS; t++) kit_default(p, t, machines[t]);
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        kit_default(p, t, machines[t]);
+        if (machines[t] == M_GSIN) m_cpy(&p->kit[t][P_SYN], GSIN_V11, 8);  /* the parts are written on that page */
+    }
     p->glob[G_TMPO] = (uint8_t)(bpm - 30);
     p->glob[G_VERB] = 50;
     return p;
@@ -1029,4 +1062,6 @@ static void factory(void)
      * voiced on them */
     static const uint8_t FM_OLD[] = {1, 5, 6, 9, 10, 11, 12};
     for (unsigned i = 0; i < sizeof FM_OLD; i++) fm_v9(&pat[FM_OLD[i]]);
+    /* and every part, its GND-SIN tracks written on that machine's old page (TUNE first): onto the Monomachine's */
+    for (int i = 0; i < 16; i++) gsin_v11(&pat[i]);
 }

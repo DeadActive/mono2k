@@ -63,8 +63,8 @@ static int m_place(int m) { for (int i = 0; i < M_COUNT; i++) if (M_ORDER[i] == 
 
 static const mi_t MI[M_COUNT] = {
     {"GND-SIN", "GND", "SINE", "PERC", {5, 1, 3},
-     {{"TUNE", "TUNE", K_TUN2}, {"FOLD", "SINE FOLD", K_NUM}, {"SUB", "SUB LEVEL", K_NUM}, {"NOIS", "NOISE", K_NUM},
-      {"PDEP", "PITCH DROP", K_NUM}, {"PDEC", "DROP TIME", K_TIME}, {"CLIK", "CLICK", K_NUM}, {"HARM", "2ND HARMONIC", K_NUM}}},
+     {{"FOLD", "SINE FOLD", K_NUM}, {"SUB", "SUB LEVEL", K_NUM}, {"NOIS", "NOISE", K_NUM}, {"PDEP", "PITCH DROP", K_NUM},
+      {"PDEC", "DROP TIME", K_TIME}, {"CLIK", "CLICK", K_NUM}, {"HARM", "2ND HARMONIC", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
     {"GND-NOIS", "GND", "NOISE", "PERC", {3, 4, 1},
      {{"COLR", "COLOUR", K_BI}, {"S&H", "PITCHED HOLD", K_NUM}, {"META", "METAL MIX", K_NUM}, {"MSPR", "METAL SPREAD", K_NUM},
       {"PDEP", "PITCH DROP", K_NUM}, {"PDEC", "DROP TIME", K_TIME}, {"GRIT", "8-BIT GRIT", K_NUM}, {"-", "-", K_NUM}}},

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Mutation tests of the pattern format's conversions (fm_v9, sid_v10): each mutant is one small change to a conversion;
+# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11): each mutant is one small change to a conversion;
 # the self-test must fail on every one. A survivor is a conversion the self-test does not hold.
 #   .venv/bin/python tools/ref/mutate_formats.py [TREE]     (default: this checkout; it restores each file it touches)
 import subprocess, sys, os
@@ -46,7 +46,19 @@ M = [
  ("SID MSRC not MFRQ", F, "k[5] = 0; k[6] = (uint8_t)sid_val(4, o[4]);", "k[5] = 127; k[6] = (uint8_t)sid_val(4, o[4]);"),
  ("SID LFO not followed", F, "            int n = SID_TO[dest - P_SYN];\n            b[L_DEST] = (uint8_t)(n < 0 ? 0 : P_SYN + n + 1);", "            int n = SID_TO[dest - P_SYN];\n            (void)n;"),
  ("SID not converted", P, "    if (ver < 11) sid_v10(p);", "    if (ver < 1) sid_v10(p);"),
+ ("GSIN not converted", P, "    if (ver < 12) gsin_v11(p);", "    if (ver < 1) gsin_v11(p);"),
+ ("GSIN converted on a version-12 pattern", P, "    if (ver < 12) gsin_v11(p);", "    if (ver < 13) gsin_v11(p);"),
+ ("GSIN TUNE not to H", F, "static int gsin_to(int k) { return k == 0 ? 7 : k - 1; }", "static int gsin_to(int k) { return k == 0 ? 0 : k - 1; }"),
+ ("GSIN the rest not shifted", F, "static int gsin_to(int k) { return k == 0 ? 7 : k - 1; }", "static int gsin_to(int k) { return k == 0 ? 7 : k; }"),
+ ("GSIN locks left", F, "            if (l->trk == t && l->param < P_SYN + 8) l->param = (uint8_t)(P_SYN + gsin_to(l->param - P_SYN));", "            (void)l;"),
+ ("GSIN LFO not followed", F, "            b[L_DEST] = (uint8_t)(P_SYN + gsin_to(dest - P_SYN) + 1);", "            (void)b;"),
+ ("GSIN LFO off by one", F, "            b[L_DEST] = (uint8_t)(P_SYN + gsin_to(dest - P_SYN) + 1);", "            b[L_DEST] = (uint8_t)(P_SYN + gsin_to(dest - P_SYN));"),
+ ("GSIN another machine's page turned", F, "        if (p->machine[t] != M_GSIN) continue;\n        uint8_t *k = &p->kit[t][P_SYN], o[8];\n        m_cpy(o, k, 8);\n        for (int i = 0; i < 8; i++)",
+                                          "        if (p->machine[t] == M_COUNT) continue;\n        uint8_t *k = &p->kit[t][P_SYN], o[8];\n        m_cpy(o, k, 8);\n        for (int i = 0; i < 8; i++)"),
+ ("GSIN an LFO on another machine moved", F, "            if (p->machine[to] != M_GSIN || dest < P_SYN", "            if (dest < P_SYN"),
+ ("GSIN bank A not turned at build", F, "    for (int i = 0; i < 16; i++) gsin_v11(&pat[i]);", "    (void)0;"),
  ("SID converted on a version-11 pattern", P, "    if (ver < 11) sid_v10(p);", "    if (ver < 12) sid_v10(p);"),
+ ("SID converted on a version-12 pattern", P, "    if (ver < 11) sid_v10(p);", "    if (ver < 13) sid_v10(p);"),
 ]
 def run():
     r = subprocess.run("cc -O2 -w -Ifirmware/src -Ifirmware/gen -o build/host/m2k_mut host/m2k_host.c -lm && build/host/m2k_mut --selftest",
