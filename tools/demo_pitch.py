@@ -21,7 +21,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "ref
 from sweep import load, SR
 
 M_GSIN, M_GNOI, M_SID, M_FMS, M_FMD, M_SAW, M_ENS, M_WAV, M_VOX = range(9)
-MNAME = ["GND-SIN", "GND-NOIS", "SID-8BIT", "FM+STAT", "FM+DYN", "SWAV-SAW", "SWAV-ENS", "DIGI-WAV", "VOX-6"]
+MNAME = ["GND-SIN", "GND-NOIS", "SID-6581", "FM+STAT", "FM+DYN", "SWAV-SAW", "SWAV-ENS", "DIGI-WAV", "VOX-6", "FM+PAR",
+         "SWAV-PUL", "FX-CHORS", "FX-RING", "FX-DYNMX"]
 P_SYN, P_DEC, P_PORT, P_BASE, P_WDTH, P_HPQ, P_LPQ, P_PTCH, P_LFO = 0, 10, 15, 16, 17, 18, 19, 36, 42
 NAMES = "C C# D D# E F F# G G# A A# B".split()
 # the keys and the tracks' roles each part declares: docs/bank-a.md's table; the old bank's (ea69d53, kept as a
@@ -129,6 +130,7 @@ def peak_near(sp, df, f, span=80):
     k = lo + int(np.argmax(sp[lo:hi]))
     a, b, c = np.log(sp[k - 1] + 1e-12), np.log(sp[k] + 1e-12), np.log(sp[k + 1] + 1e-12)
     d = 0.5 * (a - c) / (a - 2 * b + c) if a - 2 * b + c else 0
+    d = max(-0.5, min(0.5, d))         # a nearly flat spectrum (a short stab) throws the parabola far off its bin
     return 1200 * math.log2((k + d) * df / f)
 
 

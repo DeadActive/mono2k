@@ -49,9 +49,24 @@ def metrics(path):
     return 20 * math.log10(rms), 100 * low, 20 * math.log10(np.abs(x).max() / rms)
 
 
+def solo_low(slot, t):
+    """the share of a track's own energy in 30-120 Hz, from its render alone (both channels)"""
+    x = load(os.path.join(ROOT, "build", "pitch", f"p{slot:02d}_t{t + 1}.wav")).mean(axis=1)
+    n = 1 << 14
+    segs = [x[i:i + n] * np.hanning(n) for i in range(0, len(x) - n, n // 2)]
+    if not segs:
+        return 0.0
+    p = np.mean([np.abs(np.fft.rfft(s)) ** 2 for s in segs], axis=0)
+    fr = np.fft.rfftfreq(n, 1 / SR)
+    tot = p[fr > 0].sum()
+    return float(p[(fr >= 30) & (fr < 120)].sum() / tot) if tot > 0 else 0.0
+
+
 def solo(slot, t):
-    """(its rms while it sounds, its peak), dB, from the track's render alone"""
-    x = load(os.path.join(ROOT, "build", "pitch", f"p{slot:02d}_t{t + 1}.wav"))[:, 0]
+    """(its rms while it sounds, its peak), dB, from the track's render alone: its power over both channels, so a
+    track panned to one side reads as it would in the middle (the pan is constant-power, cos / sin)"""
+    y = load(os.path.join(ROOT, "build", "pitch", f"p{slot:02d}_t{t + 1}.wav"))
+    x = np.sqrt(y[:, 0] ** 2 + y[:, 1] ** 2)
     n = 1024
     m = len(x) // n
     e = np.mean(x[:m * n].reshape(m, n) ** 2, axis=1)
@@ -117,11 +132,13 @@ def balance(s, slot, name, roles, res):
             elif low < low_h + 0.05:
                 err = max(err, 0.0)
         errs[t] = err
+        if role == "bass" and solo_low(slot, t) > 0.5:
+            base[t] = err                          # a bass whose energy is low: its level does carry the low end
     # a part already at VOL and LEV 127 short of its target (a SWAV-SAW bass: its clip's ceiling is 10.5 dB under
     # GND-SIN's, as the Monomachine's): every other track comes down by the shortfall instead, the kick too, and the
-    # trim takes the mix back to HAZE's level. Its level target only, never the low end's push (a bass whose energy
-    # sits over 120 Hz, a folded one, cannot reach the low end by level: chasing it ran every other track down), and
-    # 6 dB a round at most
+    # trim takes the mix back to HAZE's level. Its level target, and the low end's push only for a bass whose own energy
+    # is mostly in 30-120 Hz (a folded bass's sits over 120 Hz: no level reaches the low end, and chasing it ran every
+    # other track down); 6 dB a round at most
     def vol_lev(t):
         st = re.search(r"SET\(p, %d,.*?\);" % t, seg, re.S).group(0)
         lm = re.search(r"P_LEVL, (\d+)", st)
