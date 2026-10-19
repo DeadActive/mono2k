@@ -129,10 +129,12 @@ typedef struct {
     uint8_t eff[P_COUNT];
     int32_t mod[P_COUNT], mod_acc[P_COUNT];
     int32_t peak;
-    /* the modulation effect */
+    /* the modulation effect; its side (chorus and flanger across the stereo) high-passed and resampled as the mid */
     uint32_t mph;
     uint16_t mw;
     int32_t map[4], mfb;
+    zop_t mhp1, mhp2;
+    int32_t msrr_hold, msrr_prev;
 } trk_t;
 
 static trk_t trk[M2K_TRACKS];
@@ -980,8 +982,11 @@ static void voice_off(int ti)
 }
 
 /* the modulation effect, one sample: a chorus (7..17 ms, swept), a flanger (0.5..5 ms, fed back) or a phaser (four
- * allpasses swept from 0.1 to 0.9, fed back), all on one triangle LFO; mix 0..254 of the wet */
-static inline int32_t mod_tick(trk_t *t, int16_t *buf, int32_t x, int type, uint32_t inc, int32_t dep, int32_t mix)
+ * allpasses swept from 0.1 to 0.9, fed back), all on one triangle LFO; mix 0..254 of the wet. The chorus and the
+ * flanger are stereo (MONO2K's own): two taps swept in opposite ways, the left hearing one and the right the other;
+ * the mid (their mean) is returned, the side (half their difference) set in *side; the phaser stays in the middle */
+static inline int32_t mod_tick(trk_t *t, int16_t *buf, int32_t x, int type, uint32_t inc, int32_t dep, int32_t mix,
+                               int32_t *side)
 {
     t->mph += inc;
     int32_t tri = (int32_t)(t->mph >> 16);
@@ -998,16 +1003,24 @@ static inline int32_t mod_tick(trk_t *t, int16_t *buf, int32_t x, int type, uint
         y = v;
         t->mfb = CLAMP(y, -65536, 65536);
     } else {
-        int32_t d8 = type == 0 ? (309 << 8) + (int32_t)(((int64_t)tri * dep * 441) >> 14)    /* Q8 samples */
-                               : (20 << 8) + (int32_t)(((int64_t)tri * dep * 200) >> 14);
-        int32_t pos = ((int32_t)t->mw << 8) - d8;
-        uint32_t j = (uint32_t)(pos >> 8);
-        int32_t f = pos & 255;
-        y = (buf[j & (MOD_LEN - 1)] * (256 - f) + buf[(j + 1) & (MOD_LEN - 1)] * f) >> 8;
-        int32_t w = type == 1 ? x + ((y * 18000) >> 15) : x;
+        int32_t ys[2];
+        for (int c = 0; c < 2; c++) {                                /* the taps: the sweep and its mirror */
+            int32_t tr = c ? 32767 - tri : tri;
+            int32_t d8 = type == 0 ? (309 << 8) + (int32_t)(((int64_t)tr * dep * 441) >> 14)   /* Q8 samples */
+                                   : (20 << 8) + (int32_t)(((int64_t)tr * dep * 200) >> 14);
+            int32_t pos = ((int32_t)t->mw << 8) - d8;
+            uint32_t j = (uint32_t)(pos >> 8);
+            int32_t f = pos & 255;
+            ys[c] = (buf[j & (MOD_LEN - 1)] * (256 - f) + buf[(j + 1) & (MOD_LEN - 1)] * f) >> 8;
+        }
+        int32_t w = type == 1 ? x + ((ys[0] * 18000) >> 15) : x;
         buf[t->mw & (MOD_LEN - 1)] = (int16_t)sat16(w);
         t->mw++;
+        y = (ys[0] + ys[1]) >> 1;
+        *side = (((ys[0] - ys[1]) >> 1) * mix) >> 8;
+        return x + (((y - x) * mix) >> 8);
     }
+    *side = 0;
     return x + (((y - x) * mix) >> 8);
 }
 
@@ -1115,7 +1128,8 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
         if (xr) s = (int32_t)(int16_t)((uint16_t)sat16(s) ^ (uint16_t)xm);
         int32_t a = t->amp0 + (((t->amp1 - t->amp0) * i) >> 4);
         s = (int32_t)(((int64_t)s * a) >> 15);
-        if (mmix) s = mod_tick(t, mod_mem[ti], s, mtype, minc, mdep, mmix);
+        int32_t msd = 0;
+        if (mmix) s = mod_tick(t, mod_mem[ti], s, mtype, minc, mdep, mmix, &msd);
         tout[ti][i] = (int16_t)sat16(s);                                  /* an FX machine's input: before VOL, so VOL 0
                                                                            * keeps a track out of the mix and in the FX */
         s = (int32_t)(((int64_t)s * vol) >> 15);
@@ -1149,6 +1163,18 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
             }
             if (bits < 16) ss = (sat16(ss) >> (16 - bits)) * (1 << (16 - bits));
             sd = (int32_t)(((int64_t)ss * T_PAN[64]) >> 15);
+        }
+        if (mmix && mtype != 2) {      /* the MOD effect's side: VOL, two high-passes (the low end in the middle), SRR */
+            int32_t ms = (int32_t)(((int64_t)msd * vol) >> 15);
+            t->mhp1.G = t->mhp2.G = MOD_SIDE_HP;
+            ms -= zop_lp(&t->mhp1, ms);
+            ms -= zop_lp(&t->mhp2, ms);
+            if (srr) {
+                if (t->srr_acc < sinc) { t->msrr_prev = t->msrr_hold; t->msrr_hold = ms; }
+                ms = t->msrr_prev + (int32_t)(((int64_t)(t->msrr_hold - t->msrr_prev) * (int32_t)t->srr_acc) >> 16);
+            }
+            if (bits < 16) ms = (sat16(ms) >> (16 - bits)) * (1 << (16 - bits));
+            sd += (int32_t)(((int64_t)ms * T_PAN[64]) >> 15);
         }
         int32_t l = (int32_t)CLAMP((((int64_t)s * gl) >> 15) + sd, -T_CLIP, T_CLIP), r = (int32_t)CLAMP((((int64_t)s * gr) >> 15) - sd, -T_CLIP, T_CLIP);
         int32_t as = l < 0 ? -l : l, ar = r < 0 ? -r : r;

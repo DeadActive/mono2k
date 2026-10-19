@@ -63,6 +63,9 @@ def mod_hz(v):
     return 0.1 * 100 ** (v / 127.0)
 out.append(arr("T_MOD_INC", "uint32_t", [round(mod_hz(v) / SR * 2 ** 32) for v in range(128)], 8))
 out.append(arr("T_MOD_HZ10", "uint16_t", [max(1, round(mod_hz(v) * 10)) for v in range(128)]))
+# its chorus and flanger across the stereo (MONO2K's own): the side through two one-pole high-passes at 160 Hz (Q24), so
+# the low end stays in the middle (-20 dB at 50 Hz)
+out.append("#define MOD_SIDE_HP %d\n" % round((1 - math.exp(-2 * math.pi * 160 / SR)) * 2 ** 24))
 # SWAV-SAW, after the Monomachine's SWAVE-SAW (measured on OS 1.32B, tools/ref/swave_saw*.spec): the unison pair's
 # pitch ratios a step of UNIW (-0.4168 c below, +0.4276 c above), the extended pair's (+-0.2109 c), Q24
 out.append(arr("T_SW1LO", "uint32_t", [round(2 ** 24 * 2 ** (-0.4168 * v / 1200)) for v in range(128)], 8))

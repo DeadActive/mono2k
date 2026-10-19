@@ -772,6 +772,27 @@ static int selftest(void)
             }
             printf("     FX-DYNAMIX: loud against soft %.1f dB at RAT 0, %.1f dB at RAT 127\n", spread[0], spread[1]);
             CHECK(spread[1] < spread[0] - 6, "FX-DYNAMIX: brings a soft hit up to a loud one");
+            /* the MOD effect's chorus across the stereo (MONO2K's own): a saw through it wide, a low sine through it still
+             * in the middle (the side high-passed), the phaser and MIX 0 mono */
+            double mc[4];
+            for (int c = 0; c < 4; c++) {
+                m2k_init(2000);
+                pat_init(&pat[fp], "MOD");
+                kit_default(&pat[fp], 0, c == 1 ? M_GSIN : M_SAW);
+                pat[fp].kit[0][P_HOLD] = 127; pat[fp].glob[G_DRIV] = 0;
+                pat[fp].kit[0][P_MODT] = enc(c == 2 ? 2 : 0, 3); pat[fp].kit[0][P_MODR] = 60;
+                pat[fp].kit[0][P_MODD] = 127; pat[fp].kit[0][P_MODM] = (uint8_t)(c == 3 ? 0 : 100);
+                for (int s_ = 0; s_ < 16; s_ += 4) {
+                    pat[fp].step[0][s_].flags = ST_TRIG; pat[fp].step[0][s_].note = (uint8_t)(c == 1 ? 29 : 48);
+                }
+                fx_measure(fp, 0x3F, 1.0, kb, &pk, &rm);
+                double sl = 0, sr = 0, slr = 0;
+                for (int i = M2K_SR / 4; i < M2K_SR; i++) { sl += (double)kb[2 * i] * kb[2 * i]; sr += (double)kb[2 * i + 1] * kb[2 * i + 1]; slr += (double)kb[2 * i] * kb[2 * i + 1]; }
+                mc[c] = slr / sqrt(sl * sr + 1);
+            }
+            printf("     MOD chorus L/R: a saw %.3f, an F1 sine %.4f; the phaser %.4f, MIX 0 %.4f\n", mc[0], mc[1], mc[2], mc[3]);
+            CHECK(mc[0] < 0.9 && mc[1] > 0.99 && mc[2] > 0.999 && mc[3] > 0.999,
+                  "MOD: the chorus wide on a saw, an F1 sine in the middle; the phaser and MIX 0 mono");
             #undef FXPAT
         }
         /* the bank on the screen: a DIGI-WAV track's SYN has a third page, BANK; the wave knob names the bank's waves */

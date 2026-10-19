@@ -142,9 +142,10 @@ Done so far, all measured on OS 1.32B:
   0.3 dB (the 7 dB gap closes), duty and sweep within 0.5 dB, ring and sync partials within 1–3 dB. Known gap: MIX's
   spectrum (the Monomachine combines the two waves otherwise; its level matches).
 - **FX-CHORUS, FX-RINGMOD, FX-DYNAMIX** (FX-CHORS, FX-RING, FX-DYNMX on the screen), new, on the Monomachine's pages
-  but MONO2K's own designs: the emulator they would be measured on passes no neighbouring track into any FX machine
-  (its THRU, REVERB and CHORUS all stay at digital silence, whether MIDI or the OS's own trigs open them; `mm_ref`'s
-  loop takes those, `Q track step`). Each takes the previous track's output, after its amp and before its VOL (so VOL
+  but MONO2K's own designs. On the emulator an FX machine hears the track before only once its KIT > EDIT KIT TRACK
+  page has been opened (`mm_ref`'s loop does it); then RINGMOD and REVERB pass it, while THRU, CHORUS and DYNAMIX stay
+  at digital silence under every input and knob, so FX-CHORS and FX-DYNMX stay unmeasured; RINGMOD's laws are measured
+  and FX-RING is to be rebuilt to them. Each takes the previous track's output, after its amp and before its VOL (so VOL
   0 keeps a track out of the mix and in the FX), INP its level (100 as it is), and opens on its own trigs as the
   Monomachine's FX tracks do (HOLD 127 by default). CHORUS (DEL DEP SPD MIX | FB WID LP INP): two taps swept in
   opposite ways off one line, their mean the chorus, their difference its width added across the stereo after the pan,
@@ -159,6 +160,12 @@ Done so far, all measured on OS 1.32B:
   at each trig; a unison pair ∓0.211 c a step of UNIW off (SWAV-SAW's extended pair's spread), each as loud as UNIL
   says; sine subs an octave and two down, the first up to full scale. Its DIST ceiling sits 2.75 dB under GND-SIN's.
   Levels within 0.3 dB, the unison's beating and the sweep's timing as the Monomachine's.
+- **The MOD effect** (MONO2K's own, every track: CHOR FLNG PHAS, its rate 0.1-10 Hz, depth and mix): the chorus (7-17
+  ms) and the flanger (0.5-5 ms, fed back) are stereo, two taps swept in opposite ways, the left hearing one and the
+  right the other; their difference, the side, goes through VOL, two high-passes at 160 Hz (the low end stays in the
+  middle: an F1 sine 0.997 alike left and right) and the track's SRR, added after the pan. A saw through the chorus at
+  full depth: L/R 0.62-0.87 by MIX, its side 3-7 dB under its mid over 250 Hz, 30 dB under 60 Hz. The phaser stays
+  in the middle.
 - **GND-SIN** on its page (`tools/ref/chain_kick40.spec`, group `kick`): the Monomachine's GND-SIN is a sine with
   TUNE alone, its page's eighth knob (CC 55). MONO2K's TUNE sits there too (format 12); FOLD SUB NOIS PDEP PDEC CLIK
   HARM on A..G are its own (a fold, a sine sub an octave down, noise, a pitch drop of up to 24 semitones and its time,
