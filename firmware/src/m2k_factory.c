@@ -513,7 +513,7 @@ static void factory(void)
      * second half: a dark pad, chorused and wobbling on the tape (the detune is the point: TAPE 80, about +-10 c,
      * slow); a dusty beat with room in it and a sub that walks under it carry it. Over it a fragment of four long notes,
      * A G, then E D, low on one of the owner's dark waves, low-passed, bit-worn and lightly driven into a dark echo */
-    p = pat_v5(0, "HAZE", 88, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_GSIN, M_WAV));
+    p = pat_v5(0, "HAZE", 88, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_WAV));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 18; p->glob[G_TAPE] = 80; p->glob[G_HISS] = 56; p->glob[G_ADPC] = 16;
     p->glob[G_VERB] = 74; p->glob[G_DAMP] = 80; p->glob[G_DRIV] = BANK_DRIVE;
     SET(p, 0, SE, 56, SF, 28, SG, 16, SC, 30, P_DEC, 34, P_REL, 10, P_DIST, 66, P_VOL, 120);
@@ -541,7 +541,7 @@ static void factory(void)
      * cleaner tick here and there, ratcheting, on trig conditions, with a kick off the grid and hats crushed to a
      * console's noise. Under it an open chord with no third (E B D E) that turns to Fmaj7 every second loop, a sub,
      * and four long notes, B A G, then E, low on one of the owner's buzzing waves, closed down and crushed */
-    p = pat_v5(1, "SPLICE", 104, MACHINES(M_GSIN, M_FMD, M_GNOI, M_WAV, M_ENS, M_GSIN));
+    p = pat_v5(1, "SPLICE", 104, MACHINES(M_GSIN, M_FMD, M_GPRC, M_WAV, M_ENS, M_GSIN));
     p->glob[G_LEN] = 56; p->glob[G_SWNG] = 4; p->glob[G_GLCH] = 24; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 24;
     p->glob[G_DRIV] = 32; p->glob[G_VERB] = 40; p->glob[G_DAMP] = 60;
     SET(p, 0, SE, 50, SF, 18, SG, 50, SC, 10, P_DEC, 22, P_REL, 6, P_DIST, 74, P_VOL, 127);
@@ -573,7 +573,7 @@ static void factory(void)
      * octave on one of the owner's dark waves, its second oscillator 12.5 c sharp against the first (the detune is
      * the point: the line beats), low-passed, driven and worn. Every second loop the drums drop out of the last bar
      * and the line and the pad are left alone */
-    p = pat_v5(2, "RIBBON", 168, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_WAV, M_ENS, M_GSIN));
+    p = pat_v5(2, "RIBBON", 168, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_WAV, M_ENS, M_GSIN));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 0; p->glob[G_VERB] = 72; p->glob[G_DAMP] = 70; p->glob[G_ADPC] = 20;
     p->glob[G_GLCH] = 16; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_DRIV] = 28; p->glob[G_HISS] = 32;
     SET(p, 0, SE, 66, SF, 18, SG, 40, SC, 16, P_DEC, 22, P_REL, 6, P_DIST, 72, P_VOL, 127);
@@ -604,7 +604,7 @@ static void factory(void)
      * whose decay wanders, with metal ticks and pitched blips locked among them. Over it a four-bar line from the first
      * step, one figure (fifth, third, fifth, the top, a step down) through each chord, held on the changes and sliding
      * into some, on one of the owner's waves, crushed, its filter moving */
-    p = pat_v5(3, "TENFOUR", 108, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_GSIN, M_WAV));
+    p = pat_v5(3, "TENFOUR", 108, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_WAV));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 22; p->glob[G_TAPE] = 70; p->glob[G_HISS] = 60; p->glob[G_ADPC] = 40;
     p->glob[G_GLCH] = 16; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_VERB] = 56; p->glob[G_DAMP] = 76; p->glob[G_ACNT] = 50;
     p->glob[G_DRIV] = BANK_DRIVE;
@@ -647,7 +647,7 @@ static void factory(void)
      * on the offbeat sixteenths, thrown into a long, filtered ping-pong echo whose feedback swells and falls; its own
      * filter breathing over the four bars. A deep four-to-the-floor, offbeat hats with shuffled ghosts, a rim far in the
      * echo, a sub rolling on C; hiss and a touch of tape under it all */
-    p = pat_v5(4, "SMOKE", 120, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_GSIN, M_GSIN));
+    p = pat_v5(4, "SMOKE", 120, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_GSIN));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 14; p->glob[G_TAPE] = 32; p->glob[G_HISS] = 40; p->glob[G_ADPC] = 16;
     p->glob[G_VERB] = 66; p->glob[G_DAMP] = 72; p->glob[G_DRIV] = 28;
     SET(p, 0, SE, 50, SF, 30, SG, 10, SC, 30, P_DEC, 36, P_REL, 10, P_DIST, 66, P_VOL, 127);
@@ -674,7 +674,7 @@ static void factory(void)
      * ghosts round every hit, rolls into the last bar, its crack and rate changing; hats in thirty-second rolls whose
      * decay wanders; a metal rim thrown into an echo. Under it a wave-folded sine bass that boings down onto each note,
      * its fold new every hit, closed down to its growl, jumping octaves, locked with the kick, A1 to A2; no melody */
-    p = pat_v5(5, "CAROM", 160, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_FMS, M_GSIN, M_GNOI));
+    p = pat_v5(5, "CAROM", 160, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_FMS, M_GSIN, M_GPRC));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 8; p->glob[G_GLCH] = 24; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 32;
     p->glob[G_TAPE] = 40; p->glob[G_HISS] = 40; p->glob[G_VERB] = 30; p->glob[G_DAMP] = 60; p->glob[G_ACNT] = 60;
     p->glob[G_DRIV] = BANK_DRIVE;
@@ -718,7 +718,7 @@ static void factory(void)
      * swelling on a chorused pad, driven and worn by the tape. Under it an FM bass, its ratio falling into each note,
      * fed back, on the roots and their fifths, C#1 to C#2, locked with the kick; busy dusty drums under the half-time
      * snare: ghost rolls, hats in sixteenths whose decay wanders, rolling and ratcheting, metal ticks among them */
-    p = pat_v5(6, "VESPER", 152, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_FMD, M_WAV));
+    p = pat_v5(6, "VESPER", 152, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_FMD, M_WAV));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 16; p->glob[G_TAPE] = 66; p->glob[G_HISS] = 50; p->glob[G_ADPC] = 30;
     p->glob[G_GLCH] = 10; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_VERB] = 56; p->glob[G_DAMP] = 76; p->glob[G_ACNT] = 50;
     p->glob[G_DRIV] = BANK_DRIVE;
@@ -759,7 +759,7 @@ static void factory(void)
     /* A08 MOTEL, lo-fi house after Anthony Naples: B dorian at 122, loose and swung. A few things: a kick tuned to B, a
      * clap in a small room, open hats sampled down; a muffled, crushed stab, Bm7 then E7sus4, off the beat into a dull
      * echo; and the idea, a bass that walks the chords; tape, hiss and the bus's crunch for the dust */
-    p = pat_v5(7, "MOTEL", 122, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_GSIN, M_GSIN));
+    p = pat_v5(7, "MOTEL", 122, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_GSIN));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 22; p->glob[G_TAPE] = 24; p->glob[G_HISS] = 44; p->glob[G_ADPC] = 24;
     p->glob[G_DRIV] = 28; p->glob[G_VERB] = 50; p->glob[G_DAMP] = 78;
     SET(p, 0, SE, 56, SF, 26, SG, 20, SC, 30, P_DEC, 34, P_REL, 10, P_DIST, 70, P_SRR, 10, P_VOL, 127);
@@ -783,7 +783,7 @@ static void factory(void)
      * (the square sub and a little unison under the closed saw for its growl), locked with the kick. Over it Gm9 for two
      * bars, Ebmaj7 over G, Cm7, chorused on a dark pad; a four-note motif, G D C Bb, its last note new every bar, on
      * one of the owner's warm waves, low-passed, worn by the rate and wobbling on the tape; a dusty snare, few hats */
-    p = pat_v5(8, "PYLONS", 84, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_SAW, M_WAV));
+    p = pat_v5(8, "PYLONS", 84, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_SAW, M_WAV));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 20; p->glob[G_TAPE] = 72; p->glob[G_HISS] = 48; p->glob[G_ADPC] = 16;
     p->glob[G_VERB] = 66; p->glob[G_DAMP] = 80; p->glob[G_DRIV] = BANK_DRIVE;
     SET(p, 0, SE, 56, SF, 26, SG, 18, SC, 40, P_DEC, 38, P_REL, 10, P_DIST, 72, P_VOL, 105);
@@ -814,7 +814,7 @@ static void factory(void)
      * every second bar; an FM clank answering the snare, its ratio locked to a brighter strike; a metal rim thrown
      * into a dotted echo. Under it a punchy SWAV-SAW bass in 3 3 4 3 3, on the kick and between, jumping octaves,
      * played an octave over its root so its sub sits on C#1 to C#2 (35-70 Hz); no melody */
-    p = pat_v5(9, "RIVETS", 118, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_FMD, M_SAW, M_GNOI));
+    p = pat_v5(9, "RIVETS", 118, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_FMD, M_SAW, M_GPRC));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 24; p->glob[G_GLCH] = 20; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 24;
     p->glob[G_VERB] = 30; p->glob[G_DAMP] = 50; p->glob[G_ACNT] = 50; p->glob[G_DRIV] = BANK_DRIVE;
     SET(p, 0, SB, 16, SE, 64, SF, 18, SG, 60, SC, 50, P_DEC, 30, P_REL, 6, P_DIST, 80, P_VOL, 111);
@@ -842,7 +842,7 @@ static void factory(void)
 
     /* A11 SYRUP: warm IDM in A, worn tape: a detuned pad through Amaj7 F#m9 Dmaj7 E6/9, a nostalgic bell melody
      * in echoes, a soft sine bass; lazy drums, a bitten snare; the tape wobbles */
-    p = pat_v5(10, "SYRUP", 96, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_FMS, M_GSIN));
+    p = pat_v5(10, "SYRUP", 96, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_FMS, M_GSIN));
     p->glob[G_LEN] = 64; p->glob[G_TAPE] = 50; p->glob[G_HISS] = 14; p->glob[G_VERB] = 70; p->glob[G_ADPC] = 10;
     p->glob[G_SWNG] = 24; p->glob[G_DAMP] = 60;
     SET(p, 0, SE, 60, SF, 34, SG, 20, SC, 30, P_DEC, 40, P_REL, 10, P_VOL, 127);
@@ -869,7 +869,7 @@ static void factory(void)
      * thirty-seconds; VO-6 cut to short vowel chops that stutter, a new vowel each; a dusty chord stab chopped off the
      * beat, Dm9 then Bbmaj7 over D. Under it an FM bass that zaps down onto each note, fed back and crushed, locked
      * with the kick, D1 to D2; the bus repeating slices; no melody */
-    p = pat_v5(11, "CUTUP", 156, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_VOX, M_FMD, M_ENS));
+    p = pat_v5(11, "CUTUP", 156, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_VOX, M_FMD, M_ENS));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 24; p->glob[G_GLCH] = 30; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 36;
     p->glob[G_TAPE] = 50; p->glob[G_HISS] = 50; p->glob[G_VERB] = 34; p->glob[G_DAMP] = 70; p->glob[G_ACNT] = 50;
     p->glob[G_DRIV] = BANK_DRIVE;
@@ -910,7 +910,7 @@ static void factory(void)
      * Over it, busy and aggressive: hats on nearly every step, ratcheting, their decay wandering; FM metal boings, their
      * ratio zapping down hard, a new sweep each hit; pitch-drop zaps answering the snare. Under it a rubbery FM bass,
      * its ratio rising into each note, fed back and crushed, sliding between E1 and E2 and through the minor; no melody */
-    p = pat_v5(12, "GRISTLE", 168, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_FMD, M_FMD, M_GSIN));
+    p = pat_v5(12, "GRISTLE", 168, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_FMD, M_FMD, M_GSIN));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 18; p->glob[G_GLCH] = 16; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 36;
     p->glob[G_TAPE] = 36; p->glob[G_HISS] = 40; p->glob[G_VERB] = 34; p->glob[G_DAMP] = 60; p->glob[G_ACNT] = 70;
     p->glob[G_DRIV] = BANK_DRIVE;
@@ -947,7 +947,7 @@ static void factory(void)
      * echo answering it; under it Em7 over G for two bars, A7, Em over B on a chorused pad; a deep sustained sine bass, its
      * sub an octave under on E1, A1 and B1, driven for its harmonics and locked with the kick; a slow swung beat with a
      * ghost before the snare */
-    p = pat_v5(13, "ORCHARD", 92, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_GSIN, M_WAV));
+    p = pat_v5(13, "ORCHARD", 92, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_WAV));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 24; p->glob[G_TAPE] = 76; p->glob[G_HISS] = 52; p->glob[G_ADPC] = 20;
     p->glob[G_VERB] = 70; p->glob[G_DAMP] = 80; p->glob[G_DRIV] = BANK_DRIVE;
     SET(p, 0, SE, 56, SF, 26, SG, 20, SC, 40, P_DEC, 40, P_REL, 10, P_DIST, 72, P_VOL, 120);
@@ -978,7 +978,7 @@ static void factory(void)
      * every second loop the drums drop out of the last two beats. Under it a huge sustained SWAV-SAW bass with a little
      * unison (its detune the point), played an octave over its root so its subs sit on F1, Ab1, Db1 and Eb1; once a
      * loop, over the F, a three-note dark hook, Ab G F */
-    p = pat_v5(14, "SPLINTR", 160, MACHINES(M_GSIN, M_GSIN, M_GNOI, M_GNOI, M_SAW, M_WAV));
+    p = pat_v5(14, "SPLINTR", 160, MACHINES(M_GSIN, M_GSIN, M_GPRC, M_GPRC, M_SAW, M_WAV));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 0; p->glob[G_GLCH] = 32; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 24;
     p->glob[G_VERB] = 40; p->glob[G_DAMP] = 50; p->glob[G_ACNT] = 60; p->glob[G_DRIV] = BANK_DRIVE;
     SET(p, 0, SB, 20, SE, 64, SF, 16, SG, 70, SC, 60, P_DEC, 32, P_REL, 6, P_DIST, 88, P_SRR, 24, P_VOL, 127);
@@ -1011,7 +1011,7 @@ static void factory(void)
      * pad, driven, crushed and worn by the tape. The drums never quite repeat: a hard kick; a crushed snare whose length
      * and crack change, ghosts round it, its rate drifting; short hats in swung sixteenths whose decay wanders, metal
      * ticks and pitched blips among them; and a gritty shaker and metal percussion thrown into a dotted echo */
-    p = pat_v5(15, "FOUNDRY", 102, MACHINES(M_GSIN, M_GNOI, M_GNOI, M_ENS, M_SAW, M_GNOI));
+    p = pat_v5(15, "FOUNDRY", 102, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_SAW, M_GPRC));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 22; p->glob[G_TAPE] = 76; p->glob[G_HISS] = 60; p->glob[G_ADPC] = 40;
     p->glob[G_GLCH] = 16; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_VERB] = 56; p->glob[G_DAMP] = 76; p->glob[G_ACNT] = 50;
     p->glob[G_DRIV] = BANK_DRIVE;

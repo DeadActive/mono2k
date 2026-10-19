@@ -317,7 +317,7 @@ static inline uint8_t enc(int i, int n) { return (uint8_t)((i * 128 + 64) / n); 
 
 static const uint8_t MACH_DEF[M_COUNT][8] = {
     /* GND-SIN  */ {0, 0, 0, 0, 40, 0, 0, 64},     /* the Monomachine's init: a sine (its page TUNE alone, on H) */
-    /* GND-NOIS */ {64, 0, 0, 40, 0, 40, 0, 0},
+    /* GND-PERC */ {64, 0, 0, 40, 0, 40, 0, 0},
     /* SID-6581 */ {0, 0, 127, 0, 0, 0, 64, 64},   /* the Monomachine's init: a triangle, the sweep reset at each trig */
     /* FM+STAT  */ {61, 64, 80, 32, 82, 64, 64, 64},  /* the Monomachine's init: 1/2, 1; a slow decay, a little feedback */
     /* FM+DYN   */ {64, 64, 64, 0, 74, 80, 32, 64},   /* the Monomachine's init: 1, 1.33; a slow decay, a little feedback */
@@ -330,6 +330,7 @@ static const uint8_t MACH_DEF[M_COUNT][8] = {
     /* FX-CHORS */ {40, 50, 30, 64, 64, 64, 127, 100}, /* MONO2K's own: a slow chorus, half wet, no feedback */
     /* FX-RING  */ {0, 0, 0, 127, 0, 0, 0, 100},     /* a sine carrier, all wet */
     /* FX-DYNMX */ {20, 60, 64, 127, 64, 64, 0, 100}, /* a quick attack, 4:1-ish over -30 dB */
+    /* GND-NOIS */ {0, 0, 0, 0, 0, 0, 0, 64},     /* the Monomachine's init: white, in the middle */
 };
 
 static void kit_default(m2k_pattern_t *p, int t, int m)
@@ -366,7 +367,7 @@ static void pat_init(m2k_pattern_t *p, const char *name)
 {
     m_set(p, 0, sizeof *p);
     for (int i = 0; i < 7 && name[i]; i++) p->name[i] = name[i];
-    static const uint8_t M[M2K_TRACKS] = {M_GSIN, M_FMD, M_GNOI, M_SID, M_VOX, M_ENS};
+    static const uint8_t M[M2K_TRACKS] = {M_GSIN, M_FMD, M_GPRC, M_SID, M_VOX, M_ENS};
     for (int t = 0; t < M2K_TRACKS; t++) {
         kit_default(p, t, M[t]);
         for (int s = 0; s < M2K_STEPS; s++) p->step[t][s].note = 60;
@@ -415,6 +416,7 @@ void m2k_init(uint32_t seed)
     for (int t = 0; t < M2K_TRACKS; t++) {
         trk[t].dl = dl_mem[t];
         trk[t].lfsr = 0x1234567u + (uint32_t)t * 7919u;
+        trk[t].lfsr2 = 0x9E3779B9u + (uint32_t)t * 104729u;
         trk[t].gate_left = -1;
         trk[t].dt_q8 = 400 << 8;
     }

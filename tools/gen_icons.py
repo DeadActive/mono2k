@@ -71,7 +71,14 @@ def mark(name):
         STROKE(pts, 2.0)
         slope = 3.2 * 2 * math.pi / 9.6
         SLIT(6.0, 6.0, math.atan2(slope, 1) + math.pi / 2, 4)
-    elif name == "GNOI":        # noise: tiles forming an N, one gone, some halved
+    elif name == "GNOI":        # the Monomachine's noise: the whole N of tiles, split down the middle (its stereo)
+        for j, row in enumerate(["X..X", "XX.X", "X.XX", "X..X"]):
+            for i, c in enumerate(row):
+                x0, y0 = 1.25 + i * 2.5, 1.25 + j * 2.5
+                if c == "X":
+                    R(x0, y0, x0 + 2, y0 + 2)
+        SLIT(6.0, 6.0, math.pi / 2, 10.5)
+    elif name == "GPRC":        # MONO2K's noise percussion: tiles forming an N, one gone, some halved
         cells = ["X..X", "Xb.X", "..cX", "X.Xa"]
         for j, row in enumerate(cells):
             for i, c in enumerate(row):
@@ -163,7 +170,7 @@ def mark(name):
     return im                   # G * SS square, 8 bit
 
 
-NAMES = ["GSIN", "GNOI", "SID", "FMS", "FMD", "SAW", "ENS", "WAV", "VOX", "FMP", "PUL", "FXC", "FXR", "FXD"]
+NAMES = ["GSIN", "GPRC", "SID", "FMS", "FMD", "SAW", "ENS", "WAV", "VOX", "FMP", "PUL", "FXC", "FXR", "FXD", "GNOI"]
 
 
 GS = 256        # the distance field's grid: finer than the mark, for clean normals

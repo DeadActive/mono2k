@@ -43,6 +43,8 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   older layouts with `pat_pack_v`); 9 the bus's controls on new laws (`bus_v9`, tables `T_V9_*`); 10 FM+STAT's and
   FM+DYN's pages (`fm_v9`); 11 SID-6581's page (`sid_v10`); 12 GND-SIN's page (TUNE on H, CC 55, as the
   Monomachine's; MONO2K's own FOLD..HARM on A..G, nothing at init: `gsin_v11`). Older ones are converted on load.
+  GND-NOIS is the Monomachine's (ST RED STON, TUNE on H; machine 14, the newest); MONO2K's own noise is GND-PERC and
+  keeps machine number 1 (`M_GPRC`), so no conversion: patterns store machine numbers, new machines go last.
   Every part of bank A is written on GND-SIN's old page (`pat_v5` lays its old init, `GSIN_V11`) and turned at build;
   slots still holding the bank before (A11 so far) are written on SWAV-ENS's old page and the bus's old laws and
   converted once at build (`ens_v6`, `bus_v9` in `factory()`), until the new bank's parts replace them; the parts

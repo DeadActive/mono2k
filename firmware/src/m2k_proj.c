@@ -204,7 +204,7 @@ static int img_pack_all(m2k_img_t *dst, const char *name)
 static void pattern_init_blank(m2k_pattern_t *p)
 {
     pat_init(p, "INIT");
-    static const uint8_t M[M2K_TRACKS] = {M_GSIN, M_GNOI, M_GNOI, M_SID, M_FMS, M_ENS};
+    static const uint8_t M[M2K_TRACKS] = {M_GSIN, M_GPRC, M_GPRC, M_SID, M_FMS, M_ENS};
     for (int t = 0; t < M2K_TRACKS; t++) kit_default(p, t, M[t]);
     p->glob[G_TMPO] = 120 - 30;
     p->glob[G_VERB] = 40;

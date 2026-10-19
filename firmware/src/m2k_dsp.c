@@ -79,6 +79,16 @@ static inline int32_t zop_lp(zop_t *f, int32_t x)
     return y;
 }
 
+/* a plain one-pole, y += G (x - y), G Q24 = 1 - e^(-2 pi fc / fs): GND-NOIS's colour, as fitted (tools/ref/gnoi_fit.py) */
+static inline int32_t op_lp(zop_t *f, int32_t x)
+{
+    int64_t p = (int64_t)(x - f->s) * f->G + f->r;
+    int32_t v = (int32_t)(p >> 24);
+    f->r = p - (int64_t)v * (1LL << 24);
+    f->s += v;
+    return f->s;
+}
+
 /* a Q24 coefficient at a filter position (1/96 octave over MIDI note 0, Q8), between table entries */
 static uint32_t fg_at(const uint32_t *T, int32_t pos)
 {
@@ -102,7 +112,8 @@ typedef struct {
     uint32_t ph[8];
     int32_t ms[6];
     uint32_t menv[3];                  /* Q30 envelopes owned by the machine */
-    uint32_t lfsr;
+    uint32_t lfsr, lfsr2;              /* the noise; GND-NOIS's second (ST) */
+    zop_t gn[2][4];                    /* GND-NOIS: each noise's pink one-poles and the brown's top */
     svf_t fm[3];                       /* formants (VOX) */
     /* the chain: EQ, the filter (LP1 before the clip, the HP's two-pole, its one-pole and LP2 after), SRR */
     zsvf_t eq, lp1, hp2;
@@ -146,7 +157,7 @@ static int16_t mod_mem[M2K_TRACKS][MOD_LEN] POOL;
 static int16_t ens_mem[M2K_TRACKS][ENS_LEN] POOL;
 static int16_t blk[M2K_TRACKS][M2K_SUB];      /* machine output of this block */
 static int16_t tout[M2K_TRACKS][M2K_SUB];     /* each track's output, after its amp, before its VOL: an FX machine's input */
-static int16_t eside[M2K_TRACKS][M2K_SUB];    /* SWAV-ENS's side out of the machine, before the chain */
+static int16_t eside[M2K_TRACKS][M2K_SUB];    /* SWAV-ENS's and GND-NOIS's side out of the machine, before the chain */
 static int16_t bside[M2K_TRACKS][M2K_SUB];    /* FX-CHORUS's side (its width), added after the pan */
 
 /* a parameter with its modulation, 0..127*256 */
@@ -187,6 +198,8 @@ static inline int32_t fold16(int32_t y)
 
 static inline uint32_t noise_step(uint32_t *s) { uint32_t x = *s; x ^= x << 13; x ^= x >> 17; x ^= x << 5; *s = x; return x; }
 
+#define GN_A 23460                     /* GND-NOIS's white: 0.716 of full scale (the Monomachine's level) */
+#define GN_HR 2                        /* and out of the machine 12 dB down, the chain's input 12 dB up */
 #define PUL_A 3430                     /* SWAVE-PULS's pulse: 0.105 of GND-SIN's sine */
 #define PUL_S1 32767                   /* its sine subs, as measured: an octave down at full scale, two at 0.96 */
 #define PUL_S2 31500
@@ -286,7 +299,7 @@ static void mach_block(int ti, int m, int32_t pitch)
         }
         break;
     }
-    case M_GNOI: {                     /* COLR S&H META MSPR PDEP PDEC GRIT - */
+    case M_GPRC: {                     /* COLR S&H META MSPR PDEP PDEC GRIT - */
         int32_t env = (int32_t)(t->menv[0] >> 15);
         int32_t pq = pitch + ((P7(t, P_SYN + 4) * 24 * env) >> 15);
         t->menv[0] = mulu_hi(t->menv[0], T_ENV_COEF[P7(t, P_SYN + 5)], 31);
@@ -334,6 +347,35 @@ static void mach_block(int ti, int m, int32_t pitch)
                 s = s + (((m6 - s) * meta) >> 15);
             }
             o[i] = (int16_t)sat16(s);
+        }
+        break;
+    }
+    case M_GNOI: {                     /* ST RED STON - - - - TUNE */
+        /* after the Monomachine's GND-NOIS, measured on its OS (tools/ref/chain_gnoi42.spec): white noise, the same at
+         * every note (the filter follows the note and TUNE, +-2 semitones). RED colours it: white at 0, pink at 64, red at
+         * 127 (white, pink and brown from the same noise, weights fitted, T_RED_W). ST mixes in a second noise coloured
+         * alike, ST / 127 of it: in the middle (3 dB louder at 127), or with STON across the stereo, the left hearing
+         * the first plus the second and the right the first less it (L/R 0.88 0.60 0.29 0.01 at ST 32 64 96 127) */
+        const int16_t *rw = &T_RED_W[3 * P7(t, P_SYN + 1)];
+        int32_t st = P7(t, P_SYN + 0) * 258, on = P7(t, P_SYN + 2) >= 64;      /* st Q15 */
+        int16_t *es = eside[ti];
+        for (int k = 0; k < 2; k++) {
+            t->gn[k][0].G = GN_G0; t->gn[k][1].G = GN_G1; t->gn[k][2].G = GN_G2; t->gn[k][3].G = GN_GT;
+        }
+        for (int i = 0; i < M2K_SUB; i++) {
+            int32_t c[2];
+            for (int k = 0; k < 2; k++) {
+                int32_t w = (((int32_t)noise_step(k ? &t->lfsr2 : &t->lfsr) >> 16) * GN_A) >> 15;
+                int32_t z0 = op_lp(&t->gn[k][0], w), z1 = op_lp(&t->gn[k][1], w), z2 = op_lp(&t->gn[k][2], w);
+                int32_t pk = (int32_t)(((int64_t)w * GN_KW + (int64_t)z0 * GN_K0 + (int64_t)z1 * GN_K1
+                                        + (int64_t)z2 * GN_K2) >> 12);
+                int32_t br = (int32_t)(((int64_t)op_lp(&t->gn[k][3], z0) * GN_KB) >> 12);
+                c[k] = (int32_t)(((int64_t)w * rw[0] + (int64_t)pk * rw[1] + (int64_t)br * rw[2]) >> 14);
+            }
+            int32_t n2 = (int32_t)(((int64_t)c[1] * st) >> 15);
+            /* the headroom: pink and red peak at 2.3 x full scale (3.3 x with ST); the chain takes it back (GN_HR) */
+            o[i] = (int16_t)sat16((on ? c[0] : c[0] + n2) >> GN_HR);
+            es[i] = (int16_t)sat16(on ? n2 >> GN_HR : 0);
         }
         break;
     }
@@ -1057,14 +1099,15 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     int32_t ow = (int32_t)((((int64_t)7 * dw * (dw < 0 ? -dw : dw)) >> 16) * fe >> 15);
     int32_t sb = P8(t, P_BASE) + ob, sl = sb + P8(t, P_WDTH) + ow;          /* steps, Q8 */
     int32_t key = t->note * 8 * 256;
-    if (m == M_GSIN) key += (PB8(t, P_SYN + 7) >> 7) * 32;               /* and GND-SIN's TUNE (chain_tune13) */
+    if (m == M_GSIN || m == M_GNOI) key += (PB8(t, P_SYN + 7) >> 7) * 32;   /* and their TUNE (chain_tune13, gnoi42) */
     int32_t ph = key + 12 * (sb - 16 * 256), pl = key + 12 * (sl - 16 * 256);
     int lq = P7(t, P_LPQ), hq = P7(t, P_HPQ);
     zsvf_set(&t->lp1, fg_at(T_FG, pl + T_LPC[lq]), T_LPK[lq]);
     zsvf_set(&t->hp2, fg_at(T_FG, ph + T_HPC[hq]), T_HPK[hq]);
     t->lp2a.G = t->lp2b.G = (int32_t)fg_at(T_FG1, pl + F_LP2 * 256);
     t->hp1.G = (int32_t)fg_at(T_FG1, ph + F_HP1 * 256);
-    int side = m == M_ENS && P7(t, P_SYN + 5) && P7(t, P_SYN + 6);              /* SWAV-ENS's chorus across the stereo */
+    int side = (m == M_ENS && P7(t, P_SYN + 5) && P7(t, P_SYN + 6))       /* SWAV-ENS's chorus across the stereo, */
+               || (m == M_GNOI && P7(t, P_SYN + 2) >= 64 && P7(t, P_SYN + 0));    /* GND-NOIS's second noise */
     if (side) {
         zsvf_set(&t->lp1s, fg_at(T_FG, pl + T_LPC[lq]), T_LPK[lq]);
         zsvf_set(&t->hp2s, fg_at(T_FG, ph + T_HPC[hq]), T_HPK[hq]);
@@ -1110,10 +1153,11 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     int mtype = PN(t, P_MODT, 3), mmix = P7(t, P_MODM) * 2, mdep = P7(t, P_MODD);
     uint32_t minc = T_MOD_INC[P7(t, P_MODR)];
     int32_t pk = 0;
+    int ish = m == M_GNOI ? 24 - GN_HR : 24;                                 /* GND-NOIS's headroom, taken back */
     for (int i = 0; i < M2K_SUB; i++) {
         /* the filter: gain, EQ, LP1, the clip, the HP's two-pole (its resonance held by the ceiling too), its
          * one-pole, LP2 */
-        int32_t u = (int32_t)CLAMP((blk[ti][i] * dh) >> 24, -(1 << 24), 1 << 24);
+        int32_t u = (int32_t)CLAMP((blk[ti][i] * dh) >> ish, -(1 << 24), 1 << 24);
         if (eq_on) { int32_t b; zsvf_tick(&t->eq, u, 0, &b, 0); u = CLAMP(u + (int32_t)(((int64_t)b * t->eqc) >> 24), -(1 << 26), 1 << 26); }
         int32_t v;
         zsvf_tick(&t->lp1, u, &v, 0, 0);
@@ -1145,7 +1189,7 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
         int32_t sd = 0;
         if (m == M_FXC) sd = (int32_t)(((int64_t)((((int64_t)bside[ti][i] * a) >> 15)) * vol) >> 15);
         if (side) {                    /* the side through the same filters, amp, VOL and SRR, added after the pan */
-            int32_t us = (int32_t)CLAMP((eside[ti][i] * dh) >> 24, -(1 << 24), 1 << 24);
+            int32_t us = (int32_t)CLAMP((eside[ti][i] * dh) >> ish, -(1 << 24), 1 << 24);
             if (eq_on) { int32_t b; zsvf_tick(&t->eqs, us, 0, &b, 0); us = CLAMP(us + (int32_t)(((int64_t)b * t->eqc) >> 24), -(1 << 26), 1 << 26); }
             int32_t vs;
             zsvf_tick(&t->lp1s, us, &vs, 0, 0);

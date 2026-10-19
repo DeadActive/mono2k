@@ -20,9 +20,10 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "ref"))
 from sweep import load, SR
 
-M_GSIN, M_GNOI, M_SID, M_FMS, M_FMD, M_SAW, M_ENS, M_WAV, M_VOX = range(9)
-MNAME = ["GND-SIN", "GND-NOIS", "SID-6581", "FM+STAT", "FM+DYN", "SWAV-SAW", "SWAV-ENS", "DIGI-WAV", "VOX-6", "FM+PAR",
-         "SWAV-PUL", "FX-CHORS", "FX-RING", "FX-DYNMX"]
+M_GSIN, M_GPRC, M_SID, M_FMS, M_FMD, M_SAW, M_ENS, M_WAV, M_VOX = range(9)
+M_GNOI = 14
+MNAME = ["GND-SIN", "GND-PERC", "SID-6581", "FM+STAT", "FM+DYN", "SWAV-SAW", "SWAV-ENS", "DIGI-WAV", "VOX-6", "FM+PAR",
+         "SWAV-PUL", "FX-CHORS", "FX-RING", "FX-DYNMX", "GND-NOIS"]
 P_SYN, P_DEC, P_PORT, P_BASE, P_WDTH, P_HPQ, P_LPQ, P_PTCH, P_LFO = 0, 10, 15, 16, 17, 18, 19, 36, 42
 NAMES = "C C# D D# E F F# G G# A A# B".split()
 # the keys and the tracks' roles each part declares: docs/bank-a.md's table; the old bank's (ea69d53, kept as a
@@ -203,7 +204,7 @@ def main():
         for t in range(1, 7):
             head, ev = events(os.path.join(d, f"p{p:02d}_t{t}.txt"))
             m = head["machine"]
-            if m == M_GNOI or not ev:
+            if m in (M_GPRC, M_GNOI) or not ev:             # the noises: no pitch to check
                 continue
             x = load(os.path.join(d, f"p{p:02d}_t{t}.wav"))[:, 0]
             drum = roles[t - 1] in DRUMS if roles[t - 1] else m == M_GSIN and ev[0]["eff"][P_SYN + 3] > 0 and ev[0]["eff"][P_DEC] < 40

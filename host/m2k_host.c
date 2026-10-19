@@ -328,7 +328,7 @@ static void bus_ref(int tracks, int ctl, int v, int gsiz)
     p->glob[G_VERB] = 0;
     p->glob[G_GSIZ] = (uint8_t)gsiz;
     if (tracks) {
-        static const uint8_t M[4] = {M_GSIN, M_GNOI, M_SAW, M_ENS}, LEV[4] = {87, 55, 87, 66};
+        static const uint8_t M[4] = {M_GSIN, M_GPRC, M_SAW, M_ENS}, LEV[4] = {87, 55, 87, 66};
         for (int t = 0; t < 4; t++) { kit_default(p, t, M[t]); p->kit[t][P_LEVL] = LEV[t]; p->kit[t][P_VOL] = 127; }
         p->kit[0][P_SYN + 3] = 60; p->kit[0][P_SYN + 4] = 40; p->kit[0][P_SYN + 5] = 30;   /* PDEP PDEC CLIK (page 12) */
         p->kit[0][P_DEC] = 30;
@@ -558,7 +558,7 @@ static int selftest(void)
             static m2k_pattern_t w, w2;
             static uint8_t wb[BLOB_MAX];
             m_cpy(&w, &pat[4], sizeof w);                             /* A05: a DIGI-WAV track among others */
-            for (int t = 0; t < M2K_TRACKS; t++) if (w.machine[t] == M_GSIN) w.machine[t] = M_GNOI;   /* (no page that converts) */
+            for (int t = 0; t < M2K_TRACKS; t++) if (w.machine[t] == M_GSIN) w.machine[t] = M_GPRC;   /* (no page that converts) */
             for (int t = 0; t < M2K_TRACKS; t++) for (int k = 0; k < P_WBNK; k++) w.kit[t][k] = (uint8_t)((t * 31 + k * 7) & 127);
             int wn = pat_pack_v(&w, wb, 7);
             int same = pat_unpack(&w2, wb, wn);
@@ -640,7 +640,7 @@ static int selftest(void)
             int wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
             CHECK(wn2 == wn && !memcmp(wb, wb2, (size_t)wn), "format: today's version loads unchanged");
             for (int t = 0; t < M2K_TRACKS; t++)             /* (a version-10 SID or GND-SIN page is the old one: none) */
-                if (w2.machine[t] == M_GSIN || w2.machine[t] == M_SID) w2.machine[t] = M_GNOI;
+                if (w2.machine[t] == M_GSIN || w2.machine[t] == M_SID) w2.machine[t] = M_GPRC;
             wn = pat_pack_v(&w2, wb, 10);                   /* and a version-10 pattern: its FM pages already the new ones */
             wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
             int wn3 = pat_pack(&w2, wb);
@@ -793,6 +793,33 @@ static int selftest(void)
             printf("     MOD chorus L/R: a saw %.3f, an F1 sine %.4f; the phaser %.4f, MIX 0 %.4f\n", mc[0], mc[1], mc[2], mc[3]);
             CHECK(mc[0] < 0.9 && mc[1] > 0.99 && mc[2] > 0.999 && mc[3] > 0.999,
                   "MOD: the chorus wide on a saw, an F1 sine in the middle; the phaser and MIX 0 mono");
+            /* GND-NOIS on the Monomachine's page: ST with STON across the stereo (L/R falls as ST rises), without it in
+             * the middle; RED darkens (its top falls). GND-PERC, MONO2K's own noise, keeps the machine number the old
+             * GND-NOIS had, so saved patterns load as they were */
+            double gc[4], top[2];
+            for (int c = 0; c < 6; c++) {
+                static const uint8_t ST[6] = {127, 64, 127, 0, 0, 0}, STON[6] = {127, 127, 0, 0, 0, 0}, RED[6] = {0, 0, 0, 0, 0, 127};
+                m2k_init(2000);
+                pat_init(&pat[fp], "NOIS");
+                kit_default(&pat[fp], 0, M_GNOI);
+                pat[fp].kit[0][P_HOLD] = 127; pat[fp].glob[G_DRIV] = 0;
+                pat[fp].kit[0][P_SYN + 0] = ST[c]; pat[fp].kit[0][P_SYN + 1] = RED[c]; pat[fp].kit[0][P_SYN + 2] = STON[c];
+                for (int s_ = 0; s_ < 16; s_ += 4) { pat[fp].step[0][s_].flags = ST_TRIG; pat[fp].step[0][s_].note = 60; }
+                fx_measure(fp, 0x3F, 1.0, kb, &pk, &rm);
+                double sl = 0, sr = 0, slr = 0, hf = 0, all = 0;
+                for (int i = M2K_SR / 4; i < M2K_SR; i++) {
+                    sl += (double)kb[2 * i] * kb[2 * i]; sr += (double)kb[2 * i + 1] * kb[2 * i + 1]; slr += (double)kb[2 * i] * kb[2 * i + 1];
+                    double d1 = (double)kb[2 * i] - kb[2 * i - 2];                /* the first difference: the top */
+                    hf += d1 * d1; all += (double)kb[2 * i] * kb[2 * i];
+                }
+                if (c < 4) gc[c] = slr / sqrt(sl * sr + 1);
+                if (c >= 4) top[c - 4] = 10 * log10(hf / (all + 1) + 1e-12);
+            }
+            printf("     GND-NOIS L/R: ST 127 STON %.3f, ST 64 STON %.3f, ST 127 alone %.4f, ST 0 %.4f; its top, RED 127 against 0: %.1f dB\n",
+                   gc[0], gc[1], gc[2], gc[3], top[1] - top[0]);
+            CHECK(gc[0] < 0.1 && gc[1] > 0.45 && gc[1] < 0.75 && gc[2] > 0.999 && gc[3] > 0.999 && top[1] < top[0] - 15,
+                  "GND-NOIS: ST with STON across the stereo, without it in the middle; RED darkens");
+            CHECK(M_GPRC == 1 && M_GNOI == M_COUNT - 1, "GND-PERC keeps the old GND-NOIS's number, GND-NOIS is the newest");
             #undef FXPAT
         }
         /* the bank on the screen: a DIGI-WAV track's SYN has a third page, BANK; the wave knob names the bank's waves */

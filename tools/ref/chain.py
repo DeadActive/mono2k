@@ -4,8 +4,8 @@
 # one control. A sine (GND-SIN) for the levels, the distortion and the sample rate reduction; noise (GND-NOIS) for the
 # filter and the EQ, whose responses are read as the ratio to the clean noise at the same note (the filter follows the
 # note); a short sine blip for the delay.
-#   .venv/bin/python tools/ref/chain.py specs|specs2|specs3|fm26|sid36|pul38|kick40|ens41 tools/ref   writes chain_*.spec
-#   (rounds one to three; FM+; SID-6581; SWAVE-PULS; GND-SIN kicks; SWAVE-ENS's stereo chorus)
+#   .venv/bin/python tools/ref/chain.py specs|specs2|specs3|fm26|sid36|pul38|kick40|ens41|gnoi42 tools/ref   writes
+#   chain_*.spec (rounds one to three; FM+; SID-6581; SWAVE-PULS; GND-SIN kicks; SWAVE-ENS's stereo chorus; GND-NOIS)
 import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -510,8 +510,27 @@ def kick40():
     return out
 
 
+def gnoi42():
+    """GND-NOIS on the Monomachine's page (ST RED STON on A B C, TUNE on H; CC 48 49 50 55), every knob sent on every
+    line (the OS keeps them from the line before): RED's colour, ST alone (its second noise, in the middle) and with
+    STON (the two noises across the stereo), TUNE (the filter's key), the note (the filter follows it)"""
+    def pg(st=0, red=0, ston=0, tune=64):
+        return {48: st, 49: red, 50: ston, 55: tune}
+    out = ["# GND-NOIS: RED, ST without and with STON, TUNE, the note (C4 unless named)"]
+    out += [line(f"g42_red_{r:03d}", NOIS, 60, pg(red=r), gate=1.0) for r in (0, 16, 32, 48, 64, 80, 96, 112, 127)]
+    out += [line(f"g42_st_{v:03d}_{'on' if on else 'off'}", NOIS, 60, pg(st=v, ston=127 if on else 0), gate=1.0)
+            for on in (0, 1) for v in (0, 32, 64, 96, 127)]
+    out += [line(f"g42_st_{v:03d}_on_r064", NOIS, 60, pg(st=v, red=64, ston=127), gate=1.0) for v in (64, 127)]
+    out += [line(f"g42_tune_{v:03d}", NOIS, 60, pg(tune=v), gate=1.0) for v in (0, 32, 96, 127)]
+    out += [line(f"g42_note_{n:03d}_r{r:03d}", NOIS, n, pg(red=r), gate=1.0) for n in (36, 84) for r in (0, 64)]
+    return out
+
+
 if __name__ == "__main__":
-    if sys.argv[1] == "ens41":
+    if sys.argv[1] == "gnoi42":
+        with open(os.path.join(sys.argv[2], "chain_gnoi42.spec"), "w") as fh:
+            fh.write("\n".join(gnoi42()) + "\n")
+    elif sys.argv[1] == "ens41":
         with open(os.path.join(sys.argv[2], "chain_ens41.spec"), "w") as fh:
             fh.write("\n".join(ens41()) + "\n")
     elif sys.argv[1] == "kick40":

@@ -55,7 +55,10 @@ enum {
 };
 
 /* machines */
-enum { M_GSIN, M_GNOI, M_SID, M_FMS, M_FMD, M_SAW, M_ENS, M_WAV, M_VOX, M_FMP, M_PUL, M_FXC, M_FXR, M_FXD, M_COUNT };   /* new ones go last: patterns keep the number */
+/* new ones go last: patterns keep the number (GND-PERC, MONO2K's own noise, was GND-NOIS until the Monomachine's took
+ * the name) */
+enum { M_GSIN, M_GPRC, M_SID, M_FMS, M_FMD, M_SAW, M_ENS, M_WAV, M_VOX, M_FMP, M_PUL, M_FXC, M_FXR, M_FXD, M_GNOI,
+       M_COUNT };
 
 typedef struct {
     uint8_t note;                 /* MIDI note */

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # MONO2K's lookup tables: everything the integer DSP would otherwise need floating point for.
 # Writes firmware/gen/m2k_tables.h.
-import math, os, sys, random
+import cmath, math, os, sys, random
 
 SR = 44100
 SUB = 16
@@ -147,9 +147,36 @@ out.append(arr("T_DIST_C", "int32_t", [round(32767 * 10 ** (dist_c(d) / 20)) for
 # and the ceiling machine by machine (tools/ref/chain_dist21.spec): the Monomachine clips each machine against a
 # ceiling of its own, whatever the level going in (a saw alone, with its subs or its unison all clip to the same level;
 # a chord of one voice or four; a sine full or cut 15 dB). Against GND-SIN's, dB; Q12. In the machines' order
-DIST_M = {"GSIN": 0.0, "GNOI": 0.0, "SID": 0.0, "FMS": -1.4, "FMD": 0.0, "SAW": -10.5, "ENS": 1.7, "WAV": -7.0, "VOX": -1.4,
-          "FMP": 0.3, "PUL": -2.75, "FXC": 0.0, "FXR": 0.0, "FXD": 0.0}
+DIST_M = {"GSIN": 0.0, "GPRC": 0.0, "SID": 0.0, "FMS": -1.4, "FMD": 0.0, "SAW": -10.5, "ENS": 1.7, "WAV": -7.0, "VOX": -1.4,
+          "FMP": 0.3, "PUL": -2.75, "FXC": 0.0, "FXR": 0.0, "FXD": 0.0, "GNOI": 0.0}
 out.append(arr("T_DIST_M", "uint16_t", [round(4096 * 10 ** (v / 20)) for v in DIST_M.values()], 14))
+# GND-NOIS on the Monomachine's page (tools/ref/chain_gnoi42.spec): RED colours white noise towards pink (64) and red
+# (127). White, pink (the economy pink filter: one-poles at 16.5, 264 and 3946 Hz and the white through it) and brown
+# (the pink's 16.5 Hz one-pole, then one at 14 kHz over the top), each scaled to white's level at 1 kHz, mixed by weights
+# fitted at every 16th RED (tools/ref/gnoi_fit.py) and interpolated between; Q14. The one-poles' G Q24, the gains Q12
+GNOI_RED = (0, 16, 32, 48, 64, 80, 96, 112, 127)
+GNOI_RED_W = [(1.0000, 0.0000, 0.0000), (0.7509, 0.4858, 0.0000), (0.5031, 0.9641, 0.0000), (0.2588, 1.4364, 0.0000),
+              (0.0146, 1.9105, 0.0000), (0.0000, 1.4341, 0.0917), (0.0000, 0.9296, 0.2129), (0.0000, 0.4052, 0.3526),
+              (0.0000, 0.0128, 0.4186)]
+GNOI_PINK = ((16.5, 42.15), (264.0, 8.014), (3946.0, 2.448))
+GNOI_PINK_W, GNOI_TOP = 0.1848, 14000.0
+def gn_lp(f, fc):
+    g = 1 - math.exp(-2 * math.pi * fc / SR)
+    return g / (1 - (1 - g) * cmath.exp(-2j * math.pi * f / SR))
+_pk1k = abs(GNOI_PINK_W + sum(k * gn_lp(1000.0, fc) for fc, k in GNOI_PINK))
+_br1k = abs(gn_lp(1000.0, GNOI_PINK[0][0]) * gn_lp(1000.0, GNOI_TOP))
+out.append("#define GN_G0 %d\n#define GN_G1 %d\n#define GN_G2 %d\n#define GN_GT %d\n" % tuple(
+    round((1 - math.exp(-2 * math.pi * fc / SR)) * 2 ** 24) for fc in (GNOI_PINK[0][0], GNOI_PINK[1][0], GNOI_PINK[2][0], GNOI_TOP)))
+out.append("#define GN_KW %d\n#define GN_K0 %d\n#define GN_K1 %d\n#define GN_K2 %d\n#define GN_KB %d\n" % (
+    round(4096 * GNOI_PINK_W / _pk1k), round(4096 * GNOI_PINK[0][1] / _pk1k), round(4096 * GNOI_PINK[1][1] / _pk1k),
+    round(4096 * GNOI_PINK[2][1] / _pk1k), round(4096 / _br1k)))
+def gn_w(v):
+    i = max(k for k in range(len(GNOI_RED)) if GNOI_RED[k] <= v)
+    if i == len(GNOI_RED) - 1:
+        return GNOI_RED_W[i]
+    u = (v - GNOI_RED[i]) / (GNOI_RED[i + 1] - GNOI_RED[i])
+    return tuple(a + (b - a) * u for a, b in zip(GNOI_RED_W[i], GNOI_RED_W[i + 1]))
+out.append(arr("T_RED_W", "int16_t", [round(16384 * c) for v in range(128) for c in gn_w(v)], 12))
 # the filter follows the note: a cutoff 2^((step - 16) / 8) x f0, the same for the HP (BASE) and the LP (BASE + WDTH).
 # Positions in 1/96 octave over MIDI note 0 (8.18 Hz): 8 a semitone, 12 a step. Every section stops at 18 kHz,
 # which gives the open filter the Monomachine's top (-1 dB at 12.5 kHz, -1.8 dB at 14 kHz). ZDF g = tan(pi fc / fs)

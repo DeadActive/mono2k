@@ -57,7 +57,7 @@ typedef struct {
 } mi_t;
 
 /* the machines as the selector steps through them: the Monomachine's order (its FM+ STAT, PAR, DYN together) */
-static const uint8_t M_ORDER[M_COUNT] = {M_GSIN, M_GNOI, M_SID, M_FMS, M_FMP, M_FMD, M_SAW, M_PUL, M_ENS, M_WAV, M_VOX, M_FXC,
+static const uint8_t M_ORDER[M_COUNT] = {M_GSIN, M_GNOI, M_GPRC, M_SID, M_FMS, M_FMP, M_FMD, M_SAW, M_PUL, M_ENS, M_WAV, M_VOX, M_FXC,
                                           M_FXD, M_FXR};
 static int m_place(int m) { for (int i = 0; i < M_COUNT; i++) if (M_ORDER[i] == m) return i; return 0; }
 
@@ -65,7 +65,7 @@ static const mi_t MI[M_COUNT] = {
     {"GND-SIN", "GND", "SINE", "PERC", {5, 1, 3},
      {{"FOLD", "SINE FOLD", K_NUM}, {"SUB", "SUB LEVEL", K_NUM}, {"NOIS", "NOISE", K_NUM}, {"PDEP", "PITCH DROP", K_NUM},
       {"PDEC", "DROP TIME", K_TIME}, {"CLIK", "CLICK", K_NUM}, {"HARM", "2ND HARMONIC", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
-    {"GND-NOIS", "GND", "NOISE", "PERC", {3, 4, 1},
+    {"GND-PERC", "GND", "NOISE", "PERC", {3, 4, 1},
      {{"COLR", "COLOUR", K_BI}, {"S&H", "PITCHED HOLD", K_NUM}, {"META", "METAL MIX", K_NUM}, {"MSPR", "METAL SPREAD", K_NUM},
       {"PDEP", "PITCH DROP", K_NUM}, {"PDEC", "DROP TIME", K_TIME}, {"GRIT", "8-BIT GRIT", K_NUM}, {"-", "-", K_NUM}}},
     {"SID-6581", "SID", "CHIP", "SYNTH", {3, 2, 4},
@@ -104,6 +104,9 @@ static const mi_t MI[M_COUNT] = {
     {"FX-DYNMX", "FX", "DYNAMIX", "FX", {5, 1, 1},
      {{"ATK", "ATTACK", K_NUM}, {"REL", "RELEASE", K_NUM}, {"THRS", "THRESHOLD", K_NUM}, {"MIX", "MIX", K_NUM},
       {"RAT", "RATIO", K_NUM}, {"GAIN", "MAKE-UP GAIN", K_NUM}, {"RMS", "RMS / PEAK", K_NUM}, {"INP", "INPUT", K_NUM}}},
+    {"GND-NOIS", "GND", "NOISE", "PERC", {2, 1, 1},
+     {{"ST", "STEREO", K_NUM}, {"RED", "REDNESS", K_NUM}, {"STON", "STEREO ON", K_ONOFF}, {"-", "-", K_NUM},
+      {"-", "-", K_NUM}, {"-", "-", K_NUM}, {"-", "-", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
 };
 
 static const char *const SIDW_N[5] = {"TRI", "SAW", "PULS", "MIX", "NOIS"};
