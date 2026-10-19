@@ -657,7 +657,7 @@ def cases():
              " +-0.7 of the peak): 14-28 dB more over 2 kHz in a kick's first 4 ms than MONO2K's, which starts at zero."
              " Not modelled (it may be the emulator's): MONO2K's CLIK is its kick's click")
     clean, driven = [0.5, 1.0, 6.0, 10.0], [0.5, 1.0, 1.5, 10.0]
-    for v in (64, 100):
+    for v in (64, 100, 127):
         add("kick", "chain_kick40", f"k40_vel_{v:03d}", "kick", {}, clean)
     add("kick", "chain_kick40", "k40_tune_064", "level_at", {"hz": [2 * f0_of(60)]}, 3.0)
     add("kick", "chain_kick40", "k40_init", "kick", {}, clean)

@@ -239,7 +239,8 @@ static void live_on(int note, int vel)
         return;
     }
     m_cpy(trk[t].eff, pat[cur_pat].kit[t], P_COUNT);
-    voice_on(t, note, vel, sq.nheld > 1 && pat[cur_pat].kit[t][P_PORT] > 0);
+    /* heard alike at any velocity, as the Monomachine plays a note (chain_kick40); a hard key records an accent */
+    voice_on(t, note, 100, sq.nheld > 1 && pat[cur_pat].kit[t][P_PORT] > 0);
     trk[t].gate_left = -1;
     if (sq.rec && sq.playing) {        /* to the nearest step; ahead of us, it must not play again this time */
         int32_t len = step_len(sq.step ? sq.step - 1 : seq_len() - 1);
@@ -298,7 +299,7 @@ void m2k_midi(int status, int d1, int d2)
     if (cmd == 0x90 && d2) {
         if (t == sq.ktrk) { live_on(d1, d2); return; }
         m_cpy(trk[t].eff, pat[cur_pat].kit[t], P_COUNT);
-        voice_on(t, d1, d2, 0);
+        voice_on(t, d1, 100, 0);                    /* any velocity alike, as the Monomachine's (no accent) */
         trk[t].gate_left = -1;
     } else if (cmd == 0x80 || cmd == 0x90) {
         if (t == sq.ktrk) { live_off(d1); return; }
