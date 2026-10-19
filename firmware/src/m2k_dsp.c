@@ -110,6 +110,11 @@ typedef struct {
     int32_t eqc;                       /* the EQ band's mix, Q24 */
     uint32_t srr_acc;
     int32_t srr_hold, srr_prev;
+    /* SWAV-ENS's side (its chorus across the stereo) through the same chain, linear: the clip's ceiling holds it, the
+     * fold and the XOR (MONO2K's own) leave it */
+    zsvf_t eqs, lp1s, hp2s;
+    zop_t hp1s, lp2as, lp2bs;
+    int32_t srr_holds, srr_prevs;
     /* delay: a sum line, and a difference line while the send is positive (ping-pong) */
     uint8_t *dl;
     uint32_t dw, dph;                  /* write index; the line's clock, Q16 of a line sample */
@@ -139,6 +144,7 @@ static int16_t mod_mem[M2K_TRACKS][MOD_LEN] POOL;
 static int16_t ens_mem[M2K_TRACKS][ENS_LEN] POOL;
 static int16_t blk[M2K_TRACKS][M2K_SUB];      /* machine output of this block */
 static int16_t tout[M2K_TRACKS][M2K_SUB];     /* each track's output, after its amp, before its VOL: an FX machine's input */
+static int16_t eside[M2K_TRACKS][M2K_SUB];    /* SWAV-ENS's side out of the machine, before the chain */
 static int16_t bside[M2K_TRACKS][M2K_SUB];    /* FX-CHORUS's side (its width), added after the pan */
 
 /* a parameter with its modulation, 0..127*256 */
@@ -681,9 +687,11 @@ static void mach_block(int ti, int m, int32_t pitch)
          * voices off its interval table (equal tempered, and the just 3/2 4/3 5/4 6/5 beside them), no level shared
          * between them. A voice is two saws an octave under its note, the second PW / 128 of a period on; WAVE fades
          * their sum out and their difference in at 0.63 (weights 1 - 0.37 x and 1 - 1.63 x, x = WAVE / 127): PW 64
-         * one saw at the note, WAVE 127 a pulse an octave under. The chorus: a copy whose pitch
-         * travels a triangle (+-13.5 c at 0.66 Hz .. +-18 c at 0.2 Hz by CHRW) off a half-rate line, CHRL its mix
-         * (dry 1 - 0.83 x, wet 0.85 x); mono here, where the Monomachine's widens the stereo by CHRW */
+         * one saw at the note, WAVE 127 a pulse an octave under. The chorus (tools/ref/chain_ens41.spec): two copies
+         * off a half-rate line, each delayed by a sine at 0.2 Hz swinging +-16.8 c, the second a quarter turn on;
+         * CHRL their mix (dry 1 - 0.83 x, wet 0.85 x). CHRW sets them apart across the stereo: the left hears
+         * (1 + w) / 2 of the first and (1 - w) / 2 of the second, the right the other way round (w = 0.355
+         * (CHRW / 127)^1.15, T_ENS_W), so at 0 both hear their mean (mono); out as the mid here and the side (eside) */
         int32_t base = pitch + (P7(t, P_SYN + 7) - 64) * 2 - 12 * 64;
         int32_t wa = 32768 - (P7(t, P_SYN + 3) * 12124) / 127, wb = 32768 - (P7(t, P_SYN + 3) * 53412) / 127;   /* Q15 */
         uint32_t off = (uint32_t)P7(t, P_SYN + 4) << 25;
@@ -695,9 +703,10 @@ static void mach_block(int ti, int m, int32_t pitch)
         }
         int chrl = P7(t, P_SYN + 5), chrw = P7(t, P_SYN + 6);
         int32_t dry = 32768 - (chrl * 27197) / 127, wet = (chrl * 27853) / 127;    /* Q15 */
-        uint32_t linc = T_ENS_CINC[chrw];
-        int32_t swing = (int32_t)T_ENS_CDEP[chrw];                                  /* half-rate samples, Q8 */
+        wet = (wet * (int32_t)T_ENS_G[chrw]) >> 15;                                /* each channel at one copy's level */
+        int32_t wside = (wet * (int32_t)T_ENS_W[chrw]) >> 15;                       /* the side's share, Q15 */
         int16_t *cm = ens_mem[ti];
+        int16_t *es = eside[ti];
         for (int i = 0; i < M2K_SUB; i++) {
             int32_t s = 0;
             for (int k = 0; k < 4; k++) {
@@ -709,16 +718,19 @@ static void mach_block(int ti, int m, int32_t pitch)
             /* the line runs at half rate, always written (a CHRL turned up finds it full): a pair's mean */
             t->ms[0] += s;
             if (i & 1) { cm[t->ph[5]++ & (ENS_LEN - 1)] = (int16_t)sat16(t->ms[0] >> 1); t->ms[0] = 0; }
-            t->ph[4] += linc;
+            t->ph[4] += ENS_CINC;
+            es[i] = 0;
             if (chrl) {
-                int32_t tri = (int32_t)(t->ph[4] >> 16) - 32768;
-                tri = tri < 0 ? -tri : tri;                                         /* 0 .. 32768 */
-                int32_t d8 = (2 << 8) + swing + (int32_t)(((int64_t)swing * (2 * tri - 32768)) >> 15);
-                int32_t pos = (int32_t)((t->ph[5] << 8) + ((uint32_t)(i & 1) << 7)) - d8;
-                uint32_t j = (uint32_t)pos >> 8;
-                int32_t f = pos & 255;
-                int32_t y = (cm[j & (ENS_LEN - 1)] * (256 - f) + cm[(j + 1) & (ENS_LEN - 1)] * f) >> 8;
-                s = (int32_t)(((int64_t)s * dry + (int64_t)y * wet) >> 15);
+                int32_t y[2];
+                for (int c = 0; c < 2; c++) {                                       /* the two taps */
+                    int32_t d8 = (2 << 8) + ENS_CDEP + (int32_t)(((int64_t)ENS_CDEP * sinp(t->ph[4] + ((uint32_t)c << 30))) >> 15);
+                    int32_t pos = (int32_t)((t->ph[5] << 8) + ((uint32_t)(i & 1) << 7)) - d8;
+                    uint32_t j = (uint32_t)pos >> 8;
+                    int32_t f = pos & 255;
+                    y[c] = (cm[j & (ENS_LEN - 1)] * (256 - f) + cm[(j + 1) & (ENS_LEN - 1)] * f) >> 8;
+                }
+                es[i] = (int16_t)sat16((int32_t)(((int64_t)(y[0] - y[1]) * wside) >> 16));
+                s = (int32_t)(((int64_t)s * dry + (int64_t)((y[0] + y[1]) >> 1) * wet) >> 15);
             }
             o[i] = (int16_t)sat16(s);
         }
@@ -1039,6 +1051,13 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     zsvf_set(&t->hp2, fg_at(T_FG, ph + T_HPC[hq]), T_HPK[hq]);
     t->lp2a.G = t->lp2b.G = (int32_t)fg_at(T_FG1, pl + F_LP2 * 256);
     t->hp1.G = (int32_t)fg_at(T_FG1, ph + F_HP1 * 256);
+    int side = m == M_ENS && P7(t, P_SYN + 5) && P7(t, P_SYN + 6);              /* SWAV-ENS's chorus across the stereo */
+    if (side) {
+        zsvf_set(&t->lp1s, fg_at(T_FG, pl + T_LPC[lq]), T_LPK[lq]);
+        zsvf_set(&t->hp2s, fg_at(T_FG, ph + T_HPC[hq]), T_HPK[hq]);
+        t->lp2as.G = t->lp2bs.G = t->lp2a.G;
+        t->hp1s.G = t->hp1.G;
+    }
     mon.cut_hp[ti] = CLAMP(((ph >> 8) * 1087 >> 10) - 132, 0, 1016);       /* on the screen's 20 Hz .. 20 kHz */
     mon.cut_lp[ti] = CLAMP(((pl >> 8) * 1087 >> 10) - 132, 0, 1016);
     /* DIST: headroom below 64, a gain into the clip above 72; the clip's ceiling falls from +5.8 dB to -3.2 dB of a
@@ -1054,6 +1073,7 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
         uint32_t gb = T_EQGAIN[eqv];
         uint32_t k = eqv > 64 ? EQ_K : (uint32_t)(((uint64_t)EQ_K * gb) >> 16);
         zsvf_set(&t->eq, T_EQG[P7(t, P_EQF)], k);
+        if (side) zsvf_set(&t->eqs, T_EQG[P7(t, P_EQF)], k);
         int32_t c = (int32_t)(((int64_t)(gb - 65536) * EQ_K) >> 16);
         t->eqc = eqv > 64 ? c : -c;
     }
@@ -1110,6 +1130,26 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
         if (bits < 16) s = (sat16(s) >> (16 - bits)) * (1 << (16 - bits));
         int32_t sd = 0;
         if (m == M_FXC) sd = (int32_t)(((int64_t)((((int64_t)bside[ti][i] * a) >> 15)) * vol) >> 15);
+        if (side) {                    /* the side through the same filters, amp, VOL and SRR, added after the pan */
+            int32_t us = (int32_t)CLAMP((eside[ti][i] * dh) >> 24, -(1 << 24), 1 << 24);
+            if (eq_on) { int32_t b; zsvf_tick(&t->eqs, us, 0, &b, 0); us = CLAMP(us + (int32_t)(((int64_t)b * t->eqc) >> 24), -(1 << 26), 1 << 26); }
+            int32_t vs;
+            zsvf_tick(&t->lp1s, us, &vs, 0, 0);
+            us = CLAMP(vs, -ceil, ceil);
+            zsvf_tick(&t->hp2s, us, 0, 0, &us);
+            t->hp2s.s1 = CLAMP(t->hp2s.s1, -ceil, ceil);
+            t->hp2s.s2 = CLAMP(t->hp2s.s2, -ceil, ceil);
+            us -= zop_lp(&t->hp1s, us);
+            int32_t ss = zop_lp(&t->lp2bs, zop_lp(&t->lp2as, us));
+            ss = (int32_t)(((int64_t)ss * a) >> 15);
+            ss = (int32_t)(((int64_t)ss * vol) >> 15);
+            if (srr) {
+                if (t->srr_acc < sinc) { t->srr_prevs = t->srr_holds; t->srr_holds = ss; }   /* the mid's clock just ticked */
+                ss = t->srr_prevs + (int32_t)(((int64_t)(t->srr_holds - t->srr_prevs) * (int32_t)t->srr_acc) >> 16);
+            }
+            if (bits < 16) ss = (sat16(ss) >> (16 - bits)) * (1 << (16 - bits));
+            sd = (int32_t)(((int64_t)ss * T_PAN[64]) >> 15);
+        }
         int32_t l = (int32_t)CLAMP((((int64_t)s * gl) >> 15) + sd, -T_CLIP, T_CLIP), r = (int32_t)CLAMP((((int64_t)s * gr) >> 15) - sd, -T_CLIP, T_CLIP);
         int32_t as = l < 0 ? -l : l, ar = r < 0 ? -r : r;
         if (ar > as) as = ar;

@@ -25,14 +25,14 @@ REF_JSON = os.path.join(HERE, "regress_ref.json")
 GAPS_JSON = os.path.join(HERE, "regress_gaps.json")
 SPECS = ["chain_levels", "chain_dist2", "chain_filt2", "chain_map3", "chain_clip3", "chain_eq2", "chain_srr2",
          "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14", "chain_ens20", "chain_ensacc", "chain_dist21",
-         "chain_fm26", "chain_sid36", "chain_pul38", "chain_kick40"]
+         "chain_fm26", "chain_sid36", "chain_pul38", "chain_kick40", "chain_ens41"]
 MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2": "mm_cfilt2", "chain_map3": "mm_cmap3",
           "chain_clip3": "mm_cclip3", "chain_eq2": "mm_ceq2", "chain_srr2": "mm_csrr2", "chain_delay": "mm_cdelay",
           "chain_delay2": "mm_cdelay2", "chain_ftime5": "mm_cftime5", "chain_res6": "mm_cres6",
           "chain_drive12": "mm_cdrive12", "chain_tune13": "mm_ctune13",
           "chain_sidbend14": "mm_csidbend14", "chain_ens20": "mm_cens20", "chain_ensacc": "mm_censacc",
           "chain_dist21": "mm_cdist21", "chain_fm26": "mm_cfm26", "chain_sid36": "mm_csid36", "chain_pul38": "mm_cpul38",
-          "chain_kick40": "mm_ckick40"}
+          "chain_kick40": "mm_ckick40", "chain_ens41": "mm_cens41"}
 
 
 def db(v):
@@ -129,6 +129,47 @@ def m_chorus_mix(x, a, ld):              # the dry line's power and the moving c
 def m_lr_corr(x, a, ld):                 # the channels' correlation over the held note
     s = x[int(0.3 * SR):int(3.9 * SR)]
     return [float(np.corrcoef(s[:, 0], s[:, 1])[0, 1])]
+
+
+def _chorus_track(c, f0):                 # one channel's copy pitch around partial 8, cents, every 200 samples
+    n = len(c)
+    X = np.fft.fft(c)
+    f = np.fft.fftfreq(n, 1 / SR)
+    H = np.zeros(n)
+    H[(f > f0 - 60) & (f < f0 + 60)] = 2
+    ph = np.unwrap(np.angle(np.fft.ifft(X * H)))
+    fi = np.diff(ph) * SR / (2 * np.pi)
+    k = int(0.02 * SR)
+    fi = np.convolve(fi, np.ones(k) / k, "same")
+    tr = 1200 * np.log2(np.maximum(fi, 1) / f0)[2000:-2000][::200]
+    return tr - tr.mean()
+
+
+def m_chorus_stereo(x, a, ld):            # SWAV-ENS's chorus held: its LFO (Hz), the left's swing (c), the right's
+    from ens15 import F0 as EF0          # phase on the left's (deg), L/R correlation, the copy's side against its mid (dB)
+    s = x[int(0.5 * SR):int(11.5 * SR)]
+    f8 = 8 * EF0
+    tl, tr = _chorus_track(s[:, 0], f8), _chorus_track(s[:, 1], f8)
+    t = np.arange(len(tl)) * 200 / SR
+    best = (0.0, 0.0, 0.0)
+    for fq in np.arange(0.10, 1.0, 0.002):
+        A = np.stack([np.sin(2 * np.pi * fq * t), np.cos(2 * np.pi * fq * t)], 1)
+        co = np.linalg.lstsq(A, tl, rcond=None)[0]
+        if np.hypot(*co) > best[1]:
+            best = (fq, float(np.hypot(*co)), float(np.arctan2(co[1], co[0])))
+    A = np.stack([np.sin(2 * np.pi * best[0] * t), np.cos(2 * np.pi * best[0] * t)], 1)
+    cr = np.linalg.lstsq(A, tr, rcond=None)[0]
+    dphi = float((np.degrees(np.arctan2(cr[1], cr[0]) - best[2]) + 180) % 360 - 180)
+    corr = float(np.corrcoef(s[:, 0], s[:, 1])[0, 1])
+    from ens15 import spec as espec
+    def copy(c):
+        sp, df = espec(c, 0, 11, 4)
+        fr = np.arange(len(sp)) * df
+        cents = 1200 * np.log2(np.maximum(fr, 1) / f8)
+        p = sp ** 2
+        return p[np.abs(cents) < 40].sum() - p[np.abs(cents - 0.5) < 0.8].sum()
+    side = db(np.sqrt(max(copy((s[:, 0] - s[:, 1]) / 2), 1e-30) / max(copy((s[:, 0] + s[:, 1]) / 2), 1e-30)))
+    return [best[0], best[1], dphi, corr, side]
 
 
 def m_ens_voices(x, a, ld):              # each voice of a SWAV-ENS chord, cents from its intended pitch (ens_voices.py)
@@ -373,7 +414,8 @@ METRICS = {"res_fit": m_res_fit, "rms": m_rms, "h1": m_h1, "h1_rel": m_h1_rel, "
            "echoes": m_echoes, "echo_bands": m_echo_bands, "fenv_ms": m_fenv_ms, "tone_rel": m_tone_rel, "pitch_c": m_pitch_c, "bend_c": m_bend_c,
            "ens_voice": m_ens_voice, "c3_partials": m_c3_partials, "chorus_mix": m_chorus_mix, "lr_corr": m_lr_corr,
            "ens_voices": m_ens_voices, "fm_side": m_fm_side, "fm_beta": m_fm_beta, "fen_hz": m_fen_hz, "grit": m_grit,
-           "kick": m_kick, "onset_hf": m_onset_hf}
+           "kick": m_kick, "onset_hf": m_onset_hf,
+           "chorus_stereo": m_chorus_stereo}
 
 
 # ------------------------------------------------------------------------------------------------------ cases
@@ -517,8 +559,16 @@ def cases():
     for v in (0, 64, 127):                                           # CHRW: the mix holds; the stereo is the gap
         add("ens", "chain_ens20", f"e20_chrw_{v:03d}", "chorus_mix", {}, 1.5,
             xfail="CHRW 0: the reference's copy moves faster (~0.66 Hz) and stands 2 dB further off the dry line" if v == 0 else None)
-        add("ens", "chain_ens20", f"e20_chrw_{v:03d}", "lr_corr", {}, 0.02,
-            xfail=None if v == 0 else "CHRW widens the reference's chorus across the stereo (L/R 0.96 / 0.78); MONO2K's is mono")
+        add("ens", "chain_ens20", f"e20_chrw_{v:03d}", "lr_corr", {}, 0.02)
+    # its chorus across the stereo, held 12 s (chain_ens41): one LFO, 0.2 Hz and +-16.8 c whatever CHRW, two copies a
+    # quarter turn apart, CHRW setting them apart (L/R correlation, the copy's side against its mid); the channels' phase
+    # on each other from CHRW 64. Below it the reference's channels already swing a quarter turn apart, MONO2K's less
+    apart = ("CHRW 32: the reference's channels swing a quarter turn apart (+-16.7 c each) while 0.99 alike; MONO2K's"
+             " blend of the two copies keeps them closer (28 degrees, +-11.6 c); their correlation and width match")
+    for w in (0, 32, 64, 96, 127):
+        add("ens_stereo", "chain_ens41", f"e41_l127_w{w:03d}", "chorus_stereo", {}, [0.02, 3.0, 20.0, 0.02, 1.5],
+            xfail=apart if w == 32 else None)
+    add("ens_stereo", "chain_ens41", "e41_l064_w127", "lr_corr", {}, 0.05)
     # SWAV-ENS's acceptance: bank A's eight parts (ea69d53, converted to format 7), each voice against the
     # Monomachine's, held and as the part's own trig; a stab of ~0.1 s cannot resolve a cluster's voices: INFO
     import ens_voices as EV

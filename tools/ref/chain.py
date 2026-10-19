@@ -4,8 +4,8 @@
 # one control. A sine (GND-SIN) for the levels, the distortion and the sample rate reduction; noise (GND-NOIS) for the
 # filter and the EQ, whose responses are read as the ratio to the clean noise at the same note (the filter follows the
 # note); a short sine blip for the delay.
-#   .venv/bin/python tools/ref/chain.py specs|specs2|specs3|fm26|sid36|pul38|kick40 tools/ref   writes chain_*.spec (rounds
-#   one to three; FM+; SID-6581; SWAVE-PULS; GND-SIN kicks)
+#   .venv/bin/python tools/ref/chain.py specs|specs2|specs3|fm26|sid36|pul38|kick40|ens41 tools/ref   writes chain_*.spec
+#   (rounds one to three; FM+; SID-6581; SWAVE-PULS; GND-SIN kicks; SWAVE-ENS's stereo chorus)
 import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -486,6 +486,15 @@ def pul38():
     return out
 
 
+def ens41():
+    """SWAVE-ENS's chorus across the stereo, held 12 s (its LFO is slow, 0.2 Hz: two and more turns): CHRL full, CHRW
+    from 0 to 127, and CHRL 64 at CHRW 127. A C4 saw (WAVE 0, PW 64), no interval voices"""
+    out = ["# SWAVE-ENS's chorus, 12 s: CHRL 127 across CHRW, and CHRL 64 at CHRW 127"]
+    out += [line(f"e41_l127_w{w:03d}", 14, 60, {51: 0, 52: 64, 53: 127, 54: w, 55: 64}, gate=12.0) for w in (0, 32, 64, 96, 127)]
+    out += [line("e41_l064_w127", 14, 60, {51: 0, 52: 64, 53: 64, 54: 127, 55: 64}, gate=12.0)]
+    return out
+
+
 def kick40():
     """GND-SIN as a kick on both instruments. The Monomachine's GND-SIN is a sine with TUNE alone (its page's eighth
     knob, CC 55): velocity's level (its MIDI notes play alike at any velocity), TUNE's centre (a sine and nothing else),
@@ -502,7 +511,10 @@ def kick40():
 
 
 if __name__ == "__main__":
-    if sys.argv[1] == "kick40":
+    if sys.argv[1] == "ens41":
+        with open(os.path.join(sys.argv[2], "chain_ens41.spec"), "w") as fh:
+            fh.write("\n".join(ens41()) + "\n")
+    elif sys.argv[1] == "kick40":
         with open(os.path.join(sys.argv[2], "chain_kick40.spec"), "w") as fh:
             fh.write("\n".join(kick40()) + "\n")
     elif sys.argv[1] == "pul38":

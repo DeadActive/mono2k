@@ -96,9 +96,15 @@ Done so far, all measured on OS 1.32B:
   to +12 semitones, 61–63 OFF, the just 3/2 4/3 5/4 6/5 beside their equal-tempered neighbours: all 66 group ends
   within 0.4 c); a voice two saws an octave under its note, the second PW/128 of a period on, WAVE fading their sum
   out and their difference in at 0.63 (levels within 0.8 dB over WAVE × PW); no level shared between the voices
-  (0.4 dB); TUNE ±2 semitones (0.7 c); the chorus a copy whose pitch travels a triangle, CHRL its mix (within 1.5 dB).
-  Bank A's chords, converted, against the Monomachine's voice by voice: within 0.5 c. MONO2K's chorus is mono, where
-  the Monomachine's widens the stereo by CHRW (a known gap).
+  (0.4 dB); TUNE ±2 semitones (0.7 c); CHRL the chorus's mix (within 1.5 dB). Bank A's chords, converted, against the
+  Monomachine's voice by voice: within 0.5 c. The chorus is stereo, as the Monomachine's (`chain_ens41.spec`, group
+  `ens_stereo`, 12 s held): two copies off a half-rate line, each delayed by a sine at 0.2 Hz swinging ±16.8 c, the
+  second a quarter turn on; CHRW sets them apart across the stereo (the left hears (1 + w) / 2 of one, the right of the
+  other, w = 0.355 (CHRW / 127)^1.15), each channel at one copy's level. L/R correlation 1.000, 0.991, 0.954, 0.887,
+  0.795 at CHRW 0, 32, 64, 96, 127 against the Monomachine's 1.000, 0.990, 0.956, 0.890, 0.787; the copy's side within
+  0.5 dB of its. Known gap: at CHRW 32 the Monomachine's channels already swing a quarter turn apart (±16.7 c each)
+  where MONO2K's stay closer (28°, ±11.6 c). The side runs through the track's own filters, amp and SRR (linear: the
+  clip's ceiling holds it; the fold and XOR, MONO2K's own, leave it).
 - **FM+STAT, FM+PAR and FM+DYN** on their pages (`tools/ref/chain_fm26.spec`, group `fm`): a sine carrier on the
   note at half GND-SIN's level, phase-modulated by sine operators side by side, every phase reset at the trig, the
   carrier's half a cycle on from its modulators (as the Monomachine's harmonics' phases read: a ratio-1 modulator

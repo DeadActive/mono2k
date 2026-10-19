@@ -316,16 +316,20 @@ def ens_et(semi):
     lo, hi = ENS_PCH[i][0], (ENS_PCH[i + 1][0] if i + 1 < len(ENS_PCH) else 128) - 1
     return (lo + hi) // 2
 out.append(arr("T_ENS_ET", "uint8_t", [ens_et(k) for k in list(range(-11, 0)) + list(range(1, 13))], 24))
-# the chorus (measured, chain_ens16 / 18 / 19): a copy whose pitch travels a triangle, mixed in by CHRL (dry
-# 1 - 0.83 x, wet 0.85 x, x = CHRL / 127); CHRW from +-13.5 c at 0.66 Hz to +-18 c at 0.2 Hz. As a delay line read
-# at half rate: the triangle's swing A = (2^(c / 1200) - 1) / (4 r) seconds; per CHRW the LFO's increment a sample
-# (Q32) and the swing in half-rate samples (Q8)
-def chr_rate(w):
-    return 0.66 * (0.2 / 0.66) ** (w / 127)
-def chr_cents(w):
-    return 13.5 + 4.5 * w / 127
-out.append(arr("T_ENS_CINC", "uint32_t", [round(2 ** 32 * chr_rate(w) / SR) for w in range(128)], 8))
-out.append(arr("T_ENS_CDEP", "uint32_t", [round(256 * SR / 2 * (2 ** (chr_cents(w) / 1200) - 1) / (4 * chr_rate(w))) for w in range(128)], 8))
+# the chorus (measured, tools/ref/chain_ens41.spec): two copies off a half-rate line, each delayed by a sine at
+# 0.2 Hz swinging +-16.8 c, the second a quarter turn on; CHRL their mix (dry 1 - 0.83 x, wet 0.85 x, x = CHRL / 127),
+# CHRW how far apart across the stereo they stand. A sine's swing A = (2^(c / 1200) - 1) / (2 pi r) seconds: the LFO's
+# increment a sample (Q32) and the swing in half-rate samples (Q8)
+ENS_RATE, ENS_CENTS = 0.2, 16.8
+# how far apart they stand by CHRW: the left hears (1 + w) / 2 of one and (1 - w) / 2 of the other, w = 0.355
+# (CHRW / 127)^1.15 (the copy's side against its mid at partial 8: -23.2 -16.7 -12.5 -9.4 dB at 32 64 96 127), Q15
+ENS_W = [0.355 * (v / 127) ** 1.153 for v in range(128)]
+out.append(arr("T_ENS_W", "uint16_t", [round(32768 * w) for w in ENS_W]))
+# the two copies' gain: their blend on a channel keeps (1 + w^2) / 2 of one copy's power where they part (over the
+# lowest notes), so each channel hears one copy's level, as the Monomachine's (chain_ens20's CHRL cases), Q15
+out.append(arr("T_ENS_G", "uint16_t", [round(32768 * math.sqrt(2 / (1 + w * w))) for w in ENS_W]))
+out.append("#define ENS_CINC %du\n#define ENS_CDEP %d\n" % (round(2 ** 32 * ENS_RATE / SR),
+           round(256 * SR / 2 * (2 ** (ENS_CENTS / 1200) - 1) / (2 * math.pi * ENS_RATE))))
 
 # FM ratios (Q8) and their names; inharmonic ones for the metallic sounds
 ratios = [0.25, 0.5, 0.75, 1.0, 1.41, 1.5, 2.0, 2.5, 2.76, 3.0, 3.5, 4.0, 4.24, 5.0, 5.4, 6.0,
