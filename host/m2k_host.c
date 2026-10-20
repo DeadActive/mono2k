@@ -740,6 +740,21 @@ static int selftest(void)
                 corr[w] = slr / sqrt(sl * sr + 1);
             }
             CHECK(corr[0] > 0.999 && corr[1] < 0.9, "FX-CHORUS: mono at WID 0, wide at 127");
+            /* its feedback rings: a short pluck through it at MIX 127, the energy 80-250 ms after the hit against the
+             * hit's first 25 ms, FB 127 (+0.9) against FB 64 (none); the Monomachine's metal clangs are made so */
+            double fbring[2];
+            for (int f = 0; f < 2; f++) {
+                FXPAT(M_FXC, M_GSIN, 0);
+                pat[fp].kit[0][P_HOLD] = 0; pat[fp].kit[0][P_DEC] = 10;
+                pat[fp].kit[1][P_SYN + 3] = 127; pat[fp].kit[1][P_SYN + 4] = (uint8_t)(f ? 127 : 64);
+                fx_measure(fp, 0x3F, 1.0, kb, &pk, &rm);
+                double e0 = 0, e1 = 0;
+                for (int i = 0; i < M2K_SR / 40; i++) e0 += (double)kb[2 * i] * kb[2 * i];
+                for (int i = M2K_SR * 8 / 100; i < M2K_SR / 4; i++) e1 += (double)kb[2 * i] * kb[2 * i];
+                fbring[f] = 10 * log10((e1 + 1) / (e0 + 1));
+            }
+            printf("     FX-CHORUS ring, 80-250 ms against the hit: FB 64 %.1f dB, FB 127 %.1f dB\n", fbring[0], fbring[1]);
+            CHECK(fbring[1] > fbring[0] + 10, "FX-CHORUS: its feedback rings (+0.9 at FB 127)");
             double ring[2];
             for (int mx = 0; mx < 2; mx++) {
                 FXPAT(M_FXR, M_SAW, 0);

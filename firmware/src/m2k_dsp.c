@@ -661,7 +661,7 @@ static void mach_block(int ti, int m, int32_t pitch)
             int16_t *ln = ens_mem[ti];
             int32_t base = 22 + P7(t, P_SYN + 0) * 4, dep = (P7(t, P_SYN + 1) * (base < 400 ? base : 400)) >> 7;   /* to 12 ms, +-9 */
             uint32_t linc = T_CHO_INC[P7(t, P_SYN + 2)];
-            int32_t fb = (PB8(t, P_SYN + 4) * 58) >> 8;                              /* Q15 of +-0.9, from Q8 steps */
+            int32_t fb = (PB8(t, P_SYN + 4) * 58) >> 5;                              /* Q15 of +-0.9, from Q8 steps */
             int32_t wid = P7(t, P_SYN + 5) * 258, lp = T_FMLP[64 + (P7(t, P_SYN + 6) >> 1)];
             for (int i = 0; i < M2K_SUB; i++) {
                 uint32_t p = t->ph[6] += linc;

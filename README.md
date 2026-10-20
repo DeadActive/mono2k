@@ -149,7 +149,8 @@ Done so far, all measured on OS 1.32B:
   0 keeps a track out of the mix and in the FX), INP its level (100 as it is), and opens on its own trigs as the
   Monomachine's FX tracks do (HOLD 127 by default). CHORUS (DEL DEP SPD MIX | FB WID LP INP): two taps swept in
   opposite ways off one line, their mean the chorus, their difference its width added across the stereo after the pan,
-  fed back through the first, the wet lowpassed. RINGMOD (WAVE EXT – MIX | – – – INP): the input times a carrier on
+  fed back through the first (FB up to +-0.9: at its top a short DEL rings as a comb, the Monomachine's metal clangs;
+  it reached only +-0.11 until fixed), the wet lowpassed. RINGMOD (WAVE EXT – MIX | – – – INP): the input times a carrier on
   the track's note, sine to triangle to square to saw by WAVE; EXT takes the carrier from the track before the input
   instead. DYNAMIX (ATK REL THRS MIX | RAT GAIN RMS INP): a compressor on each block's peak and RMS (RMS the blend),
   followed in log2, over a threshold of −60..0 dB by a ratio of 1:1..20:1 (a limiter at 127), made up by up to 24 dB,
