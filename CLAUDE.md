@@ -31,7 +31,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   and a sub-header: the emulator (`index.html`, `app.js`), the manual (`manual.html`, `manual.js`: one page at a time,
   the machines and knobs read off `m2k.wasm`, the screens `web/manual/*.png` from the host's tour), the installer
   (`installer.html`: no FM-1 build yet) and the patch editor (`editor.html`, `editor.js`: the same worklet and saves).
-  `panel.js` is the FM-1's layout, `site.js` the subpages' theme and textures. After a wasm build bump `m2k.wasm?v=` in
+  `panel.js` is the FM-1's layout, `site.js` the subpages' theme and textures. Every push adds what it changes for a
+  player to `web/changelog.js` (the manual's Change log: an entry per day of updates, newest first, a kind on every
+  line: machines sound sequencer workflow patterns screen web fixes), and bumps `changelog.js?v=` in `manual.html`. After a wasm build bump `m2k.wasm?v=` in
   `app.js`, `manual.js` and `editor.js` alike (and `worklet.js?v=` in `app.js` and `editor.js` with the worklet).
 - Checks: `sh tools/check.sh` (~6 min): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core built
   for armv7m soft float calls no float helper and no 64-bit division (flash / RAM printed); the self-test, every

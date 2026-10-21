@@ -193,6 +193,30 @@
   }
   firmware().catch(() => { const ml = $("[data-machines]"); if (ml) ml.innerHTML = "<p>The machines could not be read from the firmware here.</p>"; });
 
+  // ------------------------------------------------------------------------------------------ the change log
+  /* changelog.js's updates, newest first; the kinds as toggles (one at a time, or all), an update with none of the
+   * kind picked hidden */
+  const log = $("[data-changelog]"), CH = window.M2K_CHANGES, KINDS = window.M2K_KINDS;
+  if (log && CH && KINDS) {
+    const count = {};
+    CH.forEach((u) => u.items.forEach(([k]) => { count[k] = (count[k] || 0) + 1; }));
+    const when = (d) => new Date(d + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+    const chip = (k, label, n) => `<button type="button" data-kind="${k}" aria-pressed="${k === "all"}">${esc(label)}<small>${n}</small></button>`;
+    log.innerHTML = `<div class="log__kinds" role="group" aria-label="Kinds of change">${chip("all", "All", CH.reduce((a, u) => a + u.items.length, 0))}${
+      Object.keys(KINDS).filter((k) => count[k]).map((k) => chip(k, KINDS[k], count[k])).join("")}</div>` +
+      CH.map((u) => `<section class="log__up"><header><time datetime="${esc(u.date)}">${esc(when(u.date))}</time><h2>${esc(u.title)}</h2></header><ul>${
+        u.items.map(([k, t]) => `<li data-kind="${esc(k)}"><span class="log__kind">${esc(KINDS[k] || k)}</span><span>${esc(t)}</span></li>`).join("")}</ul></section>`).join("");
+    const pick = (kind) => {
+      $$(".log__kinds button", log).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.kind === kind)));
+      $$(".log__up", log).forEach((sec) => {
+        let any = false;
+        $$("li", sec).forEach((li) => { const on = kind === "all" || li.dataset.kind === kind; li.hidden = !on; any = any || on; });
+        sec.hidden = !any;
+      });
+    };
+    $(".log__kinds", log).addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) pick(b.dataset.kind); });
+  }
+
   /* the theme changed: the screens and the marks in the new colours */
   window.addEventListener("m2k-theme", () => {
     $$("canvas[data-scr]").forEach(drawScreen);

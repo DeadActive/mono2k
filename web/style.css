@@ -341,6 +341,23 @@ a.label { color: var(--ink); text-decoration: none; }
 .cards a span { font: var(--small); opacity: 0.7; }
 .cards a:hover { background-image: var(--d-check); background-size: 2px 2px; image-rendering: pixelated; }
 .cards a:hover b, .cards a:hover span { background: var(--paper); }
+/* the change log: the kinds as toggles, then each update, its date over its title, a kind on every line */
+.log__kinds { display: flex; flex-wrap: wrap; gap: var(--s1); margin-top: var(--s3); }
+.log__kinds button { display: inline-flex; align-items: center; gap: var(--s1); height: var(--s4); padding: 0 var(--s2); font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink); background: var(--paper); border: 1px solid var(--ink); border-radius: 0; cursor: pointer; }
+.log__kinds button small { font: inherit; opacity: 0.6; }
+.log__kinds button:hover { background-image: var(--d-check); background-size: 2px 2px; image-rendering: pixelated; }
+.log__kinds button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.log__kinds button[aria-pressed="true"] small { opacity: 0.8; }
+.log__kinds button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.log__up { margin-top: var(--s6); }
+.log__up[hidden], .doc .log__up li[hidden] { display: none; }
+.log__up header { padding-bottom: var(--s1); border-bottom: 3px solid var(--ink); }
+.log__up time { font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.6; }
+.doc .log__up h2 { margin: 4px 0 0; }
+.doc .log__up ul { list-style: none; margin: 0; padding: 0; max-width: none; }
+.doc .log__up li { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: var(--s2); margin: 0; padding: var(--s1) 0; border-bottom: 1px dotted var(--ink); }
+.log__kind { align-self: start; justify-self: start; padding: 0 6px; font: var(--label); line-height: 20px; text-transform: uppercase; letter-spacing: 0.1em; border: 1px solid var(--ink); white-space: nowrap; }
+@media (max-width: 560px) { .doc .log__up li { grid-template-columns: minmax(0, 1fr); gap: 4px; } }
 .mlist { display: grid; gap: var(--s4); margin-top: var(--s3); }
 .mlist section:first-child { border-top: 0; padding-top: 0; }
 .mlist section { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: var(--s2); padding-top: var(--s3); border-top: 1px solid var(--ink); }
