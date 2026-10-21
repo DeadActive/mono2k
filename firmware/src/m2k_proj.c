@@ -329,8 +329,8 @@ uint8_t *m2k_store_buf(int *max)
  * SPLICE, RIBBON, FACETS); 3: the next four (SMOKE, TORQUE, TUNNEL, MOTEL); 4: brief v3's first four (PYLONS,
  * RIVETS, ORCHARD, SPLINTR), and HAZE, SPLICE and RIBBON set to sound on the per-machine DIST as they did; 5: A04
  * TENFOUR and A16 FOUNDRY, after Radiohead and Boards of Canada; 6: A06 CAROM, A07 VESPER, A12 CUTUP, A13 GRISTLE;
- * 7: A09 MAMMOTH (direction v5) for PYLONS */
-#define FACTORY_REV 7
+ * 7: A09 MAMMOTH (direction v5) for PYLONS; 8: the bank reordered by energy, MAMMOTH first */
+#define FACTORY_REV 8
 static const char *const OLD_DEMO[FACTORY_REV][16] = {
     {"LATEX", "PVC", "SPU RM", "ELECTRO", "GLITCH", "CHROME", "ACID", "2STEP", "GROOVE", "HYPRPOP", "DUB", "CHIP",
      "HARDGRV", "IDM", "DUBSTEP", "INIT"},
@@ -345,6 +345,8 @@ static const char *const OLD_DEMO[FACTORY_REV][16] = {
     {"HAZE", "SPLICE", "RIBBON", "TENFOUR", "SMOKE", "TORQUE", "TUNNEL", "MOTEL", "PYLONS", "RIVETS", "SYRUP", "SPU",
      "GROOVE", "ORCHARD", "SPLINTR", "FOUNDRY"},
     {"HAZE", "SPLICE", "RIBBON", "TENFOUR", "SMOKE", "CAROM", "VESPER", "MOTEL", "PYLONS", "RIVETS", "SYRUP", "CUTUP",
+     "GRISTLE", "ORCHARD", "SPLINTR", "FOUNDRY"},
+    {"HAZE", "SPLICE", "RIBBON", "TENFOUR", "SMOKE", "CAROM", "VESPER", "MOTEL", "MAMMOTH", "RIVETS", "SYRUP", "CUTUP",
      "GRISTLE", "ORCHARD", "SPLINTR", "FOUNDRY"},
 };
 

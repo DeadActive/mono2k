@@ -271,12 +271,21 @@ static int pitch_dump(const char *out)
 
 #define CHECK(c, m) do { if (!(c)) { printf("FAIL: %s\n", m); fails++; } else printf("ok   %s\n", m); } while (0)
 
+/* B01, the blank kit, opened as the panel opens a pattern: its locks and every track's settings (A01's would stay
+ * otherwise, and an LFO of A01's reaching across tracks with them) */
+static void open_b01(void)
+{
+    cur_pat = 16;
+    lockmap_build();
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[16].kit[t], P_COUNT);
+}
+
 /* the bus's tape at a TAPE value on a held 1047 Hz sine: the pitch per cycle (between interpolated rising zero
  * crossings), its slow part (a 159 ms average: one flutter period) and the rest; peak deviation in cents of each */
 static void tape_pitch_at(int tape, double *wow_c, double *flut_c)
 {
     m2k_init(7);
-    cur_pat = 16;                                  /* B01, the blank kit */
+    open_b01();
     pat[16].machine[0] = M_GSIN;
     pat[16].kit[0][P_SYN + 3] = 0;                 /* no pitch envelope */
     pat[16].kit[0][P_SYN + 5] = 30;                /* the click the bus's references were measured with (GND-SIN's init before 12) */
@@ -437,7 +446,7 @@ static int bus_measure(const char *dir)
             double w, fl;
             tape_pitch_at(v, &w, &fl);
             m2k_init(7);
-            cur_pat = 16;
+            open_b01();
             pat[16].machine[0] = M_GSIN;
             pat[16].kit[0][P_SYN + 3] = 0;
             pat[16].kit[0][P_SYN + 5] = 30;
@@ -467,13 +476,14 @@ static int selftest(void)
     CHECK(wow_c > 25 && wow_c < 55 && flut_c < wow_c / 3,
           "tape: the wow drifts (25..55 c at TAPE 127), the flutter stays under a third of it");
     m2k_init(7);
-    CHECK(!strcmp(pat[0].name, "HAZE") && !strcmp(pat[16].name, "INIT"), "factory: A01 HAZE, B01 INIT");
+    CHECK(!strcmp(pat[0].name, "MAMMOTH") && !strcmp(pat[2].name, "HAZE") && !strcmp(pat[16].name, "INIT"),
+          "factory: A01 MAMMOTH, A03 HAZE, B01 INIT");
     CHECK(!strcmp(m2k_project_name(0), "DEMO") && !strcmp(m2k_project_name(1), "P2"), "projects: DEMO, P2");
     printf("     DEMO packed: %u bytes for 64 patterns (A01 %d bytes, B01 %d)\n", proj[0].used, proj[0].len[0], proj[0].len[16]);
     /* the pattern formats: older ones convert once, on their path; today's loads unchanged */
     {
-        /* the demos are written on today's chain: none is converted (A01 T6's DTIM 64 would become 127) */
-        CHECK(pat[0].kit[5][P_DTIM] == 64 && pat[0].kit[0][P_DSND] == 64 && pat[0].kit[0][P_DIST] == 66,
+        /* the demos are written on today's chain: none is converted (A03 HAZE's T6 DTIM 64 would become 127) */
+        CHECK(pat[2].kit[5][P_DTIM] == 64 && pat[2].kit[0][P_DSND] == 64 && pat[2].kit[0][P_DIST] == 66,
               "format: the factory is written on today's chain, not converted");
         static m2k_pattern_t a, b, c;
         static uint8_t bl[BLOB_MAX], bl2[BLOB_MAX];
@@ -558,7 +568,7 @@ static int selftest(void)
         {
             static m2k_pattern_t w, w2;
             static uint8_t wb[BLOB_MAX];
-            m_cpy(&w, &pat[4], sizeof w);                             /* A05: a DIGI-WAV track among others */
+            m_cpy(&w, &pat[9], sizeof w);                             /* A10 SMOKE (no FM, no SID) */
             for (int t = 0; t < M2K_TRACKS; t++) if (w.machine[t] == M_GSIN) w.machine[t] = M_GPRC;   /* (no page that converts) */
             for (int t = 0; t < M2K_TRACKS; t++) for (int k = 0; k < P_WBNK; k++) w.kit[t][k] = (uint8_t)((t * 31 + k * 7) & 127);
             int wn = pat_pack_v(&w, wb, 7);
@@ -686,7 +696,7 @@ static int selftest(void)
         {
             static m2k_pattern_t w, w2;
             static uint8_t wb[BLOB_MAX];
-            m_cpy(&w, &pat[0], sizeof w);
+            m_cpy(&w, &pat[2], sizeof w);                                         /* A03 HAZE */
             w.machine[0] = M_GSIN; w.machine[1] = M_SAW; w.machine[3] = M_SID;
             const uint8_t og[8] = {60, 11, 22, 33, 44, 55, 66, 77};               /* TUNE FOLD SUB NOIS PDEP PDEC CLIK HARM */
             m_cpy(&w.kit[0][P_SYN], og, 8);
@@ -841,7 +851,7 @@ static int selftest(void)
         /* the bank on the screen: a DIGI-WAV track's SYN has a third page, BANK; the wave knob names the bank's waves */
         {
             m2k_init(7);
-            cur_pat = 16;                                             /* B01, the blank kit: T1 GND-SIN, T4 DIGI-WAV */
+            open_b01();                                               /* T1 GND-SIN, T4 DIGI-WAV */
             kit_default(&pat[16], 3, M_WAV);
             int wt = -1;
             for (int t = 0; t < M2K_TRACKS; t++) if (pat[16].machine[t] == M_WAV) { wt = t; break; }
@@ -868,7 +878,7 @@ static int selftest(void)
             long worst = 0;
             for (int k = 0; k < 64; k++) {
                 m2k_init(7);
-                cur_pat = 16;                                         /* B01, the blank kit */
+                open_b01();
                 pat[16].machine[0] = M_WAV;
                 static const uint8_t syn[8] = {0, 64, 127, 0, 0, 64, 0, 0};
                 for (int j = 0; j < 8; j++) pat[16].kit[0][P_SYN + j] = syn[j];
@@ -1095,7 +1105,7 @@ static int selftest(void)
     project_load(1);
     CHECK(pat[5].kit[2][P_VOL] != 1, "load project discards unsaved work");
     project_load(0);
-    CHECK(!strcmp(pat[1].name, "SPLICE"), "load DEMO again");
+    CHECK(!strcmp(pat[1].name, "RIVETS"), "load DEMO again");
     /* the store, out and back */
     pat[3].kit[1][P_PAN] = 17;
     int n = m2k_store_pack();
@@ -1117,15 +1127,17 @@ static int selftest(void)
     CHECK(project_save(2) == 0, "a project too big for an image is refused, not corrupted");
     CHECK(!strcmp(m2k_project_name(2), "P3"), "the refused slot is untouched");
     /* a store saved before today's demos: the slots still holding the ones its revision shipped take today's, the
-     * owner's stay. Revision 0 (before the store kept one: A16 was INIT, the owner's once written in), 1 to 5 */
-    for (int rev = 0; rev < 6; rev++) {
-        static const char *const OLDN[6] = {"SPU RM", "DAYDRM", "GLITCH", "DREXC", "FACETS", "TORQUE"};
-        int sl = rev == 2 ? 4 : rev == 3 ? 8 : rev == 4 ? 3 : rev == 5 ? 5 : 2;   /* a slot the next revision replaced */
+     * owner's stay. Revision 0 (before the store kept one: A16 was INIT, the owner's once written in), 1 to 7 (7: the
+     * bank before its reorder, every part in another slot) */
+    for (int rev = 0; rev < 8; rev++) {
+        static const char *const OLDN[8] = {"SPU RM", "DAYDRM", "GLITCH", "DREXC", "FACETS", "TORQUE", "PYLONS", "HAZE"};
+        int sl = rev == 2 ? 4 : rev == 3 || rev == 6 ? 8 : rev == 4 ? 3 : rev == 5 ? 5 : rev == 7 ? 0 : 2;   /* a slot the next revision replaced */
         m2k_init(11);
-        m2k_pattern_t keep2 = pat[sl], keep15 = pat[15], keep0 = pat[0];
+        m2k_pattern_t keep2 = pat[sl], keep15 = pat[15], keep0 = pat[0], keep6 = pat[6];
         s_cpy(pat[sl].name, OLDN[rev]);                      /* an old demo, as shipped */
-        if (rev == 3) pat[0].kit[5][P_DIST] = 74;            /* HAZE as revision 3 shipped it: its lead at DIST 74 */
-        s_cpy(pat[6].name, "MYSONG");                        /* the owner's */
+        if (rev == 3) { s_cpy(pat[0].name, "HAZE"); pat[0].kit[5][P_DIST] = 74; }   /* A01 as revision 3 shipped it: HAZE's lead at DIST 74 */
+        if (rev == 7) pat[6].kit[5][P_DIST] = 74;            /* A07 VESPER, in its slot before and after the reorder */
+        s_cpy(pat[7].name, "MYSONG");                        /* the owner's */
         if (rev) {
             s_cpy(pat[15].name, rev >= 5 ? "FOUNDRY" : "SHARDS");   /* the A16 its revision shipped: a demo */
         } else {
@@ -1147,10 +1159,12 @@ static int selftest(void)
               "store: an old demo left in its slot becomes today's");
         int a16 = rev ? !strcmp(pat[15].name, keep15.name) && !memcmp(pat[15].kit, keep15.kit, sizeof keep15.kit)
                       : !strcmp(pat[15].name, "INIT") && (pat[15].step[0][0].flags & ST_TRIG);
-        CHECK(!strcmp(pat[6].name, "MYSONG") && a16, rev ? "store: the owner's kept, an earlier revision's A16 today's"
+        CHECK(!strcmp(pat[7].name, "MYSONG") && a16, rev ? "store: the owner's kept, an earlier revision's A16 today's"
                                                          : "store: the owner's patterns are kept");
         if (rev == 3)
-            CHECK(!memcmp(pat[0].kit, keep0.kit, sizeof keep0.kit), "store: a demo kept by its name (HAZE) takes today's settings");
+            CHECK(!memcmp(pat[0].kit, keep0.kit, sizeof keep0.kit), "store: A01 as revision 3 shipped it (HAZE) takes today's");
+        if (rev == 7)
+            CHECK(!memcmp(pat[6].kit, keep6.kit, sizeof keep6.kit), "store: a demo kept by its name (VESPER) takes today's settings");
     }
     printf("%s (%d failed)\n", fails ? "SELFTEST FAILED" : "selftest passed", fails);
     return fails != 0;

@@ -9,7 +9,7 @@
 #   each track alone over two loops (m2k_host --pitch's renders)
 #   a DIGI-WAV part wave by wave: each trig's level (its first 150 ms, VOL taken out) from the pitch renders, every
 #   other wave's VOL (wave_span's) set so its trigs stand where the kit's wave's do (the owner's waves span 16 dB)
-#   the mix, driven by the bank's master drive (BANK_DRIVE), at A01 HAZE's rms (the bank's template), by the
+#   the mix, driven by the bank's master drive (BANK_DRIVE), at HAZE's rms (the bank's template, A03), by the
 #   pattern's trim; its low-end share (30-120 Hz: under 30 Hz is not heard, and a sub there only takes headroom) and
 #   crest reported beside HAZE's: a part's bass rises over its
 #   target until its low end is at least HAZE's, a low end still under it flagged
@@ -27,6 +27,7 @@ from sweep import load, SR
 from demo_pitch import bank_table, events, M_WAV, P_SYN
 
 F = os.path.join(ROOT, "firmware", "src", "m2k_factory.c")
+HAZE = 3                                           # the template's slot, from the table at the start
 P_VOL = 13
 PEAK = {"kick": 0, "snare": -3, "hat": -10, "perc": -8}
 RMS = {"bass": -1, "chord": -9, "pad": -10, "lead": -10, "voice": -10}
@@ -77,10 +78,10 @@ def solo(slot, t):
 
 def analyze(slots):
     """{slot: (peak, rms, low-end share, crest)} of each part over 30 s from its start, as heard (the master drive
-    on); A01 HAZE's too, the target"""
+    on); HAZE's too, the target"""
     d = os.path.join(ROOT, "build", "levels")
     os.makedirs(d, exist_ok=True)
-    out = subprocess.run([os.path.join(ROOT, "build/host/m2k_host"), d, "--demo", "30"] + [str(x) for x in sorted(set(slots) | {1})],
+    out = subprocess.run([os.path.join(ROOT, "build/host/m2k_host"), d, "--demo", "30"] + [str(x) for x in sorted(set(slots) | {HAZE})],
                          cwd=ROOT, capture_output=True, text=True, check=True).stdout
     res = {}
     for m in re.finditer(r"A(\d\d) \S+\s+30 s: peak (-?[\d.]+) dBFS, rms (-?[\d.]+) dBFS -> (\S+)", out):
@@ -113,8 +114,8 @@ def block(s, slot, name):
 
 
 def balance(s, slot, name, roles, res):
-    rms_mix, target = res[slot][1], res[1][1]
-    low, low_h = res[slot][2] / 100, res[1][2] / 100
+    rms_mix, target = res[slot][1], res[HAZE][1]
+    low, low_h = res[slot][2] / 100, res[HAZE][2] / 100
     lv = [solo(slot, t) if r != "-" else (-150.0, -150.0) for t, r in enumerate(roles)]
     rms, peak = [x[0] for x in lv], [x[1] for x in lv]
     a, e = block(s, slot, name)
@@ -179,7 +180,7 @@ def balance(s, slot, name, roles, res):
                 seg = seg[:sp.start()] + rep + seg[sp.end():]
     tm = re.search(r"trim\(p, (\d+)\);", seg)
     tr = int(tm.group(1))
-    if abs(rms_mix - target) > 0.4 and slot != 1:  # HAZE is the template: its trim stays
+    if abs(rms_mix - target) > 0.4 and slot != HAZE:  # HAZE is the template: its trim stays
         tr = max(30, min(127, round(tr * 10 ** ((target - rms_mix) / 40))))
     seg = seg[:tm.start()] + f"trim(p, {tr});" + seg[tm.end():]
     return s[:a] + seg + s[e:]
@@ -187,7 +188,9 @@ def balance(s, slot, name, roles, res):
 
 def main():
     rounds = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 3
+    global HAZE
     table = full = bank_table()
+    HAZE = next(k for k, v in full.items() if v["name"] == "HAZE")
     if "--slots" in sys.argv:
         want = {int(x[1:]) for x in sys.argv[sys.argv.index("--slots") + 1].split(",")}
         table = {k: v for k, v in table.items() if k in want}
@@ -204,12 +207,12 @@ def main():
     subprocess.run([os.path.join(ROOT, "build/host/m2k_host"), "build/pitch", "--pitch"], cwd=ROOT, check=True,
                    stdout=subprocess.DEVNULL)
     res = analyze(sorted(table))
-    h = res[1]
+    h = res[HAZE]
     print(f"{'':12s} {'rms':>6s} {'low end':>8s} {'crest':>6s} {'peak':>6s}   BPM  key            flavour")
-    for slot in sorted(set(table) | {1}):
+    for slot in sorted(set(table) | {HAZE}):
         row = full.get(slot, {})
         pk, r, low, crest = res[slot]
-        flag = "  LOW END UNDER HAZE'S" if slot != 1 and low < h[2] else ""
+        flag = "  LOW END UNDER HAZE'S" if slot != HAZE and low < h[2] else ""
         print(f"A{slot:02d} {row.get('name', ''):8s} {r:6.1f} {low:7.1f}% {crest:6.1f} {pk:6.1f}   {row.get('bpm', ''):>3} "
               f"{row.get('key', '') + ' ' + row.get('mode', ''):14s} {row.get('flavour', '')}{flag}")
     for slot, row in sorted(table.items()):

@@ -505,7 +505,7 @@ static void wave_span(m2k_pattern_t *p, int t, int a, int b, int wave, int vol)
         if (p->step[t][s].flags & ST_TRIG) { lk(p, t, s, SA, wave); lk(p, t, s, P_VOL, vol); }
 }
 
-/* A09 MAMMOTH's parts (direction v5, the owner's picks round by round, 2026-10-19..20): the drums A (an 808 with its
+/* A01 MAMMOTH's parts (direction v5, the owner's picks round by round, 2026-10-19..20): the drums A (an 808 with its
  * sub tail) and B (a curved drop) by bars, the DROP bass after Gabor Lazar's "pathway" (a pitch drop that is the bass,
  * its saturation CRUSH, FOLD and both hit to hit), a held Gm(add9) pad moving one voice at a time over eight bars (trig
  * conditions 1:2 and 2:2), and the Monomachine's metal: FM+PAR into FX-CHORUS on the next track, fed back hard, its
@@ -716,11 +716,14 @@ static void factory(void)
 {
     m2k_pattern_t *p;
 
-    /* A01 HAZE, after Boards of Canada: D minor at 88, a one-chord vamp, Dm7 opening to Dsus2 (no third) in the
+    /* the parts in the order written; each one's slot is pat_v5's first argument. The bank's order mixes the energies,
+     * each row of four opening on a hard part (MAMMOTH, CAROM, SPLINTR, RIBBON) */
+
+    /* A03 HAZE, after Boards of Canada: D minor at 88, a one-chord vamp, Dm7 opening to Dsus2 (no third) in the
      * second half: a dark pad, chorused and wobbling on the tape (the detune is the point: TAPE 80, about +-10 c,
      * slow); a dusty beat with room in it and a sub that walks under it carry it. Over it a fragment of four long notes,
      * A G, then E D, low on one of the owner's dark waves, low-passed, bit-worn and lightly driven into a dark echo */
-    p = pat_v5(0, "HAZE", 88, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_WAV));
+    p = pat_v5(2, "HAZE", 88, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_WAV));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 18; p->glob[G_TAPE] = 80; p->glob[G_HISS] = 56; p->glob[G_ADPC] = 16;
     p->glob[G_VERB] = 74; p->glob[G_DAMP] = 80; p->glob[G_DRIV] = BANK_DRIVE;
     SET(p, 0, SE, 56, SF, 28, SG, 16, SC, 30, P_DEC, 34, P_REL, 10, P_DIST, 66, P_VOL, 120);
@@ -743,12 +746,12 @@ static void factory(void)
     BEAT(p, 5, "................|..x.......x.....|................|..x.......h.H...", 57, 55, 52, 50, 45);
     trim(p, 93);
 
-    /* A02 SPLICE, after Autechre (the mid-90s): E phrygian at 104 in 14 beats (56 steps), so the rhythm turns against
+    /* A16 SPLICE, after Autechre (the mid-90s): E phrygian at 104 in 14 beats (56 steps), so the rhythm turns against
      * the bar. The idea is the metal: a low FM clank whose decay is new every few steps and whose ratio is locked to a
      * cleaner tick here and there, ratcheting, on trig conditions, with a kick off the grid and hats crushed to a
      * console's noise. Under it an open chord with no third (E B D E) that turns to Fmaj7 every second loop, a sub,
      * and four long notes, B A G, then E, low on one of the owner's buzzing waves, closed down and crushed */
-    p = pat_v5(1, "SPLICE", 104, MACHINES(M_GSIN, M_FMD, M_GPRC, M_WAV, M_ENS, M_GSIN));
+    p = pat_v5(15, "SPLICE", 104, MACHINES(M_GSIN, M_FMD, M_GPRC, M_WAV, M_ENS, M_GSIN));
     p->glob[G_LEN] = 56; p->glob[G_SWNG] = 4; p->glob[G_GLCH] = 24; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 24;
     p->glob[G_DRIV] = 32; p->glob[G_VERB] = 40; p->glob[G_DAMP] = 60;
     SET(p, 0, SE, 50, SF, 18, SG, 50, SC, 10, P_DEC, 22, P_REL, 6, P_DIST, 74, P_VOL, 127);
@@ -775,12 +778,12 @@ static void factory(void)
     BEAT(p, 5, "x...............|............H...|x...............|........", 28, 29, 28);
     trim(p, 87);
 
-    /* A03 RIBBON, after Aphex Twin (drill'n'bass): F minor at 168. Fast programmed breaks, kick and snare ratcheting
+    /* A13 RIBBON, after Aphex Twin (drill'n'bass): F minor at 168. Fast programmed breaks, kick and snare ratcheting
      * and rolling, over a pedal F in the sub; a dark pad, Fm7 then Db over F; and a slow melancholic line in its low
      * octave on one of the owner's dark waves, its second oscillator 12.5 c sharp against the first (the detune is
      * the point: the line beats), low-passed, driven and worn. Every second loop the drums drop out of the last bar
      * and the line and the pad are left alone */
-    p = pat_v5(2, "RIBBON", 168, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_WAV, M_ENS, M_GSIN));
+    p = pat_v5(12, "RIBBON", 168, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_WAV, M_ENS, M_GSIN));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 0; p->glob[G_VERB] = 72; p->glob[G_DAMP] = 70; p->glob[G_ADPC] = 20;
     p->glob[G_GLCH] = 16; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_DRIV] = 28; p->glob[G_HISS] = 32;
     SET(p, 0, SE, 66, SF, 18, SG, 40, SC, 16, P_DEC, 22, P_REL, 6, P_DIST, 72, P_VOL, 127);
@@ -802,7 +805,7 @@ static void factory(void)
     BEAT(p, 5, "x.........x.....|x.........x.....|x.........x.....|x.........x.....", 41);
     trim(p, 77);
 
-    /* A04 TENFOUR, flavour 2, after Radiohead: the opening progression of "Everything in Its Right Place" (2000),
+    /* A06 TENFOUR, flavour 2, after Radiohead: the opening progression of "Everything in Its Right Place" (2000),
      * from the owner's MIDI; the rest is MONO2K's own. Around C at 108, four bars. The harmony: C, Dbmaj7 and Eb6, each
      * with C on top, in the opening's proportions over the four bars (6, 4 and 4 beats, then 2 with the Eb ringing),
      * swelling on a chorused pad, driven, crushed and worn by the tape, its filter breathing. Under it a driven sine
@@ -811,7 +814,7 @@ static void factory(void)
      * whose decay wanders, with metal ticks and pitched blips locked among them. Over it a four-bar line from the first
      * step, one figure (fifth, third, fifth, the top, a step down) through each chord, held on the changes and sliding
      * into some, on one of the owner's waves, crushed, its filter moving */
-    p = pat_v5(3, "TENFOUR", 108, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_WAV));
+    p = pat_v5(5, "TENFOUR", 108, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_WAV));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 22; p->glob[G_TAPE] = 70; p->glob[G_HISS] = 60; p->glob[G_ADPC] = 40;
     p->glob[G_GLCH] = 16; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_VERB] = 56; p->glob[G_DAMP] = 76; p->glob[G_ACNT] = 50;
     p->glob[G_DRIV] = BANK_DRIVE;
@@ -850,11 +853,11 @@ static void factory(void)
     lfo(p, 5, 0, P_WDTH, 1, 1, 20, 76, 0);
     trim(p, 70);
 
-    /* A05 SMOKE, dub techno after Basic Channel: C minor at 120, one chord. The idea is a Cm7 stab, short and dark,
+    /* A10 SMOKE, dub techno after Basic Channel: C minor at 120, one chord. The idea is a Cm7 stab, short and dark,
      * on the offbeat sixteenths, thrown into a long, filtered ping-pong echo whose feedback swells and falls; its own
      * filter breathing over the four bars. A deep four-to-the-floor, offbeat hats with shuffled ghosts, a rim far in the
      * echo, a sub rolling on C; hiss and a touch of tape under it all */
-    p = pat_v5(4, "SMOKE", 120, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_GSIN));
+    p = pat_v5(9, "SMOKE", 120, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_GSIN));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 14; p->glob[G_TAPE] = 32; p->glob[G_HISS] = 40; p->glob[G_ADPC] = 16;
     p->glob[G_VERB] = 66; p->glob[G_DAMP] = 72; p->glob[G_DRIV] = 28;
     SET(p, 0, SE, 50, SF, 30, SG, 10, SC, 30, P_DEC, 36, P_REL, 10, P_DIST, 66, P_VOL, 127);
@@ -874,14 +877,14 @@ static void factory(void)
          36, 36, 31, 36, 36, 39, 36, 36, 31, 36, 43, 39);
     trim(p, 85);
 
-    /* A06 CAROM, flavour 1, after Aphex Twin (the late 90s, "Bucephalus Bouncing Ball"): A minor at 160. The drums lead.
+    /* A05 CAROM, flavour 1, after Aphex Twin (the late 90s, "Bucephalus Bouncing Ball"): A minor at 160. The drums lead.
      * The idea is a ball: a metal FM hit bouncing through each bar, the bounces closing in (eight steps, then six,
      * four, two, then ratchets), each shorter and brighter, a new run every bar, settling at the end of the loop.
      * Around it a dense industrial beat: the kick folded and driven, ratcheting into the turn; a crushed snare with
      * ghosts round every hit, rolls into the last bar, its crack and rate changing; hats in thirty-second rolls whose
      * decay wanders; a metal rim thrown into an echo. Under it a wave-folded sine bass that boings down onto each note,
      * its fold new every hit, closed down to its growl, jumping octaves, locked with the kick, A1 to A2; no melody */
-    p = pat_v5(5, "CAROM", 160, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_FMS, M_GSIN, M_GPRC));
+    p = pat_v5(4, "CAROM", 160, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_FMS, M_GSIN, M_GPRC));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 8; p->glob[G_GLCH] = 24; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 32;
     p->glob[G_TAPE] = 40; p->glob[G_HISS] = 40; p->glob[G_VERB] = 30; p->glob[G_DAMP] = 60; p->glob[G_ACNT] = 60;
     p->glob[G_DRIV] = BANK_DRIVE;
@@ -963,10 +966,10 @@ static void factory(void)
     lfo(p, 5, 0, P_WDTH, 1, 1, 20, 76, 0);
     trim(p, 67);
 
-    /* A08 MOTEL, lo-fi house after Anthony Naples: B dorian at 122, loose and swung. A few things: a kick tuned to B, a
+    /* A14 MOTEL, lo-fi house after Anthony Naples: B dorian at 122, loose and swung. A few things: a kick tuned to B, a
      * clap in a small room, open hats sampled down; a muffled, crushed stab, Bm7 then E7sus4, off the beat into a dull
      * echo; and the idea, a bass that walks the chords; tape, hiss and the bus's crunch for the dust */
-    p = pat_v5(7, "MOTEL", 122, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_GSIN));
+    p = pat_v5(13, "MOTEL", 122, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_GSIN));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 22; p->glob[G_TAPE] = 24; p->glob[G_HISS] = 44; p->glob[G_ADPC] = 24;
     p->glob[G_DRIV] = 28; p->glob[G_VERB] = 50; p->glob[G_DAMP] = 78;
     SET(p, 0, SE, 56, SF, 26, SG, 20, SC, 30, P_DEC, 34, P_REL, 10, P_DIST, 70, P_SRR, 10, P_VOL, 127);
@@ -985,22 +988,22 @@ static void factory(void)
          35, 35, 42, 35, 38, 35, 35, 42, 40, 38, 40, 40, 47, 40, 45, 40, 40, 47, 45, 42);
     trim(p, 75);
 
-    /* A09 MAMMOTH, direction v5 (Lazar, Fell, saintmatan, the Monomachine's metal demos): G minor at 164. Kick, hats
+    /* A01 MAMMOTH, direction v5 (Lazar, Fell, saintmatan, the Monomachine's metal demos): G minor at 164. Kick, hats
      * (and the snare's noise), the pad, the DROP bass, the FM (the snare's clang and an elephant's calls), FX-CHORUS */
-    p = pat_v5(8, "MAMMOTH", 164, MACHINES(M_GSIN, M_GNOI, M_ENS, M_GSIN, M_FMP, M_FXC));
+    p = pat_v5(0, "MAMMOTH", 164, MACHINES(M_GSIN, M_GNOI, M_ENS, M_GSIN, M_FMP, M_FXC));
     mm_metal11(p, 62);                                                       /* the comb at 270 samples, ~163 Hz */
     trim(p, 45);
     p->kit[3][P_LEVL] = (uint8_t)CLAMP(p->kit[3][P_LEVL] * 110 / 100, 0, 127);
     p->kit[2][P_LEVL] = (uint8_t)CLAMP(p->kit[2][P_LEVL] * 248 / 100, 0, 127);
     p->kit[5][P_LEVL] = (uint8_t)CLAMP(p->kit[5][P_LEVL] * 140 / 100, 0, 127);
 
-    /* A10 RIVETS, flavour 1, after Autechre: C# minor at 118, swung. The drums lead, a broken funk with space in it: a
+    /* A02 RIVETS, flavour 1, after Autechre: C# minor at 118, swung. The drums lead, a broken funk with space in it: a
      * hard kick on one and the off-beats, ratcheting into the turn; a short crushed snare on the backbeat with ghost
      * notes round it and a drag before the turn; hats in swung sixteenths, accented on the off-beat eighths, opening
      * every second bar; an FM clank answering the snare, its ratio locked to a brighter strike; a metal rim thrown
      * into a dotted echo. Under it a punchy SWAV-SAW bass in 3 3 4 3 3, on the kick and between, jumping octaves,
      * played an octave over its root so its sub sits on C#1 to C#2 (35-70 Hz); no melody */
-    p = pat_v5(9, "RIVETS", 118, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_FMD, M_SAW, M_GPRC));
+    p = pat_v5(1, "RIVETS", 118, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_FMD, M_SAW, M_GPRC));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 24; p->glob[G_GLCH] = 20; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 24;
     p->glob[G_VERB] = 30; p->glob[G_DAMP] = 50; p->glob[G_ACNT] = 50; p->glob[G_DRIV] = BANK_DRIVE;
     SET(p, 0, SB, 16, SE, 64, SF, 18, SG, 60, SC, 50, P_DEC, 30, P_REL, 6, P_DIST, 80, P_VOL, 111);
@@ -1026,9 +1029,9 @@ static void factory(void)
     BEAT(p, 5, "..........x.....|...x..........x.|..........x.....|...x......x...x.", 72);
     trim(p, 84);
 
-    /* A11 SYRUP: warm IDM in A, worn tape: a detuned pad through Amaj7 F#m9 Dmaj7 E6/9, a nostalgic bell melody
+    /* A12 SYRUP: warm IDM in A, worn tape: a detuned pad through Amaj7 F#m9 Dmaj7 E6/9, a nostalgic bell melody
      * in echoes, a soft sine bass; lazy drums, a bitten snare; the tape wobbles */
-    p = pat_v5(10, "SYRUP", 96, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_FMS, M_GSIN));
+    p = pat_v5(11, "SYRUP", 96, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_FMS, M_GSIN));
     p->glob[G_LEN] = 64; p->glob[G_TAPE] = 50; p->glob[G_HISS] = 14; p->glob[G_VERB] = 70; p->glob[G_ADPC] = 10;
     p->glob[G_SWNG] = 24; p->glob[G_DAMP] = 60;
     SET(p, 0, SE, 60, SF, 34, SG, 20, SC, 30, P_DEC, 40, P_REL, 10, P_VOL, 127);
@@ -1050,12 +1053,12 @@ static void factory(void)
     BEAT(p, 5, "x.....x...x.....|x.....x...x.....|x.....x...x.....|x.....x...x...x.", 45, 45, 52, 42, 42, 49, 38, 38, 45, 40, 40, 47, 44);
     trim(p, 74);
 
-    /* A12 CUTUP, flavour 1, after Prefuse 73 (2001): D minor at 156, the beat in half time, swung hard. The drums lead, a
+    /* A11 CUTUP, flavour 1, after Prefuse 73 (2001): D minor at 156, the beat in half time, swung hard. The drums lead, a
      * hip-hop beat cut up: a fat kick and a crushed snare stuttering into ratchets and rolls, hats chopped in
      * thirty-seconds; VO-6 cut to short vowel chops that stutter, a new vowel each; a dusty chord stab chopped off the
      * beat, Dm9 then Bbmaj7 over D. Under it an FM bass that zaps down onto each note, fed back and crushed, locked
      * with the kick, D1 to D2; the bus repeating slices; no melody */
-    p = pat_v5(11, "CUTUP", 156, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_VOX, M_FMD, M_ENS));
+    p = pat_v5(10, "CUTUP", 156, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_VOX, M_FMD, M_ENS));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 24; p->glob[G_GLCH] = 30; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 36;
     p->glob[G_TAPE] = 50; p->glob[G_HISS] = 50; p->glob[G_VERB] = 34; p->glob[G_DAMP] = 70; p->glob[G_ACNT] = 50;
     p->glob[G_DRIV] = BANK_DRIVE;
@@ -1090,13 +1093,13 @@ static void factory(void)
     chords(p, 5, 32, 64, 3, 7, 12);                                         /* Bbmaj7 over D: D F A */
     trim(p, 61);
 
-    /* A13 GRISTLE, flavour 1, after Clark (Warp, the 2000s), with SOPHIE's metal: E minor at 168, a slow industrial
+    /* A04 GRISTLE, flavour 1, after Clark (Warp, the 2000s), with SOPHIE's metal: E minor at 168, a slow industrial
      * groove in half time with everything fast on top. The skeleton holds, swung: a hard punchy kick with a click,
      * folded and driven, locked with the bass; a metal crack of a snare on the half-time beat, ghost rolls round it.
      * Over it, busy and aggressive: hats on nearly every step, ratcheting, their decay wandering; FM metal boings, their
      * ratio zapping down hard, a new sweep each hit; pitch-drop zaps answering the snare. Under it a rubbery FM bass,
      * its ratio rising into each note, fed back and crushed, sliding between E1 and E2 and through the minor; no melody */
-    p = pat_v5(12, "GRISTLE", 168, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_FMD, M_FMD, M_GSIN));
+    p = pat_v5(3, "GRISTLE", 168, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_FMD, M_FMD, M_GSIN));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 18; p->glob[G_GLCH] = 16; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 36;
     p->glob[G_TAPE] = 36; p->glob[G_HISS] = 40; p->glob[G_VERB] = 34; p->glob[G_DAMP] = 60; p->glob[G_ACNT] = 70;
     p->glob[G_DRIV] = BANK_DRIVE;
@@ -1128,12 +1131,12 @@ static void factory(void)
     BEAT(p, 5, "......x.......x.|..x.......x.x...|......x.......x.|..x...x...x.x.x.", 52, 47, 52, 47, 52, 47, 52);
     trim(p, 56);
 
-    /* A14 ORCHARD, flavour 2, after Boards of Canada: E dorian at 92, bouncing. The idea is a four-note call, G A B
+    /* A08 ORCHARD, flavour 2, after Boards of Canada: E dorian at 92, bouncing. The idea is a four-note call, G A B
      * and down to E, answered in the last bar by the dorian C#, on one of the owner's warm waves, worn and wobbling, its
      * echo answering it; under it Em7 over G for two bars, A7, Em over B on a chorused pad; a deep sustained sine bass, its
      * sub an octave under on E1, A1 and B1, driven for its harmonics and locked with the kick; a slow swung beat with a
      * ghost before the snare */
-    p = pat_v5(13, "ORCHARD", 92, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_WAV));
+    p = pat_v5(7, "ORCHARD", 92, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_GSIN, M_WAV));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 24; p->glob[G_TAPE] = 76; p->glob[G_HISS] = 52; p->glob[G_ADPC] = 20;
     p->glob[G_VERB] = 70; p->glob[G_DAMP] = 80; p->glob[G_DRIV] = BANK_DRIVE;
     SET(p, 0, SE, 56, SF, 26, SG, 20, SC, 40, P_DEC, 40, P_REL, 10, P_DIST, 72, P_VOL, 120);
@@ -1158,13 +1161,13 @@ static void factory(void)
          55, 57, 59, 52, 55, 57, 59, 52, 55, 57, 59, 52, 55, 57, 61, 59);
     trim(p, 62);
 
-    /* A15 SPLINTR, flavour 1, after Aphex Twin (drill'n'bass): F minor at 160. The drums lead: a kick and a snare
+    /* A09 SPLINTR, flavour 1, after Aphex Twin (drill'n'bass): F minor at 160. The drums lead: a kick and a snare
      * ratcheting and rolling, the snare's tonal body ringing in its low-pass three octaves up and pitched an octave on
      * some retrigs, crushed on others; hats in thirty-seconds ground to 8 bits; a metal rim flicking between them; and
      * every second loop the drums drop out of the last two beats. Under it a huge sustained SWAV-SAW bass with a little
      * unison (its detune the point), played an octave over its root so its subs sit on F1, Ab1, Db1 and Eb1; once a
      * loop, over the F, a three-note dark hook, Ab G F */
-    p = pat_v5(14, "SPLINTR", 160, MACHINES(M_GSIN, M_GSIN, M_GPRC, M_GPRC, M_SAW, M_WAV));
+    p = pat_v5(8, "SPLINTR", 160, MACHINES(M_GSIN, M_GSIN, M_GPRC, M_GPRC, M_SAW, M_WAV));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 0; p->glob[G_GLCH] = 32; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 24;
     p->glob[G_VERB] = 40; p->glob[G_DAMP] = 50; p->glob[G_ACNT] = 60; p->glob[G_DRIV] = BANK_DRIVE;
     SET(p, 0, SB, 20, SE, 64, SF, 16, SG, 70, SC, 60, P_DEC, 32, P_REL, 6, P_DIST, 88, P_SRR, 24, P_VOL, 127);
@@ -1189,7 +1192,7 @@ static void factory(void)
     trim(p, 52);
     p->kit[4][P_LEVL] = 97;               /* the bass over the trim: SWAV-SAW clips 10.5 dB under GND-SIN */
 
-    /* A16 FOUNDRY, flavour 2, after Boards of Canada: the progression of "Kaini Industries", from the owner's MIDI,
+    /* A15 FOUNDRY, flavour 2, after Boards of Canada: the progression of "Kaini Industries", from the owner's MIDI,
      * its bass notes too (B, C#, G#, C#); the rest is MONO2K's own. G# dorian at 102. The idea is a lead bass: a deep,
      * gritty SWAV-SAW running a four-bar line from the first step over the original's four bars (G#m7 over B,
      * C#sus4, G#m9, C#9), one rhythm a bar, sliding into some notes, each bar on the progression's bass note, played an
@@ -1197,7 +1200,7 @@ static void factory(void)
      * pad, driven, crushed and worn by the tape. The drums never quite repeat: a hard kick; a crushed snare whose length
      * and crack change, ghosts round it, its rate drifting; short hats in swung sixteenths whose decay wanders, metal
      * ticks and pitched blips among them; and a gritty shaker and metal percussion thrown into a dotted echo */
-    p = pat_v5(15, "FOUNDRY", 102, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_SAW, M_GPRC));
+    p = pat_v5(14, "FOUNDRY", 102, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_SAW, M_GPRC));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 22; p->glob[G_TAPE] = 76; p->glob[G_HISS] = 60; p->glob[G_ADPC] = 40;
     p->glob[G_GLCH] = 16; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_VERB] = 56; p->glob[G_DAMP] = 76; p->glob[G_ACNT] = 50;
     p->glob[G_DRIV] = BANK_DRIVE;
@@ -1237,16 +1240,16 @@ static void factory(void)
     lfo(p, 5, 1, P_PAN, 0, 1, 14, 90, 0);
     trim(p, 74);
 
-    /* A11 A12 A13 A16, still the bank before (ea69d53), were written on SWAV-ENS's old page and the bus's old laws:
-     * onto today's, once (every other part is written on today's) */
-    static const uint8_t OLD_SLOTS[] = {10};
+    /* A12 SYRUP, still the bank before (ea69d53), was written on SWAV-ENS's old page and the bus's old laws: onto
+     * today's, once (every other part is written on today's) */
+    static const uint8_t OLD_SLOTS[] = {11};
     for (unsigned i = 0; i < sizeof OLD_SLOTS; i++) {
         ens_v6(&pat[OLD_SLOTS[i]]);
         bus_v9(&pat[OLD_SLOTS[i]]);
     }
     /* the parts with an FM+ track, written on MONO2K's old FM pages: onto the Monomachine's, once, until each is
      * voiced on them */
-    static const uint8_t FM_OLD[] = {1, 5, 6, 9, 10, 11, 12};
+    static const uint8_t FM_OLD[] = {1, 3, 4, 6, 10, 11, 15};   /* RIVETS GRISTLE CAROM VESPER CUTUP SYRUP SPLICE */
     for (unsigned i = 0; i < sizeof FM_OLD; i++) fm_v9(&pat[FM_OLD[i]]);
     /* and every part, its GND-SIN tracks written on that machine's old page (TUNE first): onto the Monomachine's */
     for (int i = 0; i < 16; i++) gsin_v11(&pat[i]);
