@@ -43,6 +43,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   older layouts with `pat_pack_v`); 9 the bus's controls on new laws (`bus_v9`, tables `T_V9_*`); 10 FM+STAT's and
   FM+DYN's pages (`fm_v9`); 11 SID-6581's page (`sid_v10`); 12 GND-SIN's page (TUNE on H, CC 55, as the
   Monomachine's; MONO2K's own FOLD..HARM on A..G, nothing at init: `gsin_v11`). Older ones are converted on load.
+  A step's flags bits 3..5 are its trig types (`ST_NOAMP`, `ST_NOFLT`, `ST_NOLFO`; clear is ALL, as every older pattern
+  has them: no format change). FM+'s 24 ratio steps decode as the Monomachine's sound does, `fr24` (v * 24 + 8) >> 7,
+  not as its screen labels them (`chain_fmstep43`).
   GND-NOIS is the Monomachine's (ST RED STON, TUNE on H; machine 14, the newest); MONO2K's own noise is GND-PERC and
   keeps machine number 1 (`M_GPRC`), so no conversion: patterns store machine numbers, new machines go last.
   Every part of bank A is written on GND-SIN's old page (`pat_v5` lays its old init, `GSIN_V11`) and turned at build;

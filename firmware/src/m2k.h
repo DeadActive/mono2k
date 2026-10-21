@@ -76,6 +76,12 @@ enum {
 #define ST_TRIG 1u
 #define ST_ACC  2u
 #define ST_SLD  4u
+/* the trig tracks (the Monomachine's AMP, FILTER and LFO, manual p.58): a trig restarts the ones it does not mask; all
+ * three masked is a trigless trig, its note and its locks alone. Clear in every older pattern, so they play ALL */
+#define ST_NOAMP 8u
+#define ST_NOFLT 16u
+#define ST_NOLFO 32u
+#define ST_TTYPE (ST_NOAMP | ST_NOFLT | ST_NOLFO)
 
 typedef struct { uint8_t trk, step, param, val; } m2k_lock_t;   /* trk 0xFF: free */
 

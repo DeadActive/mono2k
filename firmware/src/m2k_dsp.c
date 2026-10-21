@@ -995,7 +995,9 @@ static struct {
 static int cur_pat;
 static uint8_t master_vol = 100;
 
-static void voice_on(int ti, int note, int vel, int slide)
+/* a trig: the note always (a trigless trig moves the pitch too), then the amp (and the machine with it), the filter's
+ * envelope and the LFOs, each unless SKIP masks it (ST_NOAMP, ST_NOFLT, ST_NOLFO) */
+static void voice_trig(int ti, int note, int vel, int slide, unsigned skip)
 {
     trk_t *t = &trk[ti];
     t->note = (uint8_t)note;
@@ -1008,17 +1010,23 @@ static void voice_on(int ti, int note, int vel, int slide)
     }
     t->slide = 0;
     if (!t->sounding || t->eff[P_PORT] == 0) t->pitch = t->ptarget;
-    t->gate = 1;
-    t->let_go = 0;
-    t->sounding = 1;
-    t->astage = 1;
-    t->fstage = 1;
-    t->fenv = 0;
-    if (t->eff[P_ATK] == 0) t->aenv = 0;      /* percussive: start from zero, the click is the point */
-    mach_trig(t, pat[cur_pat].machine[ti]);
-    lfo_trig(t);
+    if (!(skip & ST_NOAMP)) {
+        t->gate = 1;
+        t->let_go = 0;
+        t->sounding = 1;
+        t->astage = 1;
+        if (t->eff[P_ATK] == 0) t->aenv = 0;  /* percussive: start from zero, the click is the point */
+        mach_trig(t, pat[cur_pat].machine[ti]);
+    }
+    if (!(skip & ST_NOFLT)) {
+        t->fstage = 1;
+        t->fenv = 0;
+    }
+    if (!(skip & ST_NOLFO)) lfo_trig(t);
     mon.trig[ti]++;
 }
+
+static void voice_on(int ti, int note, int vel, int slide) { voice_trig(ti, note, vel, slide, 0); }
 
 static void voice_off(int ti)
 {

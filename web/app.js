@@ -137,7 +137,7 @@
     Backslash: ["b", 7], F8: ["b", 7], KeyK: ["b", 8], F9: ["b", 8], KeyA: ["b", 9], F10: ["b", 9],
     Space: ["b", 10], Enter: ["b", 11], Minus: ["b", 12], Equal: ["b", 13],
     Semicolon: ["e", 0, -1], Quote: ["e", 0, 1], Comma: ["e", 1, -1], Period: ["e", 1, 1],
-    BracketLeft: ["e", 2, -1], BracketRight: ["e", 2, 1],
+    BracketLeft: ["e", 2, -1], BracketRight: ["e", 2, 1], Slash: ["e", 7, 1],
   };
   const hintOf = (kind, idx) => {
     const order = { k: [], b: [] };

@@ -329,7 +329,8 @@ namespace
 		unsigned steps = 16;
 		struct Note { unsigned track, step, note, vel, gate; };
 		std::vector<Note> notes;
-		std::vector<std::pair<unsigned, unsigned>> seq;
+		struct Trig { unsigned track, step, type; };    // type: the trig track it goes on, 0 ALL 1 AMP 2 FILTER 3 LFO
+		std::vector<Trig> seq;
 		std::string line;
 		while(std::getline(std::cin, line))
 		{
@@ -348,7 +349,13 @@ namespace
 			{
 				unsigned track = 0, step = 0;
 				require(static_cast<bool>(in >> track >> step), "bad Q line");
-				seq.emplace_back(track, step);
+				seq.push_back({track, step, 0});
+			}
+			else if(kind == "QT")      // a trig on one trig track alone (manual p.58: [TRIG SELECT] cycles ALL AMP FILTER LFO)
+			{
+				unsigned track = 0, step = 0, type = 0;
+				require(static_cast<bool>(in >> track >> step >> type) && type < 4, "bad QT line");
+				seq.push_back({track, step, type});
 			}
 			else if(kind == "T")
 			{
@@ -379,8 +386,10 @@ namespace
 			}
 			for(const auto& q : seq)
 			{
-				tap(*hw, static_cast<md::PanelControl>(static_cast<uint8_t>(md::PanelControl::Track1) + q.first));
-				tap(*hw, static_cast<md::PanelControl>(static_cast<uint8_t>(md::PanelControl::Trigger1) + q.second));
+				tap(*hw, static_cast<md::PanelControl>(static_cast<uint8_t>(md::PanelControl::Track1) + q.track));
+				for(unsigned i = 0; i < q.type; ++i) tap(*hw, md::PanelControl::TrigSelect);
+				tap(*hw, static_cast<md::PanelControl>(static_cast<uint8_t>(md::PanelControl::Trigger1) + q.step));
+				for(unsigned i = 0; i < (4 - q.type) % 4; ++i) tap(*hw, md::PanelControl::TrigSelect);   // back to ALL
 			}
 			tap(*hw, md::PanelControl::Record);
 			advance(*hw, g_rate / 2);

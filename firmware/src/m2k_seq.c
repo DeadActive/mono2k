@@ -14,7 +14,7 @@ static struct {
     /* trig conditions and ratchets */
     uint16_t loops;                    /* loops of the pattern since play */
     uint8_t fill, pre[M2K_TRACKS];
-    uint8_t rt_left[M2K_TRACKS], rt_note[M2K_TRACKS];
+    uint8_t rt_left[M2K_TRACKS], rt_note[M2K_TRACKS], rt_skip[M2K_TRACKS];
     int32_t rt_ctr[M2K_TRACKS], rt_len[M2K_TRACKS];
     /* arp */
     int32_t arp_ctr;
@@ -129,15 +129,17 @@ static void fire_step(int s)
         if (sq.nheld && t == sq.ktrk) continue;     /* the player has the track */
         if (!cond_pass(t, st.cond)) continue;
         apply_locks(t, s);
-        voice_on(t, st.note, (st.flags & ST_ACC) ? 127 : 100, st.flags & ST_SLD);
-        trk[t].gate_left = gate_blocks(t);
+        unsigned skip = st.flags & ST_TTYPE;
+        voice_trig(t, st.note, (st.flags & ST_ACC) ? 127 : 100, st.flags & ST_SLD, skip);
+        if (!(skip & ST_NOAMP)) trk[t].gate_left = gate_blocks(t);      /* no AMP trig: the gate runs on as it was */
         int n = st.rtrg < 1 ? 1 : st.rtrg > 4 ? 4 : st.rtrg;
         sq.rt_left[t] = (uint8_t)(n - 1);
         if (n > 1) {
             sq.rt_len[t] = step_len(s) / n;
             sq.rt_ctr[t] = sq.rt_len[t];
             sq.rt_note[t] = st.note;
-            trk[t].gate_left = sq.rt_len[t] / (M2K_SUB << 8) * 3 / 4 + 1;
+            sq.rt_skip[t] = (uint8_t)skip;
+            if (!(skip & ST_NOAMP)) trk[t].gate_left = sq.rt_len[t] / (M2K_SUB << 8) * 3 / 4 + 1;
         }
     }
     bus_step();
@@ -170,8 +172,8 @@ static void seq_block(void)
         if (sq.rt_ctr[t] <= 0) {
             sq.rt_ctr[t] += sq.rt_len[t];
             sq.rt_left[t]--;
-            voice_on(t, sq.rt_note[t], 100, 0);
-            trk[t].gate_left = sq.rt_len[t] / (M2K_SUB << 8) * 3 / 4 + 1;
+            voice_trig(t, sq.rt_note[t], 100, 0, sq.rt_skip[t]);
+            if (!(sq.rt_skip[t] & ST_NOAMP)) trk[t].gate_left = sq.rt_len[t] / (M2K_SUB << 8) * 3 / 4 + 1;
         }
     }
     /* the arp, on its own clock */

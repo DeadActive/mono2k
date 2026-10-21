@@ -117,6 +117,16 @@ static const char *const LTRG_N[5] = {"FREE", "TRIG", "HOLD", "ONE", "HALF"};
 static const char *const AMOD_N[6] = {"OFF", "UP", "DOWN", "U/D", "RND", "ORDR"};
 static const char *const ASPD_N[4] = {"1/32", "1/16", "1/8", "1/4"};
 static const char *const GSIZ_N[5] = {"1/64", "1/32", "1/16", "1/8", "1/4"};
+/* the trig types a held step steps through with VOL (the expert's order): what each masks, and its name */
+static const uint8_t TTYPE[8] = {0, ST_NOFLT | ST_NOLFO, ST_NOAMP | ST_NOLFO, ST_NOAMP | ST_NOFLT, ST_NOLFO, ST_NOFLT,
+                                 ST_NOAMP, ST_TTYPE};
+static const char *const TTYPE_N[8] = {"ALL", "AMP", "FILTER", "LFO", "AMP+FLT", "AMP+LFO", "FLT+LFO", "NONE"};
+static int ttype_of(uint8_t flags)
+{
+    for (int i = 0; i < 8; i++) if ((flags & ST_TTYPE) == TTYPE[i]) return i;
+    return 0;
+}
+
 static const char *const COND_N[C_COUNT] = {"100%", "75%", "50%", "33%", "25%", "12%", "1:2", "2:2", "1:3", "2:3", "3:3",
                                            "1:4", "2:4", "3:4", "4:4", "1ST", "!1ST", "PRE", "!PRE", "FILL", "!FIL"};
 static const uint8_t COND_DENS[6] = {64, 48, 32, 21, 16, 8};
@@ -908,7 +918,7 @@ void m2k_encoder(int e, int d)
             for (int i = 0; i < ui.nheld; i++) {
                 m2k_step_t *st = &p->step[ui.trk][ui.held[i]];
                 int f = ((st->flags >> 1) + (d > 0 ? 1 : 3)) & 3;
-                st->flags = (uint8_t)((st->flags & ST_TRIG) | (f << 1));
+                st->flags = (uint8_t)((st->flags & ~(ST_ACC | ST_SLD)) | (f << 1));   /* its trig type stays */
             }
             ui.held_edit = 1;
             break;
@@ -921,6 +931,16 @@ void m2k_encoder(int e, int d)
         break;
     }
     case E_MASTER: {
+        if (ui.grid && ui.nheld) {            /* a held step: which of its trig tracks it trigs (ALL ... NONE) */
+            int k = (ttype_of(p->step[ui.trk][ui.held[0]].flags) + (d > 0 ? 1 : 7)) & 7;
+            for (int i = 0; i < ui.nheld; i++) {
+                m2k_step_t *st = &p->step[ui.trk][ui.held[i]];
+                st->flags = (uint8_t)((st->flags & ~ST_TTYPE) | TTYPE[k]);
+            }
+            ui.held_edit = 1;
+            toast("TRIG", TTYPE_N[k]);
+            break;
+        }
         master_vol = (uint8_t)CLAMP(master_vol + d, 0, 127);
         char o[12];
         s_int(o, master_vol);
@@ -1457,7 +1477,20 @@ static void step_cell(int x, int y, int w, int h, int t, int s)
     if (st.flags & ST_TRIG) {
         /* the fill says how sure the trig is: solid always, Bayer by chance, textures for the conditions */
         int c = st.cond, lk = has_locks(t, s);
-        if (c == C_ALWAYS && !lk) rect(x, y, w, h, 1);
+        unsigned sk = st.flags & ST_TTYPE;
+        if (sk) {
+            /* a trig on some of its trig tracks: framed, a third filled for each it trigs (AMP, FILTER, LFO), as the
+             * lanes read left to right; a trigless one (NONE) the frame and a dot */
+            frame(x, y, w, h, 1);
+            int pt = c == C_ALWAYS ? -1 : c <= C_P12 ? COND_DENS[c] : c <= C_4_4 ? PT_DIAG : c <= C_NPRE ? PT_VLINES : PT_LINES;
+            for (int k = 0; k < 3; k++) {
+                if (sk & (ST_NOAMP << k)) continue;
+                int x0 = x + 1 + k * (w - 2) / 3, x1 = x + 1 + (k + 1) * (w - 2) / 3;
+                if (pt < 0) rect(x0, y + 1, x1 - x0, h - 2, 1); else rect_pat(x0, y + 1, x1 - x0, h - 2, pt, 1);
+            }
+            if (sk == ST_TTYPE) px(x + w / 2, y + h / 2, 1);
+            if (lk) rect(x + w - 4, y, 4, 4, 1);
+        } else if (c == C_ALWAYS && !lk) rect(x, y, w, h, 1);
         else {
             int pt = c == C_ALWAYS ? PT_CHECK : c <= C_P12 ? COND_DENS[c] : c <= C_4_4 ? PT_DIAG : c <= C_NPRE ? PT_VLINES : PT_LINES;
             frame(x, y, w, h, 1);
@@ -1612,6 +1645,7 @@ static void step_card(void)
     x += tag(x, 102, COND_N[st.cond], st.cond != C_ALWAYS) + 3;
     char r[4] = {'X', (char)('0' + (st.rtrg ? st.rtrg : 1)), 0, 0};
     x += tag(x, 102, r, st.rtrg > 1) + 3;
+    if (st.flags & ST_TTYPE) x += tag(x, 102, TTYPE_N[ttype_of(st.flags)], 1) + 3;
     if (st.flags & ST_ACC) x += tag(x, 102, "ACC", 1) + 3;
     if (st.flags & ST_SLD) tag(x, 102, "SLD", 1);
 }

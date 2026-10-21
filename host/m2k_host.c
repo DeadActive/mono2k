@@ -467,6 +467,53 @@ static int bus_measure(const char *dir)
     return 0;
 }
 
+/* the trig types: step 1 trigs ALL, step 5 with SKIP masked; after step 5, the amp run's level (a short GND-SIN, silent
+ * by then), the filter run's brightness against just before (a held SWAV-SAW, its gate open, its low-pass shut and
+ * opened by its envelope, closed again by then) and whether LFO 1 started over (a slow rising ramp, TRIG) */
+static void trig_probe(unsigned skip, double *amp_db, double *bright_db, int *lfo_restart)
+{
+    const int at = 4 * M2K_SR / 8;                                  /* step 5 at 120: 0.5 s */
+    const int frames = (at + M2K_SR / 16) / 16 * 16;
+    int16_t *b = malloc((size_t)frames * 4);
+    for (int run = 0; run < 2; run++) {
+        m2k_init(7);
+        open_b01();
+        m2k_pattern_t *p = &pat[16];
+        p->glob[G_TMPO] = 120 - 30;
+        p->glob[G_LEN] = 16;
+        kit_default(p, 0, run ? M_SAW : M_GSIN);
+        uint8_t *k = p->kit[0];
+        k[P_ATK] = 0;
+        if (run) { k[P_HOLD] = 127; k[P_DEC] = 127; k[P_GATE] = 127; k[P_BASE] = 0; k[P_WDTH] = 20; k[P_FATK] = 0; k[P_FDEC] = 30; k[P_WOF] = 127; }
+        else { k[P_HOLD] = 0; k[P_DEC] = 30; k[P_BASE] = 0; k[P_WDTH] = 127; k[P_WOF] = 64; }
+        k[P_LFO + L_TRCK] = 0; k[P_LFO + L_DEST] = P_PAN + 1; k[P_LFO + L_WAVE] = 92; k[P_LFO + L_TRIG] = 30;   /* ramp, TRIG */
+        k[P_LFO + L_MULT] = 0; k[P_LFO + L_SPD] = 20; k[P_LFO + L_PHAS] = 0; k[P_LFO + L_DPTH] = 64;              /* 0.16 Hz, no depth */
+        p->step[0][0] = (m2k_step_t){.note = 48, .flags = ST_TRIG};
+        p->step[0][4] = (m2k_step_t){.note = 48, .flags = (uint8_t)(ST_TRIG | skip)};
+        open_b01();
+        seq_play(1);
+        int32_t lfo0 = 0;
+        for (int fr = 0; fr < frames; fr += 16) {
+            if (fr == (at - M2K_SR / 100) / 16 * 16) lfo0 = mon.lfo[0][0];
+            m2k_render(b + 2 * fr, 16);
+        }
+        if (!run) *lfo_restart = mon.lfo[0][0] < lfo0 / 2;
+        /* the level after; the brightness as the share of the slope's energy in the signal's, after against before */
+        double e0 = 0, e1 = 0, d0 = 0, d1 = 0;
+        for (int i = at - M2K_SR / 16; i < at - M2K_SR / 100; i++) {
+            double d = (double)b[2 * i] - b[2 * i - 2];
+            e0 += (double)b[2 * i] * b[2 * i]; d0 += d * d;
+        }
+        for (int i = at + M2K_SR / 200; i < frames; i++) {
+            double d = (double)b[2 * i] - b[2 * i - 2];
+            e1 += (double)b[2 * i] * b[2 * i]; d1 += d * d;
+        }
+        if (run) *bright_db = 10 * log10(((d1 + 1) / (e1 + 1)) / ((d0 + 1) / (e0 + 1)));
+        else *amp_db = 10 * log10(e1 / (frames - at - M2K_SR / 200) / (32768.0 * 32768.0) + 1e-12);
+    }
+    free(b);
+}
+
 static int selftest(void)
 {
     int fails = 0;
@@ -1087,6 +1134,43 @@ static int selftest(void)
     pat[0].kit[0][P_DEC] = 99;
     pattern_reload();
     CHECK(pat[0].kit[0][P_DEC] == 11, "save sets the reload point");
+    /* the trig types (the Monomachine's trig tracks): each of the eight restarts exactly the amp, the filter's envelope
+     * and the LFOs it names, and none of the others */
+    {
+        static const unsigned SK[8] = {0, ST_NOFLT | ST_NOLFO, ST_NOAMP | ST_NOLFO, ST_NOAMP | ST_NOFLT, ST_NOLFO, ST_NOFLT,
+                                       ST_NOAMP, ST_TTYPE};
+        int ok = 1;
+        for (int i = 0; i < 8; i++) {
+            double a, br; int lr;
+            trig_probe(SK[i], &a, &br, &lr);
+            int wa = !(SK[i] & ST_NOAMP), wf = !(SK[i] & ST_NOFLT), wl = !(SK[i] & ST_NOLFO);
+            int good = (wa ? a > -40 : a < -90) && (wf ? br > 10 : br < 3) && lr == wl;
+            printf("     trig %-7s amp %6.1f dB  filter %+5.1f dB  LFO %s%s\n", (const char *[]){"ALL", "AMP", "FILTER",
+                   "LFO", "AMP+FLT", "AMP+LFO", "FLT+LFO", "NONE"}[i], a, br, lr ? "restarts" : "runs on", good ? "" : "  <- wrong");
+            ok &= good;
+        }
+        CHECK(ok, "trig types: each restarts the amp, the filter's envelope and the LFOs it names, no other");
+        m2k_init(7);
+        open_b01();
+        m2k_pattern_t *p = &pat[16];
+        p->step[0][4] = (m2k_step_t){.note = 48, .flags = ST_TRIG};
+        ui.grid = 1; ui.nheld = 1; ui.held[0] = 4; ui.trk = 0;
+        m2k_encoder(E_MASTER, 1);
+        int t1 = p->step[0][4].flags;
+        m2k_encoder(E_MASTER, 1);
+        m2k_encoder(E_ALGO, 1);                                     /* the accent / slide knob keeps the trig type */
+        int t2 = p->step[0][4].flags;
+        m2k_encoder(E_MASTER, -1); m2k_encoder(E_MASTER, -1); m2k_encoder(E_MASTER, -1);
+        int t3 = p->step[0][4].flags & ST_TTYPE;
+        ui.grid = 0; ui.nheld = 0;
+        CHECK(t1 == (ST_TRIG | ST_NOFLT | ST_NOLFO) && t2 == (ST_TRIG | ST_ACC | ST_NOAMP | ST_NOLFO) && t3 == ST_TTYPE,
+              "trig types: a held step and VOL step through them (ALL AMP FILTER ... NONE), the accent knob keeps them");
+        static uint8_t tb[BLOB_MAX];
+        static m2k_pattern_t tw;
+        p->step[0][9] = (m2k_step_t){.note = 50, .flags = ST_TRIG | ST_NOFLT};
+        int tn = pat_pack(p, tb);
+        CHECK(pat_unpack(&tw, tb, tn) && tw.step[0][9].flags == (ST_TRIG | ST_NOFLT), "trig types: saved and loaded with the step");
+    }
     /* trigs and locks survive a pack */
     int trigs = 0, locks = 0;
     for (int t = 0; t < 6; t++) for (int st = 0; st < 64; st++) trigs += pat[0].step[t][st].flags & 1;
