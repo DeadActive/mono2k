@@ -68,6 +68,9 @@ p, h2, h3, dl, dd, ol { margin: 0; }
 .links a { color: var(--ink); text-decoration: none; }
 .links a::after { content: " \2197"; }
 .links a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.kofi { color: var(--ink); text-decoration: none; }                       /* the author's Ko-fi, header and footer */
+.kofi::after { content: " \2197"; }
+.kofi:hover { text-decoration: underline; text-underline-offset: 4px; }
 .r { text-align: right; }
 .themebtn {
   display: inline-flex; align-items: center; gap: var(--s1); height: var(--s4); padding: 0 var(--s1);
@@ -222,7 +225,7 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
   .play__side { padding-bottom: var(--s8); }
   .bar > * { grid-column: span 6; }
   .bar { row-gap: var(--s1); padding-top: var(--s2); padding-bottom: var(--s2); }   /* bars that wrap: rows apart */
-  header.bar > :nth-child(2), header.bar > :nth-child(3) { display: none; }   /* the name and the switch only */
+  header.bar > :nth-child(2) { display: none; }                  /* the name, the Ko-fi and the switch */
   .hero__sub .kicker, .hero__sub .lede, .sec__n, .sec__body, .keys, .keys:last-child { grid-column: 1 / -1; }
   .hero__sub { row-gap: var(--s2); }
   .cols2, .mgrid { grid-template-columns: 1fr; }
