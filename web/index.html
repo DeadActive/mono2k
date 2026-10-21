@@ -9,7 +9,7 @@
 <title>MONO2K Emulator</title>
 <meta name="description" content="MONO2K: six mono machines, a 64-step sequencer with parameter locks and trig conditions, and a lofi bus, for the M-VAVE FM-1. Running in your browser.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
-<link rel="stylesheet" href="style.css?v=36">
+<link rel="stylesheet" href="style.css?v=37">
 </head>
 <body>
 <div class="rules" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
@@ -102,9 +102,13 @@
   <p class="sec__n">02</p>
   <div class="sec__body">
     <h2 class="display">Machines</h2>
-    <p class="lede">Nine machines in six families, after what is published about the Monomachine's: written from scratch for MONO2K, integer only, to be tuned against the original by ear and by measurement. Point at a card and its mark turns, as on the screen.</p>
+    <p class="lede">Fifteen machines in seven families, twelve that sound and three FX that work on the track before them, after what is published about the Monomachine's: written from scratch for MONO2K, integer only, to be tuned against the original by ear and by measurement. Point at a card and its mark turns, as on the screen.</p>
   </div>
   <div class="mgrid" id="mgrid"></div>
+  <details class="params" id="params">
+    <summary><span class="label">Every parameter</span><span class="label" id="pcount">Eight pages</span></summary>
+    <div class="pgrid" id="pgrid"></div>
+  </details>
 </section>
 
 <section class="sec" id="sequencer">
@@ -153,6 +157,6 @@
   <span class="label">MONO2K</span><span class="label">Six mono machines</span><a class="label kofi" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">Support on Ko-fi</a><span class="label r">2026</span>
 </footer>
 
-<script src="app.js?v=62"></script>
+<script src="app.js?v=63"></script>
 </body>
 </html>

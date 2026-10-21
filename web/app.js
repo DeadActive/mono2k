@@ -318,7 +318,7 @@
   const status = (s) => console.info("MONO2K:", s);   /* the page keeps no status line: messages go to the console */
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=56");
+    const r = await fetch("m2k.wasm?v=57");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();
@@ -326,6 +326,7 @@
     pre.w_setting(0, isDark() ? 0 : 127);
     preT0 = performance.now();
     machines();
+    params();
     namesFrom(pre);
     patterns();
     requestAnimationFrame(preTick);
@@ -567,6 +568,31 @@
       card.addEventListener("pointerleave", () => { clearInterval(anim); flat(); });
       card._redraw = flat;
     }
+  }
+
+  // ---------------------------------------------------------------------------- every parameter, page by page
+  /* read off the firmware's own pages, so the list is the panel's: a block for each page (or subpage where it has a
+   * name of its own), each knob's short name and its long one; SYN's for the machine chosen */
+  function params() {
+    const x = pre, grid = $("pgrid");
+    if (!x.w_pages) return;
+    const P = { HOME: 0, SYN: 1, AMP: 2, FILT: 3, FX: 4, LFO: 5, ARP: 6, GLO: 7 };
+    const knobs = (page, subs, m) => subs.flatMap((sub) => [0, 1, 2, 3].map((k) => ({ s4: cstr(x, x.w_knob(page, sub, m, k)), name: cstr(x, x.w_kname(page, sub, m, k)), code: x.w_kcode(page, sub, k) })))
+      .filter((r) => r.name);
+    const blocks = [
+      ["SYN", P.SYN, [0, 1]], ["AMP", P.AMP, [0, 1]], ["FILTER", P.FILT, [0, 1]],
+      ...[0, 1, 2, 3].map((sub) => [cstr(x, x.w_page_label(P.FX, sub)), P.FX, [sub]]),
+      ...[0, 1, 2].map((l) => [`LFO ${l + 1}`, P.LFO, [2 * l, 2 * l + 1]]),
+      ["ARP", P.ARP, [0]], ["HOME", P.HOME, [0]],
+      ...[0, 1, 2, 3].map((sub) => [cstr(x, x.w_page_label(P.GLO, sub)), P.GLO, [sub]]),
+    ];
+    const li = (r) => `<li><b>${r.s4}</b>${r.name}</li>`;
+    grid.innerHTML = blocks.map(([t, page, subs]) => page === P.SYN
+      ? `<section class="pblk"><h5>${t}<select id="psyn" aria-label="Machine">${machineNames.map((n, m) => `<option value="${m}">${n}</option>`).join("")}</select></h5><ol id="psynl">${knobs(page, subs, 0).map(li).join("")}</ol></section>`
+      : `<section class="pblk"><h5>${t}</h5><ol>${knobs(page, subs, 0).map(li).join("")}</ol></section>`).join("");
+    $("psyn").addEventListener("change", (e) => { $("psynl").innerHTML = knobs(P.SYN, [0, 1], +e.target.value).map(li).join(""); });
+    const codes = new Set(blocks.flatMap(([, page, subs]) => knobs(page, subs, 0).map((r) => r.code)));
+    $("pcount").textContent = `Eight pages, ${codes.size} controls`;
   }
 
   // ------------------------------------------------------------------------------------------------- input

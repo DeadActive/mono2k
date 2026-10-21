@@ -41,6 +41,18 @@ EXPORT const char *w_knob(int page, int sub, int m, int k)
     return code < 8 ? MI[m % M_COUNT].syn[code].s4 : pinfo(0, code)->s4;
 }
 
+/* every page and subpage the panel edits, for the page's list of every parameter */
+EXPORT int w_pages(void) { return PG_COUNT; }
+EXPORT int w_subs(int page) { return NSUB[page % PG_COUNT]; }
+EXPORT const char *w_page_label(int page, int sub) { static char o[12]; page_label(page % PG_COUNT, sub, o); return o; }
+EXPORT int w_kcode(int page, int sub, int k) { return knob_param(page % PG_COUNT, sub, k & 3); }
+EXPORT const char *w_kname(int page, int sub, int m, int k)
+{
+    int code = knob_param(page % PG_COUNT, sub, k & 3);
+    if (code == NONE) return "";
+    return code < 8 ? MI[m % M_COUNT].syn[code].name : pinfo(0, code)->name;
+}
+
 /* what the page shows next to the panel */
 EXPORT const uint8_t *w_info(void)
 {
