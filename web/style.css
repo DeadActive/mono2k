@@ -66,18 +66,25 @@ p, h2, h3, dl, dd, ol { margin: 0; }
 .links > * { grid-column: span 2; }
 .links + .foot { margin-top: 0; }
 .links a { color: var(--ink); text-decoration: none; }
-.links a::after { content: " \2197"; }
+.links a::after { margin-left: 0.35em; }
 .links a:hover { text-decoration: underline; text-underline-offset: 4px; }
 .kofi { color: var(--ink); text-decoration: none; }                       /* the author's Ko-fi, header and footer */
-.kofi::after { content: " \2197"; }
+.kofi::after { margin-left: 0.35em; }
 .kofi:hover { text-decoration: underline; text-underline-offset: 4px; }
+/* the outward arrow on links, after Geist's arrow-up-right: a stroke and its corner, square ends, in the text's colour */
+:root { --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.6'%3E%3Cpath d='M3.25 5.75 8 10.5l4.75-4.75'/%3E%3C/svg%3E"); }
+:root { --arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.6'%3E%3Cpath d='M5 3.75h6.5a.75.75 0 0 1 .75.75V11M12 4 3.25 12.75'/%3E%3C/svg%3E"); }
+.links a::after, .kofi::after, .cta::after {
+  content: ""; display: inline-block; width: 1em; height: 1em; vertical-align: -0.15em; background: currentColor;
+  -webkit-mask: var(--arrow) center / contain no-repeat; mask: var(--arrow) center / contain no-repeat;
+}
 .r { text-align: right; }
 header.bar > .acts { grid-column: span 6; display: flex; justify-content: flex-end; align-items: center; gap: var(--s1); }
 .cta {                                                                   /* the author's Ko-fi, set in the page's ink */
   display: inline-flex; align-items: center; height: var(--s4); padding: 0 var(--s2);
   color: var(--paper); background: var(--ink); border: 1px solid var(--ink); text-decoration: none;
 }
-.cta::after { content: "\2197"; margin-left: var(--s1); }
+.cta::after { margin-left: var(--s1); }
 .cta { white-space: nowrap; }
 .cta:hover { color: var(--ink); background: var(--paper); }
 .themebtn {
@@ -268,7 +275,8 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 a.label { color: var(--ink); text-decoration: none; }
 /* the isotype, top left, in the theme's ink: the way home */
 .brand { display: inline-flex; align-items: center; justify-self: start; color: var(--ink); padding: 4px 0; }
-.brand svg { display: block; height: 22px; width: auto; fill: currentColor; }
+.brand svg { display: block; height: 27.5px; width: auto; fill: currentColor; }
+.brand .isodots { fill: var(--paper); }                         /* the hero K's dither, a few dots of paper in the ink */
 .brand:hover svg { opacity: 0.7; }
 .brand:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
 .subnav { position: relative; z-index: 1; display: flex; justify-content: flex-end; align-items: center; gap: var(--s3); min-height: 40px; padding: 0 var(--gut); border-bottom: 1px solid var(--ink); background: var(--paper); }
@@ -372,7 +380,11 @@ a.label { color: var(--ink); text-decoration: none; }
 .ed__bar { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s2); padding-bottom: var(--s2); border-bottom: 3px solid var(--ink); }
 .ed__field { display: grid; gap: 4px; }
 .ed__midi { margin-left: auto; }
-.ed select { height: var(--s4); padding: 0 var(--s1); font: var(--label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); background: var(--paper); border: 1px solid var(--ink); border-radius: 0; min-width: 12em; }
+/* a select with the site's chevron (after Geist's chevron-down), room on its right */
+.sel { position: relative; display: inline-block; }
+.sel::after { content: ""; position: absolute; right: 12px; top: 50%; width: 12px; height: 12px; margin-top: -6px; background: var(--ink); pointer-events: none;
+  -webkit-mask: var(--chev) center / contain no-repeat; mask: var(--chev) center / contain no-repeat; }
+.ed select { -webkit-appearance: none; appearance: none; height: var(--s4); padding: 0 40px 0 var(--s1); font: var(--label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); background: var(--paper); border: 1px solid var(--ink); border-radius: 0; min-width: 12em; }
 .ed__btn { height: var(--s4); padding: 0 var(--s2); font: var(--label); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); background: var(--paper); border: 1px solid var(--ink); cursor: pointer; }
 .ed__btn:hover { background-image: var(--d-check); background-size: 2px 2px; image-rendering: pixelated; }
 .ed__btn[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
@@ -385,7 +397,7 @@ a.label { color: var(--ink); text-decoration: none; }
 .ed__tracks li { font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; }
 .ed__mach { display: grid; grid-template-columns: 72px auto minmax(0, 1fr); align-items: center; gap: var(--s2); }
 .ed__mach canvas { width: 72px; height: 72px; image-rendering: pixelated; }
-.ed__mach p { opacity: 0.7; }
+.ed__mach p { opacity: 0.7; align-self: end; min-height: var(--s4); display: flex; align-items: center; }   /* on the select's line */
 .ed__pages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gut); }
 .ecard { border: 1px solid var(--ink); padding: var(--s2); min-width: 0; }
 .ecard h3 { display: flex; justify-content: space-between; margin: 0 0 var(--s1); padding-bottom: 4px; border-bottom: 3px solid var(--ink); font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; }
@@ -404,7 +416,8 @@ a.label { color: var(--ink); text-decoration: none; }
 .ed input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 16px; margin-top: -6px; background: var(--ink); border: 0; }
 .ed input[type="range"]::-moz-range-thumb { width: 12px; height: 16px; background: var(--ink); border: 0; border-radius: 0; }
 .ed input[type="range"]:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-.ed__keys { display: grid; gap: var(--s1); }
+/* the keys float at the foot of the window while the cards scroll under them, the gutter below and at the sides */
+.ed__keys { display: grid; gap: var(--s1); position: sticky; bottom: var(--gut); z-index: 5; padding: var(--s2); background: var(--paper); border: 1px solid var(--ink); }
 .ed__kb { position: relative; display: flex; height: 96px; border: 1px solid var(--ink); }
 .ed__kb .k { flex: 1 1 0; position: relative; padding: 0 0 6px; display: flex; align-items: flex-end; justify-content: center; font: var(--label); color: var(--ink); background: var(--paper); border: 0; border-right: 1px solid var(--ink); cursor: pointer; touch-action: none; }
 .ed__kb .k:last-child { border-right: 0; }
