@@ -34,7 +34,7 @@ and a slow one in each (HAZE, ORCHARD, SYRUP); half-time parts count as mid.
 | Slot | Name | Flavour | Reference | BPM | Key | Idea | Tracks |
 |---|---|---|---|---|---|---|---|
 | A01 | MAMMOTH | v5 | Gabor Lazar, Mark Fell, saintmatan, the Monomachine's metal demos | 164 | G minor | drums A (an 808 with a sub tail) and B (a curved drop) by bars; the DROP bass, a pitch drop that is the bass, CRUSH, FOLD and both hit to hit; a held Gm(add9) pad moving a voice at a time over eight bars; FM+PAR into FX-CHORUS fed back hard: the snare's clang and an elephant's calls | kick hat pad bass lead - |
-| A02 | RIVETS | 1 | Autechre | 118 | C# minor | the drums lead, a swung broken funk: kick on the off-beats, ghost snares, accented hats, an FM clank; a punchy SWAV-SAW bass in 3 3 4 3 3, its sub on C#1-C#2 | kick snare hat perc bass perc |
+| A02 | CUTUP | 1 | Prefuse 73 | 156 | D minor | half time: a swung hip-hop beat cut up, stuttering kick and snare, chopped hats, VO-6 vowel chops, a chopped stab (Dm9, Bbmaj7/D); an FM bass zapping onto each note, D1-D2 | kick snare hat voice bass chord |
 | A03 | HAZE | 2 | Boards of Canada | 88 | D minor | a dark, wobbling one-chord vamp and a dusty beat; four low notes over it | kick snare hat pad bass lead |
 | A04 | GRISTLE | 1 | Clark, SOPHIE | 168 | E minor | a slow industrial half-time groove, everything fast on top: a punchy kick, a metal-crack snare with ghost rolls, hats on nearly every step, FM metal boings and pitch-drop zaps; a rubbery FM bass sliding E1-E2 | kick snare hat perc bass perc |
 | A05 | CAROM | 1 | Aphex Twin | 160 | A minor | a metal hit bouncing through each bar, closing in, over a dense industrial beat with rolls; a wave-folded sine bass boinging onto each note, A1-A2 | kick snare hat perc bass perc |
@@ -43,7 +43,7 @@ and a slow one in each (HAZE, ORCHARD, SYRUP); half-time parts count as mid.
 | A08 | ORCHARD | 2 | Boards of Canada | 92 | E dorian | a four-note call, G A B E, answered by the dorian C#; Em7, A7; a driven sine bass, its sub on E1 A1 B1 | kick snare hat pad bass lead |
 | A09 | SPLINTR | 1 | Aphex Twin | 160 | F minor | drill breaks with pitched snare retrigs dropping out every second loop, over a huge sustained SWAV-SAW bass, its subs on F1 Ab1 Db1 Eb1 | kick snare hat perc bass lead |
 | A10 | SMOKE | v2 | Basic Channel | 120 | C minor | (brief v2, to be redone) | kick hat perc chord bass - |
-| A11 | CUTUP | 1 | Prefuse 73 | 156 | D minor | half time: a swung hip-hop beat cut up, stuttering kick and snare, chopped hats, VO-6 vowel chops, a chopped stab (Dm9, Bbmaj7/D); an FM bass zapping onto each note, D1-D2 | kick snare hat voice bass chord |
+| A11 | RIVETS | 1 | Autechre | 118 | C# minor | the drums lead, a swung broken funk: kick on the off-beats, ghost snares, accented hats, an FM clank; a punchy SWAV-SAW bass in 3 3 4 3 3, its sub on C#1-C#2 | kick snare hat perc bass perc |
 | A12 | SYRUP | old | (the bank before) | 96 | A major | a favourite of the owner's, kept | kick snare hat pad lead bass |
 | A13 | RIBBON | v2 | Aphex Twin | 168 | F minor | (brief v2, to be redone) | kick snare hat lead pad bass |
 | A14 | MOTEL | v2 | Anthony Naples | 122 | B dorian | (brief v2, to be redone) | kick snare hat chord bass - |

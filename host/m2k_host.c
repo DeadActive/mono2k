@@ -1105,7 +1105,7 @@ static int selftest(void)
     project_load(1);
     CHECK(pat[5].kit[2][P_VOL] != 1, "load project discards unsaved work");
     project_load(0);
-    CHECK(!strcmp(pat[1].name, "RIVETS"), "load DEMO again");
+    CHECK(!strcmp(pat[1].name, "CUTUP"), "load DEMO again");
     /* the store, out and back */
     pat[3].kit[1][P_PAN] = 17;
     int n = m2k_store_pack();
@@ -1127,11 +1127,11 @@ static int selftest(void)
     CHECK(project_save(2) == 0, "a project too big for an image is refused, not corrupted");
     CHECK(!strcmp(m2k_project_name(2), "P3"), "the refused slot is untouched");
     /* a store saved before today's demos: the slots still holding the ones its revision shipped take today's, the
-     * owner's stay. Revision 0 (before the store kept one: A16 was INIT, the owner's once written in), 1 to 7 (7: the
-     * bank before its reorder, every part in another slot) */
-    for (int rev = 0; rev < 8; rev++) {
-        static const char *const OLDN[8] = {"SPU RM", "DAYDRM", "GLITCH", "DREXC", "FACETS", "TORQUE", "PYLONS", "HAZE"};
-        int sl = rev == 2 ? 4 : rev == 3 || rev == 6 ? 8 : rev == 4 ? 3 : rev == 5 ? 5 : rev == 7 ? 0 : 2;   /* a slot the next revision replaced */
+     * owner's stay. Revision 0 (before the store kept one: A16 was INIT, the owner's once written in), 1 to 8 (7: the
+     * bank before its reorder, every part in another slot; 8: before CUTUP and RIVETS swapped) */
+    for (int rev = 0; rev < 9; rev++) {
+        static const char *const OLDN[9] = {"SPU RM", "DAYDRM", "GLITCH", "DREXC", "FACETS", "TORQUE", "PYLONS", "HAZE", "RIVETS"};
+        int sl = rev == 2 ? 4 : rev == 3 || rev == 6 ? 8 : rev == 4 ? 3 : rev == 5 ? 5 : rev == 7 ? 0 : rev == 8 ? 1 : 2;   /* a slot the next revision replaced */
         m2k_init(11);
         m2k_pattern_t keep2 = pat[sl], keep15 = pat[15], keep0 = pat[0], keep6 = pat[6];
         s_cpy(pat[sl].name, OLDN[rev]);                      /* an old demo, as shipped */
@@ -1139,7 +1139,7 @@ static int selftest(void)
         if (rev == 7) pat[6].kit[5][P_DIST] = 74;            /* A07 VESPER, in its slot before and after the reorder */
         s_cpy(pat[7].name, "MYSONG");                        /* the owner's */
         if (rev) {
-            s_cpy(pat[15].name, rev >= 5 ? "FOUNDRY" : "SHARDS");   /* the A16 its revision shipped: a demo */
+            s_cpy(pat[15].name, rev >= 8 ? "SPLICE" : rev >= 5 ? "FOUNDRY" : "SHARDS");   /* the A16 its revision shipped */
         } else {
             pattern_init_blank(&pat[15]);
             pat[15].step[0][0].flags = ST_TRIG;              /* A16 INIT, but written in: the owner's */

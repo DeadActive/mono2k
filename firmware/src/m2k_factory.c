@@ -997,13 +997,13 @@ static void factory(void)
     p->kit[2][P_LEVL] = (uint8_t)CLAMP(p->kit[2][P_LEVL] * 248 / 100, 0, 127);
     p->kit[5][P_LEVL] = (uint8_t)CLAMP(p->kit[5][P_LEVL] * 140 / 100, 0, 127);
 
-    /* A02 RIVETS, flavour 1, after Autechre: C# minor at 118, swung. The drums lead, a broken funk with space in it: a
+    /* A11 RIVETS, flavour 1, after Autechre: C# minor at 118, swung. The drums lead, a broken funk with space in it: a
      * hard kick on one and the off-beats, ratcheting into the turn; a short crushed snare on the backbeat with ghost
      * notes round it and a drag before the turn; hats in swung sixteenths, accented on the off-beat eighths, opening
      * every second bar; an FM clank answering the snare, its ratio locked to a brighter strike; a metal rim thrown
      * into a dotted echo. Under it a punchy SWAV-SAW bass in 3 3 4 3 3, on the kick and between, jumping octaves,
      * played an octave over its root so its sub sits on C#1 to C#2 (35-70 Hz); no melody */
-    p = pat_v5(1, "RIVETS", 118, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_FMD, M_SAW, M_GPRC));
+    p = pat_v5(10, "RIVETS", 118, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_FMD, M_SAW, M_GPRC));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 24; p->glob[G_GLCH] = 20; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 24;
     p->glob[G_VERB] = 30; p->glob[G_DAMP] = 50; p->glob[G_ACNT] = 50; p->glob[G_DRIV] = BANK_DRIVE;
     SET(p, 0, SB, 16, SE, 64, SF, 18, SG, 60, SC, 50, P_DEC, 30, P_REL, 6, P_DIST, 80, P_VOL, 111);
@@ -1053,12 +1053,12 @@ static void factory(void)
     BEAT(p, 5, "x.....x...x.....|x.....x...x.....|x.....x...x.....|x.....x...x...x.", 45, 45, 52, 42, 42, 49, 38, 38, 45, 40, 40, 47, 44);
     trim(p, 74);
 
-    /* A11 CUTUP, flavour 1, after Prefuse 73 (2001): D minor at 156, the beat in half time, swung hard. The drums lead, a
+    /* A02 CUTUP, flavour 1, after Prefuse 73 (2001): D minor at 156, the beat in half time, swung hard. The drums lead, a
      * hip-hop beat cut up: a fat kick and a crushed snare stuttering into ratchets and rolls, hats chopped in
      * thirty-seconds; VO-6 cut to short vowel chops that stutter, a new vowel each; a dusty chord stab chopped off the
      * beat, Dm9 then Bbmaj7 over D. Under it an FM bass that zaps down onto each note, fed back and crushed, locked
      * with the kick, D1 to D2; the bus repeating slices; no melody */
-    p = pat_v5(10, "CUTUP", 156, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_VOX, M_FMD, M_ENS));
+    p = pat_v5(1, "CUTUP", 156, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_VOX, M_FMD, M_ENS));
     p->glob[G_LEN] = 64; p->glob[G_SWNG] = 24; p->glob[G_GLCH] = 30; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 36;
     p->glob[G_TAPE] = 50; p->glob[G_HISS] = 50; p->glob[G_VERB] = 34; p->glob[G_DAMP] = 70; p->glob[G_ACNT] = 50;
     p->glob[G_DRIV] = BANK_DRIVE;
@@ -1249,7 +1249,7 @@ static void factory(void)
     }
     /* the parts with an FM+ track, written on MONO2K's old FM pages: onto the Monomachine's, once, until each is
      * voiced on them */
-    static const uint8_t FM_OLD[] = {1, 3, 4, 6, 10, 11, 15};   /* RIVETS GRISTLE CAROM VESPER CUTUP SYRUP SPLICE */
+    static const uint8_t FM_OLD[] = {1, 3, 4, 6, 10, 11, 15};   /* CUTUP GRISTLE CAROM VESPER RIVETS SYRUP SPLICE */
     for (unsigned i = 0; i < sizeof FM_OLD; i++) fm_v9(&pat[FM_OLD[i]]);
     /* and every part, its GND-SIN tracks written on that machine's old page (TUNE first): onto the Monomachine's */
     for (int i = 0; i < 16; i++) gsin_v11(&pat[i]);
