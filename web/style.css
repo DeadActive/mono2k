@@ -26,8 +26,8 @@
   --label: 700 11px / 16px var(--text);
   --small: 400 14px / 20px var(--text);
   --body: 400 17px / 24px var(--text);
-  --title: 900 24px / 28px var(--head);
-  --display: 900 clamp(40px, 5.6vw, 64px) / 1 var(--head);
+  --title: 700 24px / 28px var(--head);
+  --display: 700 clamp(40px, 5.6vw, 64px) / 1 var(--head);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -42,7 +42,7 @@ body { margin: 0; background: var(--paper); color: var(--ink); font: var(--body)
 p, h2, h3, dl, dd, ol { margin: 0; }
 
 /* the text styles */
-.label, .read dt, .keys h3, .mcard .meta, .mcard ol, .themebtn,
+.label, .read dt, .keys h3, .mcard .meta, .mcard ol, .themebtn, .cta,
 .tracks li, .pats button { font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; }
 .small { font: var(--small); }
 .lede { font: var(--body); max-width: 40em; }
@@ -72,6 +72,14 @@ p, h2, h3, dl, dd, ol { margin: 0; }
 .kofi::after { content: " \2197"; }
 .kofi:hover { text-decoration: underline; text-underline-offset: 4px; }
 .r { text-align: right; }
+header.bar > .acts { grid-column: span 6; display: flex; justify-content: flex-end; align-items: center; gap: var(--s1); }
+.cta {                                                                   /* the author's Ko-fi, set in the page's ink */
+  display: inline-flex; align-items: center; height: var(--s4); padding: 0 var(--s2);
+  color: var(--paper); background: var(--ink); border: 1px solid var(--ink); text-decoration: none;
+}
+.cta::after { content: "\2197"; margin-left: var(--s1); }
+.cta { white-space: nowrap; }
+.cta:hover { color: var(--ink); background: var(--paper); }
 .themebtn {
   display: inline-flex; align-items: center; gap: var(--s1); height: var(--s4); padding: 0 var(--s1);
   color: var(--ink); background: var(--paper); border: 1px solid var(--ink); cursor: pointer;
@@ -226,6 +234,7 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
   .bar > * { grid-column: span 6; }
   .bar { row-gap: var(--s1); padding-top: var(--s2); padding-bottom: var(--s2); }   /* bars that wrap: rows apart */
   header.bar > :nth-child(2) { display: none; }                  /* the name, the Ko-fi and the switch */
+  .cta .long { display: none; }                                   /* on a phone just "Ko-fi" */
   .hero__sub .kicker, .hero__sub .lede, .sec__n, .sec__body, .keys, .keys:last-child { grid-column: 1 / -1; }
   .hero__sub { row-gap: var(--s2); }
   .cols2, .mgrid { grid-template-columns: 1fr; }
