@@ -266,6 +266,11 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 /* ------------------------------------------------------------------------------------------- the other pages */
 /* the sub-header: the pages, on the right; the one in view in ink, the others faded, as labels */
 a.label { color: var(--ink); text-decoration: none; }
+/* the isotype, top left, in the theme's ink: the way home */
+.brand { display: inline-flex; align-items: center; justify-self: start; color: var(--ink); padding: 4px 0; }
+.brand svg { display: block; height: 22px; width: auto; fill: currentColor; }
+.brand:hover svg { opacity: 0.7; }
+.brand:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
 .subnav { position: relative; z-index: 1; display: flex; justify-content: flex-end; align-items: center; gap: var(--s3); min-height: 40px; padding: 0 var(--gut); border-bottom: 1px solid var(--ink); background: var(--paper); }
 .subnav a { position: relative; font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink); text-decoration: none; opacity: 0.5; padding: 12px 0; }
 .subnav a:hover { opacity: 1; }

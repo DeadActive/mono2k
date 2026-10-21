@@ -108,7 +108,8 @@
       t(cx, cy - 37, P.ENC[i], 6.5, { "font-weight": 600 });
       if (kind === "labels") t(cx, cy - 28, P.EROLE[i], 8, { "font-weight": 900 });
     }
-    t(58, 47, "MONO2K", 13, { "text-anchor": "start", "font-weight": 900, style: "font-family: var(--head)" });
+    const iso = P.ISO, isoG = el("g", { transform: `translate(58 34) scale(${15 / iso.h})`, fill: "currentColor" });
+    for (const [d, rule] of iso.paths) el("path", { d, "fill-rule": rule }, isoG);
     return s;
   }
   $$("[data-panel]").forEach((d) => d.appendChild(panelSvg(d.dataset.panel)));

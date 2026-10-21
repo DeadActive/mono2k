@@ -43,28 +43,23 @@
     r.setProperty("--g-up", make(8, 64, (x, y) => BAYER[y & 7][x & 7] < y));
   }
 
-  // --------------------------------------------------------------------------------------------- the wordmark
+  // --------------------------------------------------------------------------- the wordmark: the logotype, dithered
   const wm = $("wordmark");
   let wmBase = null, wmGlitchUntil = 0;
   function wordmark() {
     const cssW = wm.parentElement.clientWidth - 32;
     const cell = cssW > 900 ? 4 : 3;
     const W = Math.max(60, Math.floor(cssW / cell));
+    /* the logotype (mono2k_handoff/brand), filled across the grid at the cells' resolution, then dithered as before */
     const off = document.createElement("canvas");
     const g = off.getContext("2d");
-    let size = 200;
-    const face = getComputedStyle(document.documentElement).getPropertyValue("--head").trim() || "Orbitron";
-    g.font = `900 ${size}px ${face}`;
-    const fit = (s) => { g.font = `900 ${s}px ${face}`; return g.measureText("MONO2K").width - s * 0.05 * 5; };
-    size = Math.floor(size * (W * 0.995) / fit(size));
-    g.font = `900 ${size}px ${face}`;
-    const H = Math.ceil(size * 0.78);
+    const L = window.M2K_PANEL.LOGO;
+    const H = Math.max(12, Math.round(W * L.h / L.w));
     off.width = W; off.height = H;
-    g.font = `900 ${size}px ${face}`;
-    g.textBaseline = "alphabetic";
+    g.setTransform(W / L.w, 0, 0, H / L.h, 0, 0);
     g.fillStyle = "#000";
-    let x = 0;
-    for (const ch of "MONO2K") { g.fillText(ch, x, H - 1); x += g.measureText(ch).width - size * 0.05; }
+    for (const [d, rule] of L.paths) g.fill(new Path2D(d), rule);
+    g.setTransform(1, 0, 0, 1, 0, 0);
     const a = g.getImageData(0, 0, W, H).data;
     const on = (x, y) => x >= 0 && y >= 0 && x < W && y < H && a[(y * W + x) * 4 + 3] > 110;
     const mask = new Uint8Array(W * H);
@@ -178,7 +173,9 @@
     rect([233, 45, 229, 229], 18, { fill: "none", stroke: "currentColor", "stroke-width": 1.5 });
     bezel = rect([237, 49, 221, 221], 14, { fill: "currentColor" });
     bezelDark = -1;
-    text(58, 47, "MONO2K", 13, { "text-anchor": "start", "font-weight": 900, "letter-spacing": "0", style: "font-family: var(--head)" });
+    /* the isotype, top left, where the FM-1 has its maker's name */
+    const iso = window.M2K_PANEL.ISO, isoG = el("g", { transform: `translate(58 34) scale(${15 / iso.h})`, fill: "currentColor", "aria-label": "MONO2K" });
+    for (const [d, rule] of iso.paths) el("path", { d, "fill-rule": rule }, isoG);
     text(846, 47, "SIX MONO MACHINES · M-VAVE FM-1", 6.5, { "text-anchor": "end" });
     text(822, 296, "M-VAVE FM-1 · 27 KEYS · F3–G5", 6.5, { "text-anchor": "end" });
     for (let k = 0; k < 27; k++) {
