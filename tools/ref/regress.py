@@ -25,14 +25,15 @@ REF_JSON = os.path.join(HERE, "regress_ref.json")
 GAPS_JSON = os.path.join(HERE, "regress_gaps.json")
 SPECS = ["chain_levels", "chain_dist2", "chain_filt2", "chain_map3", "chain_clip3", "chain_eq2", "chain_srr2",
          "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14", "chain_ens20", "chain_ensacc", "chain_dist21",
-         "chain_fm26", "chain_sid36", "chain_pul38", "chain_kick40", "chain_ens41", "chain_gnoi42"]
+         "chain_fm26", "chain_sid36", "chain_pul38", "chain_kick40", "chain_ens41", "chain_gnoi42", "chain_fmstep43"]
 MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2": "mm_cfilt2", "chain_map3": "mm_cmap3",
           "chain_clip3": "mm_cclip3", "chain_eq2": "mm_ceq2", "chain_srr2": "mm_csrr2", "chain_delay": "mm_cdelay",
           "chain_delay2": "mm_cdelay2", "chain_ftime5": "mm_cftime5", "chain_res6": "mm_cres6",
           "chain_drive12": "mm_cdrive12", "chain_tune13": "mm_ctune13",
           "chain_sidbend14": "mm_csidbend14", "chain_ens20": "mm_cens20", "chain_ensacc": "mm_censacc",
           "chain_dist21": "mm_cdist21", "chain_fm26": "mm_cfm26", "chain_sid36": "mm_csid36", "chain_pul38": "mm_cpul38",
-          "chain_kick40": "mm_ckick40", "chain_ens41": "mm_cens41", "chain_gnoi42": "mm_cgnoi42"}
+          "chain_kick40": "mm_ckick40", "chain_ens41": "mm_cens41", "chain_gnoi42": "mm_cgnoi42",
+          "chain_fmstep43": "mm_cfmstep43"}
 
 
 def db(v):
@@ -687,6 +688,17 @@ def cases():
     add("fm", "chain_fm26", "f26d_fen_032", "fen_hz", {"note": 48, "at": [0.03, 0.08, 0.6, 1.2], "mode": "peak"}, "4%")
     for v in (0, 127):
         add("fm", "chain_fm26", f"f26d_tune_{v:03d}", "pitch_c", {"note": 48}, 1.0)
+    # FM+'s 24 ratio steps where the Monomachine's sound begins each and the value under (chain_fmstep43): the sidebands
+    # of the step it plays, (v * 24 + 8) >> 7 (its screen labels these eight values with the step before)
+    R24 = [1 / 64, 1 / 32, 1 / 16, 3 / 32, 1 / 8, 5 / 32, 3 / 16, 1 / 4, 5 / 16, 3 / 8, 7 / 16, 1 / 2, 5 / 8, 3 / 4, 7 / 8,
+           1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4]
+    fc6 = f0_of(84)
+    for b in (5, 21, 37, 53, 69, 85, 101, 117):
+        for v in (b - 1, b):
+            r = R24[(v * 24 + 8) >> 7]
+            hz = [(1 + r) * fc6, (1 + 2 * r) * fc6] + ([abs(1 - r) * fc6] if abs(1 - r) > 0.05 else [])
+            for k in ("s1", "p1", "p2", "p3"):
+                add("fmstep", "chain_fmstep43", f"fs43{k}_{v:03d}", "fm_side", {"hz": hz}, 1.5)
     # SID-6581 on the Monomachine's page (chain_sid36)
     mix = "SID's MIX: MONO2K's is the chip's triangle AND saw; the Monomachine's combines them otherwise (its level matches)"
     top = ("SID's top: the Monomachine's dips ~2.5 dB around 4-5 kHz and stops at 15 kHz (its noise quieter as it"

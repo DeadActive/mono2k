@@ -133,6 +133,14 @@ static const pi_t *pinfo(int t, int id)
     return &PI_LFO[(id - P_LFO) & 7];
 }
 
+static int kind_choices(int k);
+/* a knob's choice from its value: FM+'s ratios on the sound's own steps (fr24), the rest even */
+static int choice_of(int kind, int v)
+{
+    int n = kind_choices(kind);
+    return kind == K_FR24 ? fr24(v) : n ? (v * n) >> 7 : 0;
+}
+
 static int kind_choices(int k)
 {
     switch (k) {
@@ -219,7 +227,7 @@ static int filt_q3(int t, int32_t steps_q8)
 static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
 {
     *unit = "";
-    int n = kind_choices(pi->kind), c = n ? (v * n) >> 7 : 0;
+    int c = choice_of(pi->kind, v);
     switch (pi->kind) {
     case K_BI: s_int(out, v - 64); break;
     case K_FINE: s_int(out, ((v - 64) * 100) / 64); *unit = "CENT"; break;
@@ -470,7 +478,7 @@ static void edit(int k, int d)
     int v = knob_value(code);
     fmt(pi, ui.trk, v, old, &u);
     int n = kind_choices(pi->kind), nv;
-    if (n) nv = enc(CLAMP(((v * n) >> 7) + d, 0, n - 1), n);
+    if (n) nv = enc(CLAMP(choice_of(pi->kind, v) + d, 0, n - 1), n);
     else nv = CLAMP(v + d, kind_min(pi->kind), kind_max(pi->kind));
     if (code == SETTING(16)) {
         ui.proj_sel = (uint8_t)((nv * M2K_PROJECTS) >> 7);

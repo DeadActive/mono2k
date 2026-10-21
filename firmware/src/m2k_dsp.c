@@ -235,6 +235,11 @@ static uint32_t iexp2_q16(int32_t y)
     return i >= 0 ? f << i : f >> -i;
 }
 
+/* FM+'s 24 ratio steps from a knob's 0..127, as the Monomachine's sound steps them (tools/ref/chain_fmstep43.spec): a
+ * step begins at 5, 11, 16, 21, 27 .. 117, 123, rounded, where its screen (and the expert's sheet read off it) begins
+ * eight of them a value later, at 6, 22, 38 .. 118 */
+static inline int fr24(int v) { return (v * 24 + 8) >> 7; }
+
 static void mach_trig(trk_t *t, int m)
 {
     t->menv[0] = t->menv[1] = t->menv[2] = 1u << 30;
@@ -441,8 +446,8 @@ static void mach_block(int ti, int m, int32_t pitch)
          * law to 64 and on to index 14 at 127; both through a lowpass, TONE its cutoff (30 Hz at 0, 1.37 kHz at 64, open at
          * 127), so a high modulator goes in shallower; TUNE +-2 semitones */
         uint32_t inc = inc_of(pitch + (P7(t, P_SYN + 7) - 64) * 2);
-        uint32_t r1 = (T_FMR24[(P7(t, P_SYN + 0) * 24) >> 7] * (uint32_t)(192 + P7(t, P_SYN + 1))) >> 8;
-        uint32_t r2 = T_FMR24[(P7(t, P_SYN + 4) * 24) >> 7];
+        uint32_t r1 = (T_FMR24[fr24(P7(t, P_SYN + 0))] * (uint32_t)(192 + P7(t, P_SYN + 1))) >> 8;
+        uint32_t r2 = T_FMR24[fr24(P7(t, P_SYN + 4))];
         uint32_t i1 = (uint32_t)(((uint64_t)inc * r1) >> 16), i2 = (uint32_t)(((uint64_t)inc * r2) >> 16);
         int env = P7(t, P_SYN + 2), tone = P7(t, P_SYN + 6);
         uint32_t k1 = T_FMB[env];
@@ -545,7 +550,7 @@ static void mach_block(int ti, int m, int32_t pitch)
         int tone = P7(t, P_SYN + 6);
         uint32_t ii[3], kk[3];
         for (int j = 0; j < 3; j++) {
-            ii[j] = (uint32_t)(((uint64_t)inc * T_FMR24[(P7(t, P_SYN + 2 * j) * 24) >> 7]) >> 16);
+            ii[j] = (uint32_t)(((uint64_t)inc * T_FMR24[fr24(P7(t, P_SYN + 2 * j))]) >> 16);
             int env = P7(t, P_SYN + 2 * j + 1);
             uint32_t k = T_FMB[env];
             if (env > 64) {

@@ -626,8 +626,8 @@ static int selftest(void)
             int wn = pat_pack_v(&w, wb, 9);
             int ok = pat_unpack(&w2, wb, wn);
             const uint8_t *s2 = &w2.kit[1][P_SYN], *d2 = &w2.kit[2][P_SYN];
-            double r1 = T_FMR24[(s2[0] * 24) >> 7] / 65536.0 * (192 + s2[1]) / 256;
-            ok = ok && fabs(r1 / 1.41 - 1) < 0.01 && s2[1] != 64 && (s2[4] * 24) >> 7 == 19 &&
+            double r1 = T_FMR24[fr24(s2[0])] / 65536.0 * (192 + s2[1]) / 256;
+            ok = ok && fabs(r1 / 1.41 - 1) < 0.01 && s2[1] != 64 && fr24(s2[4]) == 19 &&
                  s2[2] == near_u32(T_FMB, 0, 64, T_FMK[30]) && s2[5] == near_u32(T_FMB, 0, 127, T_FMK[90]) &&
                  s2[3] == near_u32(T_FMFB, 0, 127, T_FMK[50] >> 1) && s2[6] == 64 && s2[7] == 64;
             CHECK(ok, "format: version 9 -> 10, an old FM+STAT's ratios to the 24 steps (1FIN the rest), its depths and feedback");
@@ -638,7 +638,7 @@ static int selftest(void)
             int lr = 0, ld = 0, l2 = 0, l1 = 0, lf = 0;
             for (int i = 0; i < M2K_LOCKS; i++) {
                 const m2k_lock_t *l = &w2.lock[i];
-                if (l->trk == 1 && l->step == 3) lr = l->param == P_SYN + 0 && (l->val * 24) >> 7 == 21;
+                if (l->trk == 1 && l->step == 3) lr = l->param == P_SYN + 0 && fr24(l->val) == 21;
                 if (l->trk == 1 && l->step == 5) ld = 1;
                 if (l->trk == 2 && l->step == 7) l2 = l->param == P_SYN + 5 && l->val == near_u32(T_FMDV, 0, 64, T_FMK[70]);
                 if (l->trk == 1 && l->step == 9) l1 = l->param == P_SYN + 2 && l->val == near_u32(T_FMB, 0, 64, T_FMK[20]);
