@@ -1,0 +1,86 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- MONO2K's installer page. There is no FM-1 build to install yet: the page says so, keeps its button shut, and
+     sets out how installing will work (after Felucca's installer, GPL-3.0-only, which the FM-1 build will adapt). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MONO2K Installer</title>
+<meta name="description" content="Installing MONO2K on the M-VAVE FM-1: its status, how it will work, and how to go back to the official firmware.">
+<script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+<link rel="stylesheet" href="style.css?v=42">
+</head>
+<body>
+<div class="rules" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+<header class="bar">
+  <a class="label" href="./">MONO2K</a>
+  <span class="label">Firmware for the M-VAVE FM-1</span>
+  <span class="r acts"><a class="cta" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener"><span class="long">Support on&nbsp;</span>Ko-fi</a><button id="theme" class="themebtn" type="button" aria-label="Colour theme">Auto</button></span>
+</header>
+<nav class="subnav" aria-label="Pages">
+  <a href="editor.html">Patch Editor</a>
+  <a href="installer.html" aria-current="page">Installer</a>
+  <a href="manual.html">Manual</a>
+</nav>
+
+<section class="phead">
+  <p class="sec__n">FM-1</p>
+  <div class="sec__body">
+    <h1 class="display" style="margin:0">Installer</h1>
+    <p class="lede">MONO2K onto the FM-1 over USB, from this page, in Chrome or Edge. No extra hardware, and a way back to the official firmware.</p>
+  </div>
+</section>
+
+<section class="inst">
+  <aside class="side doc">
+    <table>
+      <thead><tr><th colspan="2">Status</th></tr></thead>
+      <tbody>
+        <tr><td>Firmware</td><td>Prototype</td></tr>
+        <tr><td>In the browser</td><td>Runs</td></tr>
+        <tr><td>FM-1 build</td><td>Next</td></tr>
+        <tr><td>Flashed</td><td>Not yet</td></tr>
+      </tbody>
+    </table>
+  </aside>
+  <div class="main doc">
+    <div class="callout"><b>Not yet</b><p>There is no FM-1 build of MONO2K to install yet. The firmware runs in your browser today; the FM-1 build, Felucca's platform around the same core, is the next step. This page will install it when it is ready.</p></div>
+    <button class="bigbtn" type="button" disabled>Install<small>Not available yet</small></button>
+    <p><a class="bigbtn alt" href="./">Try it in the browser</a></p>
+
+    <h2>How it will work</h2>
+    <p>MONO2K will install as Felucca does, the open FM-1 firmware it is built on, with an installer adapted from Felucca's.</p>
+    <ol class="steps">
+      <li>Connect the FM-1 to a computer with a USB cable that carries data, not one for charging only.</li>
+      <li>Open this page in Chrome or Edge on the computer, and allow MIDI when the browser asks: the installer talks to the FM-1 over USB-MIDI, with SysEx.</li>
+      <li>The installer backs up first: the FM-1's own songs and settings, saved as a file on the computer.</li>
+      <li>Press Install. The running firmware stages an update loader, and the loader writes MONO2K. Keep the cable in and the page open until it says it is done.</li>
+      <li>The FM-1 starts again, into MONO2K.</li>
+    </ol>
+
+    <h2>Back to the official firmware</h2>
+    <p>M-VAVE's own updater takes the FM-1 back to its official firmware at any time. The installer will also offer to: with M-VAVE's unmodified firmware file, checked in your browser and sent nowhere, after a backup.</p>
+
+    <h2>You will need</h2>
+    <table>
+      <tbody>
+        <tr><td>Instrument</td><td>An M-VAVE FM-1.</td></tr>
+        <tr><td>Cable</td><td>USB, carrying data.</td></tr>
+        <tr><td>Browser</td><td>Chrome or Edge on a computer (Web MIDI with SysEx).</td></tr>
+        <tr><td>Computer</td><td>macOS, Windows or Linux.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout"><b>At your own risk</b><p>Installing firmware other than the FM-1's own is at your own risk. MONO2K is not affiliated with M-VAVE or Elektron.</p></div>
+    <p>Meanwhile the <a href="manual.html">Manual</a> describes the instrument, and the <a href="./">emulator</a> plays it as it will run on the FM-1.</p>
+  </div>
+</section>
+
+<footer class="bar foot">
+  <span class="label">MONO2K</span><span class="label">Installer</span><a class="label kofi" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">Support on Ko-fi</a><span class="label r">2026</span>
+</footer>
+<script src="site.js?v=2"></script>
+</body>
+</html>

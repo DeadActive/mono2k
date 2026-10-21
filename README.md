@@ -50,7 +50,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
   store, `m2k_gfx.c` 1-bit drawing, `m2k_ui.c` pages and controls.
 - `tools/gen_tables.py`, `gen_font.py`, `gen_icons.py`: the tables, fonts and marks, into `firmware/gen/` (Pillow and
   numpy in `.venv`).
-- `web/`: the emulator page; `m2k_web.c` is the core plus exports, `worklet.js` runs it, `app.js` draws the panel.
+- `web/`: the site: the emulator page, the manual, the installer (no FM-1 build to install yet) and the patch editor; `m2k_web.c` is the core plus exports, `worklet.js` runs it, `app.js` draws the panel, `manual.js` and `editor.js` read the machines and their knobs off the core.
 - `host/m2k_host.c`: the host harness.
 
 ## The next steps

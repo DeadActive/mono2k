@@ -109,22 +109,8 @@
   }
 
   // ------------------------------------------------------------------------------------------------ the panel
-  // the FM-1's geometry, as measured for the community's emulators (CoralFlower's emu.js)
-  const WHITE_X = [71, 119, 167, 215, 264, 312, 360, 408, 456, 504, 553, 601, 649, 697, 745, 794];
-  const BLACK_X = [95, 143, 191, 288, 336, 432, 480, 529, 625, 673, 769];
-  const isBlack = (k) => (0x54a >> ((k + 5) % 12)) & 1;
-  const KEYR = [];
-  for (let k = 0, w = 0, b = 0; k < 27; k++) KEYR.push(isBlack(k) ? [BLACK_X[b++], 326, 42, 76] : [WHITE_X[w++], 408, 42, 76]);
-  const BTNR = [];
-  for (let i = 0; i < 12; i++) BTNR.push([[500, 554, 608, 661, 715, 768][i % 6], [177, 231][(i / 6) | 0], 36, 36]);
-  BTNR.push([87, 250, 42, 22], [153, 250, 42, 22]);
-  const ENC_CX = [186.5, 186.5, 95, 508, 604, 701, 797, 95], ENC_CY = [101, 191, 191, 101, 101, 101, 101, 101];
-  const BTN = ["FX", "SEL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE", "ARP", "SEQ", "PLAY", "REC", "OCT-", "OCT+"];
-  const ROLE = ["FX", "FILT", "AMP", "LFO", "SYN", "GLO", "HOME", "SAVE", "ARP", "GRID", "PLAY", "REC/FILL", "", ""];
-  const ENC = ["SELECT", "ALGORITHM", "PRESETS", "KNOB 1", "KNOB 2", "KNOB 3", "KNOB 4", "MASTER"];
-  const EROLE = ["TRACK", "MACHINE", "PATTERN", "K1", "K2", "K3", "K4", "VOLUME"];
-  const NOTE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-  const BLACK_ROLE = ["T1", "T2", "T3", "T4", "T5", "T6", "P1", "P2", "P3", "P4", "MUTE"];
+  // the FM-1's geometry and MONO2K's names for its controls: panel.js, shared with the manual
+  const { isBlack, KEYR, BTNR, ENC_CX, ENC_CY, BTN, ROLE, ENC, EROLE, NOTE, BLACK_ROLE } = window.M2K_PANEL;
 
   // computer keys: the 27 keys as a tracker's piano; letters for the buttons (F-keys too)
   const KEYMAP = {
@@ -318,7 +304,7 @@
   const status = (s) => console.info("MONO2K:", s);   /* the page keeps no status line: messages go to the console */
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=59");
+    const r = await fetch("m2k.wasm?v=60");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();
@@ -346,7 +332,7 @@
     try {
       try { ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }); }
       catch (e) { ctx = new AudioContext({ latencyHint: "interactive" }); }
-      await ctx.audioWorklet.addModule("worklet.js?v=31");
+      await ctx.audioWorklet.addModule("worklet.js?v=32");
       node = new AudioWorkletNode(ctx, "mono2k", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(ctx.destination);
       node.port.onmessage = (ev) => {

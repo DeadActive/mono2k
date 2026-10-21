@@ -27,7 +27,12 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   `.venv/bin/python tools/demo_levels.py [ROUNDS] [--slots A01,...]` balances the table's parts by measurement and
   edits the factory; `build/host/m2k_host DIR --demo [SECONDS] [SLOT ...]` renders patterns for listening. New
   demos go to the owner in batches of four as ~30 s WAVs with their notes rows, and are committed once approved.
-- Web: `sh web/build.sh`, serve `web/` (`.claude/launch.json`: mono2k-web on port 8742).
+- Web: `sh web/build.sh`, serve `web/` (`.claude/launch.json`: mono2k-web on port 8742). Four pages share `style.css`
+  and a sub-header: the emulator (`index.html`, `app.js`), the manual (`manual.html`, `manual.js`: one page at a time,
+  the machines and knobs read off `m2k.wasm`, the screens `web/manual/*.png` from the host's tour), the installer
+  (`installer.html`: no FM-1 build yet) and the patch editor (`editor.html`, `editor.js`: the same worklet and saves).
+  `panel.js` is the FM-1's layout, `site.js` the subpages' theme and textures. After a wasm build bump `m2k.wasm?v=` in
+  `app.js`, `manual.js` and `editor.js` alike (and `worklet.js?v=` in `app.js` and `editor.js` with the worklet).
 - Checks: `sh tools/check.sh` (~6 min): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core built
   for armv7m soft float calls no float helper and no 64-bit division (flash / RAM printed); the self-test, every
   screen, bank A and every reference spec under ASan + UBSan, clean; the format's conversions mutated

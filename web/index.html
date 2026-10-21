@@ -9,22 +9,27 @@
 <title>MONO2K Emulator</title>
 <meta name="description" content="MONO2K: six mono machines, a 64-step sequencer with parameter locks and trig conditions, and a lofi bus, for the M-VAVE FM-1. Running in your browser.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
-<link rel="stylesheet" href="style.css?v=37">
+<link rel="stylesheet" href="style.css?v=42">
 </head>
 <body>
 <div class="rules" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
 
 <header class="bar">
-  <span class="label">MONO2K</span>
+  <a class="label" href="./">MONO2K</a>
   <span class="label">Firmware for the M-VAVE FM-1</span>
   <span class="r acts"><a class="cta" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener"><span class="long">Support on&nbsp;</span>Ko-fi</a><button id="theme" class="themebtn" type="button" aria-label="Colour theme">Auto</button></span>
 </header>
+<nav class="subnav" aria-label="Pages">
+  <a href="editor.html">Patch Editor</a>
+  <a href="installer.html">Installer</a>
+  <a href="manual.html">Manual</a>
+</nav>
 
 <section class="hero">
   <canvas id="wordmark" aria-label="MONO2K"></canvas>
   <div class="hero__sub">
     <p class="title kicker">Six mono machines</p>
-    <p class="lede">A Monomachine-style synthesizer for a palm-sized FM synth. Six tracks, each one machine: sine, noise, chip, two kinds of FM, supersaw, chord, digital waves, a voice. A 64-step sequencer with parameter locks, trig conditions and ratchets. A bus that breaks the sound beautifully.</p>
+    <p class="lede">A Monomachine-style synthesizer for a palm-sized FM synth. Six tracks, each one machine: sine, noise, chip, three kinds of FM, supersaw and pulse, chord, digital waves, a voice, and three FX machines. A 64-step sequencer with parameter locks, the Monomachine's trig types, conditions and ratchets. A bus that breaks the sound beautifully.</p>
   </div>
 </section>
 
@@ -159,6 +164,7 @@
   <span class="label">MONO2K</span><span class="label">Six mono machines</span><a class="label kofi" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">Support on Ko-fi</a><span class="label r">2026</span>
 </footer>
 
-<script src="app.js?v=65"></script>
+<script src="panel.js?v=1"></script>
+<script src="app.js?v=66"></script>
 </body>
 </html>

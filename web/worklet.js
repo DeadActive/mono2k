@@ -16,6 +16,15 @@ class Mono2k extends AudioWorkletProcessor {
     return x.w_store_unpack(n);
   }
 
+  kit() {
+    const x = this.x, n = x.w_pcount(), kits = new Uint8Array(6 * n), machines = [];
+    for (let t = 0; t < 6; t++) {
+      machines.push(x.w_machine_of(t));
+      kits.set(new Uint8Array(x.memory.buffer, x.w_kit(t), n), t * n);
+    }
+    this.port.postMessage({ t: "kit", pat: x.w_cur_pattern(), machines, kits, n });
+  }
+
   names() {
     const x = this.x, mem = new Uint8Array(x.memory.buffer), s = (p) => { let r = ""; while (mem[p]) r += String.fromCharCode(mem[p++]); return r; };
     const pats = [], projs = [];
@@ -50,6 +59,10 @@ class Mono2k extends AudioWorkletProcessor {
       case "tempo": x.w_tempo(m.d); break;
       case "reset": x.w_init(m.seed >>> 0); this.names(); break;
       case "names": this.names(); break;
+      /* the patch editor: a parameter or a machine set on the open pattern, and the pattern's six tracks sent back */
+      case "param": x.w_param(m.trk, m.code, m.v); break;
+      case "machine": x.w_set_machine(m.trk, m.m); this.kit(); break;
+      case "kit": this.kit(); break;
       case "project": {                       /* load (save 0) or save (save 1) a project, then keep it */
         x.w_project(m.slot, m.save ? 1 : 0);
         const n = x.w_store_pack();

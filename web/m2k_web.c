@@ -53,6 +53,50 @@ EXPORT const char *w_kname(int page, int sub, int m, int k)
     return code < 8 ? MI[m % M_COUNT].syn[code].name : pinfo(0, code)->name;
 }
 
+/* the patch editor: the open pattern's tracks read and set as the panel sets them (kept, dirty, saved with the store),
+ * each value formatted as the screen shows it, its range, and the Monomachine's CC for it (-1 for MONO2K's own) */
+EXPORT int w_cur_pattern(void) { return cur_pat; }
+EXPORT int w_machine_of(int t) { return pat[cur_pat].machine[t % M2K_TRACKS]; }
+EXPORT const uint8_t *w_kit(int t) { return pat[cur_pat].kit[t % M2K_TRACKS]; }
+EXPORT int w_pcount(void) { return P_COUNT; }
+EXPORT void w_param(int t, int code, int v)
+{
+    if (code < 0 || code >= P_COUNT) return;
+    t %= M2K_TRACKS;
+    pat[cur_pat].kit[t][code] = (uint8_t)CLAMP(v, 0, 255);
+    trk[t].eff[code] = pat[cur_pat].kit[t][code];
+    dirty = 1;
+}
+EXPORT void w_set_machine(int t, int m)
+{
+    t %= M2K_TRACKS;
+    if (m < 0 || m >= M_COUNT) return;
+    pat[cur_pat].machine[t] = (uint8_t)m;
+    m_cpy(pat[cur_pat].kit[t], MACH_DEF[m], 8);
+    m_cpy(trk[t].eff, pat[cur_pat].kit[t], 8);
+    dirty = 1;
+}
+/* in the page's own copy of the core: the machines the edited pattern has, so the labels and the formats follow them */
+EXPORT void w_mirror_machine(int t, int m) { if (m >= 0 && m < M_COUNT) pat[cur_pat].machine[t % M2K_TRACKS] = (uint8_t)m; }
+EXPORT const char *w_fmt(int t, int code, int v)
+{
+    static char o[32];
+    const char *u = "";
+    fmt(pinfo(t % M2K_TRACKS, code), t % M2K_TRACKS, v, o, &u);
+    if (*u) { char *e = o; while (*e) e++; *e++ = ' '; s_cpy(e, u); }
+    return o;
+}
+EXPORT int w_kmin(int t, int code) { return kind_min(pinfo(t % M2K_TRACKS, code)->kind); }
+EXPORT int w_kmax(int t, int code) { return kind_max(pinfo(t % M2K_TRACKS, code)->kind); }
+EXPORT int w_kchoices(int t, int code) { return kind_choices(pinfo(t % M2K_TRACKS, code)->kind); }
+EXPORT int w_enc(int i, int n) { return enc(i, n); }
+EXPORT int w_choice(int t, int code, int v) { return choice_of(pinfo(t % M2K_TRACKS, code)->kind, v); }
+EXPORT int w_cc_of(int code)
+{
+    for (int cc = 0; cc < 128; cc++) if (mm_cc_param(cc) == code) return cc;
+    return -1;
+}
+
 /* what the page shows next to the panel */
 EXPORT const uint8_t *w_info(void)
 {

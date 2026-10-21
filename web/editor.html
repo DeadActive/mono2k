@@ -1,0 +1,73 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- MONO2K's patch editor: every parameter of the open pattern's six tracks, on sliders, heard as they move. The same
+     firmware core as the emulator runs in the same worklet, with the same saves, so what is changed here is there
+     too. A MIDI output, when chosen, gets the Monomachine's CC for each change (the FM-1 running MONO2K, or a
+     Monomachine). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MONO2K Patch Editor</title>
+<meta name="description" content="Edit MONO2K's sounds in the browser: every parameter of every track, heard as you move it, saved with the emulator.">
+<script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+<link rel="stylesheet" href="style.css?v=42">
+</head>
+<body>
+<div class="rules" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+<header class="bar">
+  <a class="label" href="./">MONO2K</a>
+  <span class="label">Firmware for the M-VAVE FM-1</span>
+  <span class="r acts"><a class="cta" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener"><span class="long">Support on&nbsp;</span>Ko-fi</a><button id="theme" class="themebtn" type="button" aria-label="Colour theme">Auto</button></span>
+</header>
+<nav class="subnav" aria-label="Pages">
+  <a href="editor.html" aria-current="page">Patch Editor</a>
+  <a href="installer.html">Installer</a>
+  <a href="manual.html">Manual</a>
+</nav>
+
+<section class="phead">
+  <p class="sec__n" id="ed-pat">A01</p>
+  <div class="sec__body">
+    <h1 class="display" style="margin:0">Patch Editor</h1>
+    <p class="lede">Every parameter of the pattern's six tracks, heard as you move it. Your changes are kept with the emulator's: open the <a class="label" href="./" style="font:inherit;text-transform:none;letter-spacing:0;text-decoration:underline">emulator</a> and they are there.</p>
+  </div>
+</section>
+
+<section class="ed">
+  <div class="ed__start" id="ed-start">
+    <button class="bigbtn" type="button" id="ed-go">Start<small>Sound on, and the editor</small></button>
+    <p class="small">Loads the firmware and your saves from this browser. Two pages open at once each keep their own copy: edit in one at a time.</p>
+  </div>
+
+  <div class="ed__main" id="ed-main" hidden>
+    <div class="ed__bar">
+      <label class="ed__field"><span class="label">Pattern</span><select id="ed-pattern" aria-label="Pattern"></select></label>
+      <button class="ed__btn" type="button" id="ed-play" aria-pressed="false">Play</button>
+      <button class="ed__btn" type="button" id="ed-save">Save pattern</button>
+      <label class="ed__field ed__midi"><span class="label">MIDI out</span><select id="ed-midi" aria-label="MIDI output"><option value="">None</option></select></label>
+    </div>
+    <ul class="tracks ed__tracks" id="ed-tracks" aria-label="Tracks"></ul>
+    <div class="ed__mach">
+      <canvas id="ed-mark" width="72" height="72" aria-hidden="true"></canvas>
+      <label class="ed__field"><span class="label">Machine</span><select id="ed-machine" aria-label="Machine"></select></label>
+      <p class="small" id="ed-mach-text"></p>
+    </div>
+    <div class="ed__pages" id="ed-pages"></div>
+    <div class="ed__keys">
+      <p class="label">Audition the track: click the keys, or play Z–M and Q–U</p>
+      <div class="ed__kb" id="ed-kb"></div>
+      <div class="ed__oct"><button class="ed__btn" type="button" id="ed-octd">Oct −</button><span class="label" id="ed-octv">C3</span><button class="ed__btn" type="button" id="ed-octu">Oct +</button></div>
+    </div>
+    <p class="small ed__note" id="ed-status" aria-live="polite"></p>
+  </div>
+</section>
+
+<footer class="bar foot">
+  <span class="label">MONO2K</span><span class="label">Patch Editor</span><a class="label kofi" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">Support on Ko-fi</a><span class="label r">2026</span>
+</footer>
+<script src="site.js?v=2"></script>
+<script src="editor.js?v=1"></script>
+</body>
+</html>
