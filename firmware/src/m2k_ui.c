@@ -396,6 +396,8 @@ static struct {
     uint8_t seen_trig[M2K_TRACKS];
     uint32_t flash_t[M2K_TRACKS];
     int32_t icon_ph, icon_spd;         /* Q8 frames, and frames per second Q8 */
+    uint32_t icon_hit;                 /* when the track in view last trigged (its mark jumps) */
+    uint8_t icon_amp;                  /* how hard: the track's meter then, 0..63 */
     int32_t meter[M2K_TRACKS];
     int16_t lfo_hist[88];
     uint8_t lfo_w;
@@ -1086,13 +1088,19 @@ static void machine_card(void)
 static void mark_3d(int x, int y, int m)
 {
     int f = (ui.icon_ph >> 8) % ICON_FRAMES;
+    /* a hit of the track: the mark jumps off its shadow and falls back (higher for a louder hit), the shadow narrower
+     * as it rises */
+    int lift = 0;
+    uint32_t dt = ui.icon_hit ? ui.now - ui.icon_hit : 1000u;
+    if (dt < 180) { int top = 2 + ui.icon_amp / 16; lift = top - (int)(((uint32_t)top * dt * dt) / (180u * 180u)); }
     /* a dithered shadow on the floor, thinner at the ends */
     for (int j = 0; j < 5; j++) {
-        int w = 44 - j * 6;
+        int w = 44 - j * 6 - lift * 4;
+        if (w < 4) continue;
         rect_grad(x + 32 - w / 2, y + ICON_N + 1 + j, w / 2, 1, 4, 28 - j * 5, 0);
         rect_grad(x + 32, y + ICON_N + 1 + j, w / 2, 1, 28 - j * 5, 4, 0);
     }
-    blit(ICON_BITS[m][f], ICON_N, ICON_N, x, y, 1);
+    blit(ICON_BITS[m][f], ICON_N, ICON_N, x, y - lift, 1);
 }
 
 /* one mark a machine, the current one filled; 5 px apart, so all of them fit the column (fifteen: 75 px of its 88) */
@@ -1748,8 +1756,11 @@ const uint8_t *m2k_frame(uint32_t ms)
         mon.peak[t] = 0;
         ui.meter[t] = pk > ui.meter[t] ? CLAMP(pk, 0, 32767) : (ui.meter[t] * 7) >> 3;
     }
-    if (boost) ui.icon_spd = 34 << 8;
-    ui.icon_spd += ((6 << 8) - ui.icon_spd) >> 3;
+    /* the mark: in time with the music while it plays (a loop a bar), kicked on by each of the track's trigs; slow
+     * when stopped */
+    if (boost) { ui.icon_spd = 30 << 8; ui.icon_hit = ms | 1u; ui.icon_amp = (uint8_t)(ui.meter[ui.trk] >> 9); }
+    int32_t ibase = sq.playing ? (int32_t)(((int32_t)seq_bpm() << 8) / 20) : 6 << 8;
+    ui.icon_spd += (ibase - ui.icon_spd) >> 3;
     ui.icon_ph += (int32_t)((ui.icon_spd * (int32_t)dt) / 1000);
     ui.lfo_hist[ui.lfo_w] = (int16_t)mon.lfo[ui.trk][ui.page == PG_LFO ? ui.sub >> 1 : 0];
     ui.lfo_w = (uint8_t)((ui.lfo_w + 1) % 88);

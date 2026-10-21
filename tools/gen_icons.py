@@ -3,7 +3,8 @@
 # MONO2K's machine marks. Each machine has a brand mark, a slanted, chamfered letterform (after the Y2K techno
 # faces) drawn on a module grid. It is used twice: flat (64 px, the machine card, as Model:Cycles shows its
 # engines) and extruded in 3D, ray-marched, its face solid and its sides dithered to 1 bit with screen-fixed
-# patterns (after Kloroform's dithered letters), swaying in 12 frames. Writes firmware/gen/m2k_icons.h.
+# patterns (after Kloroform's dithered letters), in 12 frames that move as the machine does (the sine travels, the
+# noise flickers, the FM's modulators swing, the saw detunes ...) while it sways. Writes firmware/gen/m2k_icons.h.
 #   .venv/bin/python tools/gen_icons.py [--sheet build/icons.png]
 import os, sys, math
 import numpy as np
@@ -25,8 +26,12 @@ U = G * SS / 12.0           # one unit, in drawing pixels
 SL = 0.5                    # the slit
 
 
-def mark(name):
+def mark(name, ph=None):
+    """the mark, flat (ph None), or at a phase 0..1 of its own motion, one loop seamless"""
     im = Image.new("L", (G * SS, G * SS), 0)
+    a = ph is not None
+    w2 = 2 * math.pi * (ph or 0.0)                    # the loop's angle
+    fr = int(round((ph or 0.0) * FRAMES)) % FRAMES    # the frame, for the stepped motions
     d = ImageDraw.Draw(im)
     W = 255
 
@@ -67,12 +72,23 @@ def mark(name):
            (cx - hx + vx, cy - hy + vy)], 0)
 
     if name == "GSIN":          # the sine: one cycle, a slit where it crosses zero
-        pts = [(1.2 + 9.6 * k / 80, 6 - 3.2 * math.sin(2 * math.pi * k / 80)) for k in range(81)]
+        pts = [(1.2 + 9.6 * k / 80, 6 - 3.2 * math.sin(2 * math.pi * k / 80 - w2)) for k in range(81)]
         STROKE(pts, 2.0)
         slope = 3.2 * 2 * math.pi / 9.6
-        SLIT(6.0, 6.0, math.atan2(slope, 1) + math.pi / 2, 4)
+        if not a:
+            SLIT(6.0, 6.0, math.atan2(slope, 1) + math.pi / 2, 4)
+        else:                   # moving: travelling, the slits ride its zero crossings
+            for c, sg in ((0.5, 1), (0.0, -1), (1.0, -1)):
+                x = 1.2 + 9.6 * ((c + ph) % 1.0 if c < 1 else 1.0 + ph)
+                if 2.2 < x < 9.8:
+                    SLIT(x, 6.0, math.atan2(sg * slope, 1) + math.pi / 2, 4)
     elif name == "GNOI":        # the Monomachine's noise: the whole N of tiles, split down the middle (its stereo)
-        for j, row in enumerate(["X..X", "XX.X", "X.XX", "X..X"]):
+        cells = [list(r) for r in ["X..X", "XX.X", "X.XX", "X..X"]]
+        if a:                   # moving: noise, one tile of the N gone at a time, a new one each frame (the N kept)
+            on = [(j, i) for j in range(4) for i in range(4) if cells[j][i] == "X"]
+            j, i = on[(fr * 7) % len(on)]
+            cells[j][i] = "."
+        for j, row in enumerate(cells):
             for i, c in enumerate(row):
                 x0, y0 = 1.25 + i * 2.5, 1.25 + j * 2.5
                 if c == "X":
@@ -80,6 +96,9 @@ def mark(name):
         SLIT(6.0, 6.0, math.pi / 2, 10.5)
     elif name == "GPRC":        # MONO2K's noise percussion: tiles forming an N, one gone, some halved
         cells = ["X..X", "Xb.X", "..cX", "X.Xa"]
+        if a:                   # moving: each halved tile held on a new corner every other frame (S&H)
+            turn = {"a": "bcda", "b": "cdab", "c": "dabc", "d": "abcd"}
+            cells = ["".join(turn[c][(fr // 2) % 4] if c in "abcd" else c for c in r) for r in cells]
         for j, row in enumerate(cells):
             for i, c in enumerate(row):
                 x0, y0 = 1.25 + i * 2.5, 1.25 + j * 2.5
@@ -91,29 +110,38 @@ def mark(name):
                     P([(x0, y0), (x0 + 2, y0), (x0 + 2, y0 + 2)])
                 elif c == "c":                                      # the lower left
                     P([(x0, y0), (x0, y0 + 2), (x0 + 2, y0 + 2)])
+                elif c == "d":                                      # the lower right
+                    P([(x0 + 2, y0), (x0 + 2, y0 + 2), (x0, y0 + 2)])
     elif name == "SID":         # the chip: a body, its notch, three pins a side
         R(3.75, 1.5, 8.25, 10.5)
         DISC(6, 1.5, 1.0, 0)
+        lit = (fr // 2) % 6 if a else -1                         # moving: the pins lit in turn, round the chip
         for k in range(3):
             y = 2.75 + k * 2.5
-            R(1.25, y, 3.25, y + 1.25)
-            R(8.75, y, 10.75, y + 1.25)
+            R(0.5 if lit == k else 1.25, y, 3.25, y + 1.25)
+            R(8.75, y, 11.5 if lit == 5 - k else 10.75, y + 1.25)
     elif name == "FMS":         # static FM: a carrier, two modulators held round it
         DISC(6.8, 6.8, 2.9)
-        ARC(6.8, 6.8, 4.9 + 0.0, 3.4, 180, 270)
-        ARC(6.8, 6.8, 6.4, 5.4, 190, 260)
+        s1, s2 = (22 * math.sin(w2), -16 * math.sin(w2)) if a else (0, 0)   # moving: the two held modulators swing
+        ARC(6.8, 6.8, 4.9 + 0.0, 3.4, 180 + s1, 270 + s1)
+        ARC(6.8, 6.8, 6.4, 5.4, 190 + s2, 260 + s2)
     elif name == "FMD":         # dynamic FM: the carrier, and its modulators streaking in
-        for y, x0 in [(3.4, 1.0), (5.4, 2.2), (7.4, 1.6)]:
+        for k, (y, x0) in enumerate([(3.4, 1.0), (5.4, 2.2), (7.4, 1.6)]):
+            if a:               # moving: each streak runs in from the left and starts again, out of step
+                x0 = 1.0 + 3.2 * ((ph * 2 + k * 0.37) % 1.0)
             R(x0, y, 8, y + 1.2)
         DISC(8, 6, 3.6, 0)
         DISC(8, 6, 3.1)
     elif name == "FMP":         # parallel FM: the carrier, three modulators standing side by side over it
         DISC(6, 7.9, 3.1)
-        for x in (1.9, 5.3, 8.7):
-            R(x, 0.6, x + 1.4, 4.0)
+        for k, x in enumerate((1.9, 5.3, 8.7)):
+            top = 0.6 + (1.6 * (1 - abs(math.sin(w2 + k * math.pi / 3))) if a else 0)   # moving: in turn
+            R(x, top, x + 1.4, 4.0)
     elif name == "SAW":         # the supersaw: three teeth, detuned, each in front of the last and cut out of it
         off, T, B = 2.75, 2.0, 10.0
         w = 10 - 2 * off
+        if a:                   # moving: the detune breathing, the teeth sliding together and back
+            off = 2.45 + 0.3 * math.cos(w2)
         for k in range(3):
             pts = [(1 + k * off, B), (1 + k * off + w, T), (1 + k * off + w, B)]
             P(pts, 0)
@@ -123,27 +151,33 @@ def mark(name):
     elif name == "PUL":         # the pulse: a train on its low line, each pulse narrower than the last (its width swept)
         R(0.5, 8.6, 11.5, 10.2)
         x = 0.5
-        for w in (3.4, 2.4, 1.4):
+        for k, w in enumerate((3.4, 2.4, 1.4)):
+            w0 = w
+            if a:               # moving: the widths swept, each a third of the way on
+                w = w * (1 + 0.18 * math.sin(w2 + k * 2 * math.pi / 3))
             R(x, 1.8, x + w, 10.2)
-            x += w + 2.2 - (3.4 - w) * 0.3
+            x += w + 2.2 - (3.4 - w0) * 0.3
     elif name == "FXC":         # the chorus: one wave and its copy, bent apart
         for k, dy in enumerate((-1.3, 1.3)):
-            pts = [(1 + 10 * q / 40, 6 + dy * (1 if k else 1) + 3.2 * math.sin(2 * math.pi * q / 40 + k * 0.9)) for q in range(41)]
+            sp = (0.9 + 0.5 * math.sin(w2)) if a else 0.9        # moving: the copy's offset swept, both travelling
+            pts = [(1 + 10 * q / 40, 6 + dy * (1 if k else 1) + 3.2 * math.sin(2 * math.pi * q / 40 + k * sp - w2)) for q in range(41)]
             STROKE(pts, 1.5)
     elif name == "FXR":         # the ring: a ring, a wave through it
         ARC(6, 6, 5.2, 3.6, 0, 360)
-        STROKE([(1 + 10 * q / 40, 6 + 2.0 * math.sin(2 * math.pi * 2 * q / 40)) for q in range(41)], 1.2, 0)
-        STROKE([(1 + 10 * q / 40, 6 + 2.0 * math.sin(2 * math.pi * 2 * q / 40)) for q in range(41)], 0.8)
+        STROKE([(1 + 10 * q / 40, 6 + 2.0 * math.sin(2 * math.pi * 2 * q / 40 - w2)) for q in range(41)], 1.2, 0)   # moving: it runs
+        STROKE([(1 + 10 * q / 40, 6 + 2.0 * math.sin(2 * math.pi * 2 * q / 40 - w2)) for q in range(41)], 0.8)
     elif name == "FXD":         # the dynamics: a level, squeezed flat over its line
         R(1, 8.5, 11, 10)
         for k, h in enumerate((5.5, 7.5, 6.5, 6.5, 6.5)):
+            if a:               # moving: the level pumping into the ceiling, bar after bar
+                h = 5.0 + 2.2 * (0.5 + 0.5 * math.sin(w2 - k * 2 * math.pi / 5))
             R(1.2 + k * 2.0, 10 - min(h, 6.5) - 1.5, 2.6 + k * 2.0, 8.5)
         R(0.5, 2.0, 11.5, 2.8)
     elif name == "ENS":         # the ensemble: one tone, three voices swirled apart
         cx, cy, r = 6.0, 6.0, 4.9
         DISC(cx, cy, r)
         for k in range(3):
-            a0 = math.radians(-90 + 120 * k)
+            a0 = math.radians(-90 + 120 * k + (120 * ph if a else 0))   # moving: it turns, a third a loop
             pts = [(cx + math.cos(a0 + 1.4 * (q / 40 * (r + 0.4) / r) ** 1.3) * q / 40 * (r + 0.4),
                     cy + math.sin(a0 + 1.4 * (q / 40 * (r + 0.4) / r) ** 1.3) * q / 40 * (r + 0.4)) for q in range(41)]
             STROKE(pts, SL, 0)
@@ -151,7 +185,12 @@ def mark(name):
         st = Image.new("L", im.size, 0)
         sd = ImageDraw.Draw(st)
         y = 1.0
-        for h in [2.0, 1.6, 1.3, 1.05, 0.85, 0.7]:                 # six frames and five slits: ten units
+        H6 = [2.0, 1.6, 1.3, 1.05, 0.85, 0.7]
+        if a:                   # moving: the frames scanned, each height passing to the one under it
+            q = ph * 6
+            i0, t6 = int(q) % 6, q - int(q)
+            H6 = [H6[(i - i0) % 6] + (H6[(i - i0 - 1) % 6] - H6[(i - i0) % 6]) * t6 for i in range(6)]
+        for h in H6:                                                # six frames and five slits: ten units
             sd.rectangle([0, y * U, G * SS, (y + h) * U - 1], fill=255)
             y += h + SL
         dm = Image.new("L", im.size, 0)
@@ -162,11 +201,12 @@ def mark(name):
     elif name == "VOX":         # the voice: a mouth, its lips parted by the slit
         bow = lambda t: 1.0 * math.exp(-((t - 0.5) / 0.1) ** 2)    # the dip of the upper lip
         n = 60
-        top = [(1.2 + 9.6 * k / n, 5.75 - 3.0 * math.sin(math.pi * k / n) ** 0.75 + bow(k / n)) for k in range(n + 1)]
-        mid = [(1.2 + 9.6 * k / n, 5.75 + 0.5 * math.sin(math.pi * k / n)) for k in range(n + 1)]
-        bot = [(1.2 + 9.6 * k / n, 6.25 + 3.2 * math.sin(math.pi * k / n) ** 0.9) for k in range(n + 1)]
+        op = 0.55 * (1 - math.cos(w2)) if a else 0.0             # moving: it talks, the lips apart and together
+        top = [(1.2 + 9.6 * k / n, 5.75 - op - 3.0 * math.sin(math.pi * k / n) ** 0.75 + bow(k / n)) for k in range(n + 1)]
+        mid = [(1.2 + 9.6 * k / n, 5.75 - op + 0.5 * math.sin(math.pi * k / n)) for k in range(n + 1)]
+        bot = [(1.2 + 9.6 * k / n, 6.25 + op + 3.2 * math.sin(math.pi * k / n) ** 0.9) for k in range(n + 1)]
         P(top + mid[::-1])                            # the upper lip
-        P([(x, y + SL) for x, y in mid] + bot[::-1])  # the lower lip, a slit below the upper
+        P([(x, y + SL + 2 * op * math.sin(math.pi * (x - 1.2) / 9.6)) for x, y in mid] + bot[::-1])  # the lower lip
     return im                   # G * SS square, 8 bit
 
 
@@ -297,9 +337,11 @@ def main():
         big = mark(name)
         flat = np.array(big.resize((N, N), Image.BOX)) > 127
         flats.append(flat)
-        sdf = make_sdf(np.array(big.resize((GS, GS), Image.BOX)) > 127)
-        fr = [render(sdf, 0.72 * math.sin(2 * math.pi * k / FRAMES), 0.2 + 0.1 * math.cos(2 * math.pi * k / FRAMES))
-              for k in range(FRAMES)]
+        # each frame its own mark, moving as its machine does, swaying less than it used to so the motion reads
+        fr = []
+        for k in range(FRAMES):
+            sdf = make_sdf(np.array(mark(name, k / FRAMES).resize((GS, GS), Image.BOX)) > 127)
+            fr.append(render(sdf, 0.32 * math.sin(2 * math.pi * k / FRAMES), 0.22 + 0.06 * math.cos(2 * math.pi * k / FRAMES)))
         frames3d.append(fr)
         print(name)
     lines.append("static const uint8_t ICON_BITS[%d][%d][%d] = {\n" % (len(NAMES), FRAMES, N * N // 8))
