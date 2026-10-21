@@ -1067,13 +1067,14 @@ static void mark_3d(int x, int y, int m)
     blit(ICON_BITS[m][f], ICON_N, ICON_N, x, y, 1);
 }
 
+/* one mark a machine, the current one filled; 5 px apart, so all of them fit the column (fifteen: 75 px of its 88) */
 static void machine_dots(int cx, int y, int m)
 {
-    int x0 = cx - (M_COUNT * 9) / 2 + 4;
+    int x0 = cx - ((M_COUNT - 1) * 5) / 2;
     for (int i = 0; i < M_COUNT; i++) {
-        int x = x0 + i * 9;
-        if (M_ORDER[i] == m) disc(x, y, 3, 1);
-        else { frame(x - 3, y - 3, 7, 7, 1); px(x - 3, y - 3, 0); px(x + 3, y - 3, 0); px(x - 3, y + 3, 0); px(x + 3, y + 3, 0); }
+        int x = x0 + i * 5;
+        if (M_ORDER[i] == m) disc(x, y, 2, 1);
+        else frame(x - 1, y - 1, 3, 3, 1);
     }
 }
 
