@@ -524,7 +524,8 @@ static int selftest(void)
         n = pat_pack(&pat[0], bl);
         CHECK(pat_unpack(&c, bl, n) && !memcmp(pat[0].kit, c.kit, sizeof c.kit), "format: a saved demo reloads as it was");
         /* no conversion moves a pitch: every demo saved and reloaded as version 4 and 5 keeps its notes, its PTCH,
-         * its machines' pages and the locks on them (GND-SIN's TUNE converts, and no demo moves it) */
+         * its machines' pages and the locks on them (GND-SIN's page converts before 12, its locks with it, and no demo
+         * moves its TUNE) */
         int moved = 0;
         for (int d = 0; d < 16; d++)
             for (int ver = 4; ver <= 5; ver++) {
@@ -539,7 +540,7 @@ static int selftest(void)
                 }
                 for (int i = 0; i < M2K_LOCKS; i++) {
                     int m = pat[d].lock[i].trk != 0xFF ? pat[d].machine[pat[d].lock[i].trk] : M_ENS;
-                    if (m != M_ENS && m != M_FMS && m != M_FMD && m != M_SID && (pat[d].lock[i].param < 8 || pat[d].lock[i].param == P_PTCH))
+                    if (m != M_ENS && m != M_FMS && m != M_FMD && m != M_SID && m != M_GSIN && (pat[d].lock[i].param < 8 || pat[d].lock[i].param == P_PTCH))
                         moved += c.lock[i].val != pat[d].lock[i].val;
                 }
             }

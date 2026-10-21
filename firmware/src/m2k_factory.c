@@ -505,6 +505,213 @@ static void wave_span(m2k_pattern_t *p, int t, int a, int b, int wave, int vol)
         if (p->step[t][s].flags & ST_TRIG) { lk(p, t, s, SA, wave); lk(p, t, s, P_VOL, vol); }
 }
 
+/* A09 MAMMOTH's parts (direction v5, the owner's picks round by round, 2026-10-19..20): the drums A (an 808 with its
+ * sub tail) and B (a curved drop) by bars, the DROP bass after Gabor Lazar's "pathway" (a pitch drop that is the bass,
+ * its saturation CRUSH, FOLD and both hit to hit), a held Gm(add9) pad moving one voice at a time over eight bars (trig
+ * conditions 1:2 and 2:2), and the Monomachine's metal: FM+PAR into FX-CHORUS on the next track, fed back hard, its
+ * comb ringing an elephant's calls and the snare's clang. Written on GND-SIN's old page, turned at build as the rest */
+#define FR24(i) enc(i, 24)
+
+static void mm_cyc(m2k_pattern_t *p, int t, int prm, const uint8_t *v, int n)   /* each trig of the track the next value */
+{
+    for (int st = 0, k = 0; st < M2K_STEPS; st++)
+        if (p->step[t][st].flags & ST_TRIG) lk(p, t, st, prm, v[k++ % n]);
+}
+
+#define MM_CYC(p, t, prm, ...) mm_cyc(p, t, prm, NOTES(__VA_ARGS__))
+
+static void mm_chorus4(m2k_pattern_t *p, int t, int rate, int dep, int mix)
+{
+    SET(p, t, P_MODT, enc(0, 3), P_MODR, rate, P_MODD, dep, P_MODM, mix);
+}
+
+static void mm_bass4_drop(m2k_pattern_t *p)
+{
+    /* "pathway": GND-SIN (old page) folded, dropping 110 -> 50 Hz over 150 ms, bright at the hit and pure on the body (a
+     * filter envelope over a low WDTH); the hits between the kicks, three steps on (three against four) */
+    SET(p, 3, SA, 64, SB, 30, SC, 0, SD, 0, SE, 90, SF, 84, SG, 60, SH, 0, P_ATK, 0, P_HOLD, 10, P_DEC, 37, P_REL, 0,
+        P_DIST, 72, P_VOL, 127, P_BASE, 0, P_WDTH, 24, P_FATK, 0, P_FDEC, 28, P_WOF, 90, P_GATE, 127);
+    BEAT(p, 3, "...X.....X.....x|......X.x.....X.|...X.....X.....x|.....X....X.....",
+         31, 31, 31, 31, 34, 31, 31, 31, 29, 31, 27, 29);
+    MM_CYC(p, 3, SE, 90, 90, 110, 84, 90, 100);                               /* the drop's depth, hit to hit */
+    MM_CYC(p, 3, SB, 30, 42, 30, 22, 56);                                      /* the fold */
+    lfo(p, 3, 0, P_WOF, 1, 0, 30, 16, 0);                                   /* the hit's brightness, ~0.32 Hz */
+    lfo(p, 3, 1, SH, 0, 0, 20, 16, 0);                                      /* the 2nd harmonic, ~0.21 Hz */
+    lfo(p, 3, 2, P_FDEC, 1, 0, 44, 20, 0);                                  /* how long the hit stays bright, ~0.47 Hz */
+    mm_chorus4(p, 3, 40, 40, 110);
+}
+
+static void mm_drop5(m2k_pattern_t *p)
+{
+    mm_bass4_drop(p);
+    SET(p, 3, P_HOLD, 18, P_DEC, 42);                                       /* 263 ms, then -20 dB in 136 ms */
+    MM_CYC(p, 3, P_HOLD, 18, 24, 14, 30, 18, 20, 26);                          /* 204..438 ms, hit to hit */
+}
+
+static void mm_drop6(m2k_pattern_t *p)
+{
+    mm_drop5(p);
+    SET(p, 3, P_DEC, 50, P_REL, 40);
+}
+
+#define MM_SNARE_GRID "........X.......|........X......?|........X.......|........X.....x."
+
+static void mm_hats7(m2k_pattern_t *p, int red, int bits, int dec)
+{
+    SET(p, 1, SA, 127, SB, (uint8_t)red, SC, 127, SH, 64, P_ATK, 0, P_HOLD, 0, P_DEC, (uint8_t)dec, P_REL, 2, P_BASE, 48,
+        P_DIST, 80, P_BITS, (uint8_t)bits, P_VOL, 92, P_DTIM, 16, P_DSND, 104, P_DFB, 40, P_DBAS, 90);
+    BEAT(p, 1, "x.xxX.x2x.xxX.x3|x.xxX3x.x.xxX2x4|x.xxX.x2x.xxX.x3|x4xxX2x3x.x4X4x4", 60);
+    MM_CYC(p, 1, SB, (uint8_t)red, (uint8_t)(red + 30), (uint8_t)red, (uint8_t)(red + 60));       /* bright, darker */
+    MM_CYC(p, 1, SA, 127, 100, 127, 80, 127);                                   /* how wide, hit to hit */
+    lfo(p, 1, 0, P_DEC, 6, 3, 56, 60, 0);
+    lfo(p, 1, 1, P_BASE, 1, 0, 30, 30, 0);
+    lfo(p, 1, 2, P_SRR, 6, 3, 44, 50, 0);
+}
+
+static void mm_snare7(m2k_pattern_t *p, int dec, int dist, int grit)
+{
+    /* GND-PERC: noise thinned, the six-square metal at a spread, a short drop for the crack */
+    SET(p, 2, SA, 84, SB, 0, SC, 104, SD, 84, SE, 70, SF, 18, SG, (uint8_t)grit, P_ATK, 0, P_HOLD, 0, P_DEC, (uint8_t)dec,
+        P_REL, 20, P_BASE, 20, P_DIST, (uint8_t)dist, P_VOL, 112, P_PAN, 64, P_DTIM, 24, P_DSND, 96, P_DFB, 50,
+        P_DBAS, 70, P_MODT, enc(0, 3), P_MODR, 50, P_MODD, 40, P_MODM, 110);
+    BEAT(p, 2, MM_SNARE_GRID, 60);
+    lfo(p, 2, 0, SD, 6, 3, 40, 30, 0);                                      /* the metal's spread, hit to hit */
+    lfo(p, 2, 1, P_DEC, 6, 3, 44, 20, 0);
+    lfo(p, 2, 2, SA, 1, 0, 20, 20, 0);
+}
+
+static void mm_trig(m2k_pattern_t *p, int t, int st, int note, int acc)
+{
+    m2k_step_t *x = &p->step[t][st];
+    x->flags = (uint8_t)(ST_TRIG | (acc ? ST_ACC : 0)); x->note = (uint8_t)note; x->cond = C_ALWAYS; x->rtrg = 0;
+}
+
+static void mm_lks(m2k_pattern_t *p, int t, int st, const uint8_t *pv, int n)
+{
+    for (int i = 0; i + 1 < n; i += 2) lk(p, t, st, pv[i], pv[i + 1]);
+}
+
+#define MM_LKS(p, t, st, ...) do { const uint8_t _v[] = {__VA_ARGS__}; mm_lks(p, t, st, _v, sizeof _v); } while (0)
+
+static void mm_combo9(m2k_pattern_t *p)
+{
+    p->glob[G_LEN] = 64; p->glob[G_SWNG] = 0; p->glob[G_GLCH] = 22; p->glob[G_GSIZ] = GSIZE(1); p->glob[G_ADPC] = 50;
+    p->glob[G_TAPE] = 6; p->glob[G_HISS] = 4; p->glob[G_VERB] = 30; p->glob[G_DAMP] = 50; p->glob[G_ACNT] = 80;
+    p->glob[G_DRIV] = BANK_DRIVE;
+    static const char *const KA = "X.........x.....|X.....x.........|X.........x.....|X.....x.....x...";
+    static const char *const KB = "X.....x.....x...|X..x......x.x...|X.....x.....x...|X..x....x...x.4.";
+    static const char *const BL = "...x..x.....x..x|.x......x..x....|...x..x.....x..x|.x....x.x..3..x.";
+    static const uint8_t BN[6] = {79, 74, 82, 77, 74, 86};
+    /* the kick: B's curved drop in the kit, A's 808 by locks on bars 1 and 3 */
+    SET(p, 0, SA, 64, SB, 24, SC, 0, SD, 0, SE, 127, SF, 84, SG, 70, SH, 10, P_ATK, 0, P_HOLD, 6, P_DEC, 44, P_REL, 6,
+        P_DIST, 92, P_VOL, 124);
+    for (int st = 0; st < M2K_STEPS; st++) {
+        int bbar = (st / 16) & 1, c = (bbar ? KB : KA)[st + st / 16];
+        if (c == '.') continue;
+        mm_trig(p, 0, st, bbar ? 34 : 31, c == 'X');
+        if (c == '4') p->step[0][st].rtrg = 4;
+        if (!bbar) MM_LKS(p, 0, st, SB, 12, SE, 118, SF, 60, SG, 40, P_HOLD, 20, P_DEC, 50, P_REL, 10, P_DIST, 84);
+    }
+    lfo(p, 0, 0, SE, 6, 3, 40, 24, 0);
+    lfo(p, 0, 1, P_SRR, 6, 3, 36, 50, 0);
+    lfo(p, 0, 2, SB, 1, 0, 20, 20, 0);
+    mm_hats7(p, 0, 34, 4);
+    mm_snare7(p, 55, 100, 10);
+    for (int st = 0; st < M2K_STEPS; st++)
+        if ((p->step[2][st].flags & ST_TRIG) && ((st / 16) & 1)) MM_LKS(p, 2, st, P_DEC, 36, P_DIST, 104, SG, 20);
+    /* FM+PAR: B's blips (bars 2 and 4) in the kit, A's partials on A's snares by locks */
+    SET(p, 4, SA, FR24(19), SB, 90, SC, FR24(15), SD, 80, SE, FR24(21), SF, 70, SG, 110, SH, 64, P_ATK, 0, P_DEC, 22,
+        P_REL, 6, P_DIST, 90, P_VOL, 80, P_DTIM, 32, P_DSND, 110, P_DFB, 50, P_SPU, 24, P_PAN, 64, P_MODT, enc(0, 3),
+        P_MODR, 60, P_MODD, 40, P_MODM, 127);
+    for (int st = 16, n = 0; st < M2K_STEPS; st++) {
+        int c = BL[st + st / 16];
+        if (c == '.' || !((st / 16) & 1)) continue;
+        mm_trig(p, 4, st, BN[n++ % 6], 0);
+        if (c == '3') p->step[4][st].rtrg = 3;
+    }
+    for (int k = 0; k < 2; k++) {
+        int st = k ? 40 : 8;
+        mm_trig(p, 4, st, 67, 1);
+        MM_LKS(p, 4, st, SA, FR24(22), SB, 100, SC, FR24(18), SD, 96, SE, FR24(20), SF, 92, SG, 120, P_DEC, 52, P_REL, 20,
+            P_DIST, 96, P_VOL, 84, P_DTIM, 48, P_DSND, (uint8_t)(k ? 124 : 100), P_DFB, 64, P_SPU, 30, P_MODR, 40, P_MODD, 50);
+    }
+    lfo(p, 4, 0, P_PTCH, 0, 4, 64, 3, 0);
+    lfo(p, 4, 1, P_PAN, 6, 3, 40, 100, 0);
+    lfo(p, 4, 2, SG, 1, 0, 24, 30, 0);
+    mm_drop6(p);
+    MM_CYC(p, 3, P_BITS, 100, 0, 90);
+    MM_CYC(p, 3, P_SRR, 50, 0, 44);
+    MM_CYC(p, 3, P_FOLD, 0, 70, 56);
+    MM_CYC(p, 3, P_XOR, 0, 40, 30);
+    MM_CYC(p, 3, P_DIST, 88, 92, 90);
+}
+
+static const uint8_t MM_SUS[4][3] = {{69, 73, 100}, {73, 100, 116}, {73, 100, 109}, {69, 93, 100}};
+
+typedef struct { uint8_t st, note, flags; } mm_ln_t;
+
+static void mm_pad12t(m2k_pattern_t *p, int t)                        /* pad12 B on track t */
+{
+    p->glob[G_VERB] = 64; p->glob[G_DAMP] = 64;
+    SET(p, t, SA, 69, SB, 73, SC, 100, SD, 10, SE, 64, SF, 110, SG, 127, SH, 64, P_ATK, 90, P_HOLD, 127, P_DEC, 127,
+        P_REL, 90, P_GATE, 127, P_PORT, 0, P_WDTH, 52, P_LPQ, 16, P_DIST, 64, P_VOL, 84, P_DTIM, 96, P_DSND, 100,
+        P_DFB, 70, P_DBAS, 80, P_DWID, 40, P_SPU, 116, P_PAN, 64, P_MODT, enc(0, 3), P_MODR, 24, P_MODD, 30, P_MODM, 90);
+    for (int st = 0; st < M2K_STEPS; st += 4)
+        for (int k = 0; k < 2; k++) {
+            const uint8_t *c = MM_SUS[2 * k + st / 32];
+            mm_trig(p, t, st + k, 55, 0); p->step[t][st + k].flags |= ST_SLD;
+            p->step[t][st + k].cond = (uint8_t)(k ? C_2_2 : C_1_2);
+            MM_LKS(p, t, st + k, SA, c[0], SB, c[1], SC, c[2]);
+        }
+    lfo(p, t, 0, P_WDTH, 0, 0, 64, 70, 0);
+    lfo(p, t, 1, P_PAN, 1, 0, 32, 80, 0);
+    lfo(p, t, 2, P_VOL, 0, 1, 64, 66, 0);
+}
+
+static const mm_ln_t MM_ELE2[] = {
+    {2, 55, ST_ACC}, {4, 55, 0},
+    {10, 74, ST_ACC}, {12, 79, ST_SLD}, {15, 81, ST_SLD}, {18, 79, ST_SLD}, {20, 74, ST_SLD},
+    {34, 55, ST_ACC}, {36, 57, 0},
+    {42, 77, ST_ACC}, {44, 84, ST_SLD}, {47, 82, ST_SLD}, {50, 79, ST_SLD}, {52, 74, ST_SLD},
+    {60, 55, 0}};
+
+static void mm_metal11(m2k_pattern_t *p, int del)
+{
+    mm_combo9(p);
+    for (int t = 2; t < 6; t++) if (t != 3)                                  /* the steps blank, their notes too */
+        for (int st = 0; st < M2K_STEPS; st++) { m2k_step_t *x = &p->step[t][st]; x->flags = 0; x->note = 60; x->cond = C_ALWAYS; x->rtrg = 0; }
+    for (int k = 0; k < M2K_LOCKS; k++)                                       /* combo9's snare and blips: gone */
+        if (p->lock[k].trk == 2 || p->lock[k].trk == 4) p->lock[k].trk = 0xFF;
+    m_set(&p->kit[4][P_LFO], 0, 24);
+    for (int l = 0; l < 3; l++) p->kit[4][P_LFO + 8 * l + L_DPTH] = 64;
+    mm_pad12t(p, 2);
+    /* the snare's noise on the hats track */
+    for (int st = 8; st < M2K_STEPS; st += 16) { mm_trig(p, 1, st, 60, 1); MM_LKS(p, 1, st, SB, 0, SA, 127, P_DEC, 30, P_BASE, 22, P_VOL, 112); }
+    /* T5: the FM, plucked; the elephant's calls between the snares, the snare's clang on 8 24 40 56 */
+    SET(p, 4, SA, FR24(22), SB, 112, SC, FR24(18), SD, 96, SE, FR24(15), SF, 88, SG, 120, SH, 64, P_ATK, 0, P_HOLD, 6,
+        P_DEC, 40, P_REL, 20, P_PORT, 96, P_GATE, 127, P_DIST, 72, P_VOL, 24, P_WDTH, 127, P_DSND, 64, P_SPU, 20,
+        P_PAN, 64, P_MODM, 0);
+    for (unsigned i = 0; i < sizeof MM_ELE2 / sizeof MM_ELE2[0]; i++) {
+        mm_trig(p, 4, MM_ELE2[i].st, MM_ELE2[i].note, MM_ELE2[i].flags & ST_ACC);
+        p->step[4][MM_ELE2[i].st].flags |= MM_ELE2[i].flags & ST_SLD;
+        if (MM_ELE2[i].st == 4 || MM_ELE2[i].st == 36 || MM_ELE2[i].st == 60) p->step[4][MM_ELE2[i].st].cond = C_P50;
+    }
+    for (int st = 8; st < M2K_STEPS; st += 16) {
+        int b = (st / 16) & 1;                                            /* bars 2 and 4: B's crack */
+        mm_trig(p, 4, st, 62, 1);
+        MM_LKS(p, 4, st, SA, FR24(22), SB, 120, SC, FR24(20), SD, 108, SE, FR24(23), SF, 100, SG, 127, P_DEC, (uint8_t)(b ? 24 : 34),
+            P_PORT, 0);
+    }
+    lfo(p, 4, 0, SH, 0, 3, 70, 69, 0);                                      /* the elephant's vibrato */
+    lfo(p, 4, 1, SB, 2, 2, 64, 54, 0);                                      /* the tutorial's inverted square */
+    lfo(p, 4, 2, P_PAN, 1, 0, 32, 82, 0);
+    /* T6: FX-CHORUS, the comb, opened by every T5 trig; its gate short so the hits breathe */
+    SET(p, 5, SA, (uint8_t)del, SB, 12, SC, 10, SD, 127, SE, 120, SF, 110, SG, 116, SH, 100, P_ATK, 0, P_HOLD, 10,
+        P_DEC, 50, P_REL, 20, P_GATE, 127, P_VOL, 108, P_DIST, 64, P_PAN, 64, P_SPU, 40, P_DSND, 96, P_DTIM, 48, P_DFB, 40);
+    for (int st = 0; st < M2K_STEPS; st++) if (p->step[4][st].flags & ST_TRIG) mm_trig(p, 5, st, 60, 0);
+    for (int st = 8; st < M2K_STEPS; st += 16) lk(p, 5, st, P_DEC, (uint8_t)(((st / 16) & 1) ? 44 : 58));
+}
+
 static void factory(void)
 {
     m2k_pattern_t *p;
@@ -778,35 +985,14 @@ static void factory(void)
          35, 35, 42, 35, 38, 35, 35, 42, 40, 38, 40, 40, 47, 40, 45, 40, 40, 47, 45, 42);
     trim(p, 75);
 
-    /* A09 PYLONS, flavour 2, after Boards of Canada: G minor at 84, a slow boom-bap. The idea is the bass: a deep
-     * SWAV-SAW that walks under the chords, played an octave over its root so its sine sub sits on G1, Eb1 and C2
-     * (the square sub and a little unison under the closed saw for its growl), locked with the kick. Over it Gm9 for two
-     * bars, Ebmaj7 over G, Cm7, chorused on a dark pad; a four-note motif, G D C Bb, its last note new every bar, on
-     * one of the owner's warm waves, low-passed, worn by the rate and wobbling on the tape; a dusty snare, few hats */
-    p = pat_v5(8, "PYLONS", 84, MACHINES(M_GSIN, M_GPRC, M_GPRC, M_ENS, M_SAW, M_WAV));
-    p->glob[G_LEN] = 64; p->glob[G_SWNG] = 20; p->glob[G_TAPE] = 72; p->glob[G_HISS] = 48; p->glob[G_ADPC] = 16;
-    p->glob[G_VERB] = 66; p->glob[G_DAMP] = 80; p->glob[G_DRIV] = BANK_DRIVE;
-    SET(p, 0, SE, 56, SF, 26, SG, 18, SC, 40, P_DEC, 38, P_REL, 10, P_DIST, 72, P_VOL, 105);
-    BEAT(p, 0, "x......x..x.....|x.......x.x.....|x......x..x.....|x.......x.x...q.", 43);
-    SET(p, 1, SA, 62, SC, 20, SD, 40, SE, 20, SF, 20, SG, 16, P_DEC, 32, P_REL, 14, P_BASE, 18, P_SRR, 30, P_BITS, 20,
-        P_DIST, 72, P_SPU, 50, P_VOL, 84);
-    BEAT(p, 1, "....x.......x...|....x.......x..q|....x.......x...|....x.......x.q.", 60);
-    SET(p, 2, SA, 100, P_ATK, 10, P_DEC, 14, P_REL, 8, P_BASE, 36, P_SRR, 40, P_BITS, 30, P_VOL, 57, P_PAN, 58);
-    BEAT(p, 2, "..x.......x.....|..x.......x...x?|..x.......x.....|..x.......x.x...", 60);
-    SET(p, 3, SA, PCH(3), SB, PCH(7), SC, PCH(8), SD, 30, SF, 60, SG, 30, P_ATK, 80, P_HOLD, 127, P_DEC, 127,
-        P_REL, 90, P_GATE, 127, P_WDTH, 28, P_LPQ, 0, P_SPU, 80, P_VOL, 91);
-    BEAT(p, 3, "x...............|x...............|x...............|x...............", 50, 50, 43, 48);
-    chords(p, 3, 32, 48, 3, 7, 8);                                          /* Ebmaj7 over G */
-    chords(p, 3, 48, 64, 3, 7, 10);                                         /* Cm7 */
-    SET(p, 4, SA, 30, SB, 16, SE, 40, SF, 110, SG, 0, SH, 64, P_ATK, 2, P_HOLD, 127, P_DEC, 127, P_REL, 30,
-        P_GATE, 60, P_WDTH, 28, P_LPQ, 0, P_DIST, 72, P_VOL, 127, P_LEVL, 127);
-    BEAT(p, 4, "x.........x.....|x.......x.....x.|x.........x.....|x.........x.....", 43, 43, 43, 43, 41, 39, 39, 48, 46);
-    SET(p, 5, SA, OS(17), SB, 64, SC, 127, SE, 30, SF, 64, SG, 0, SH, 0, P_WBNK, 127, P_ATK, 12, P_HOLD, 127,
-        P_DEC, 127, P_REL, 50, P_GATE, 40, P_WDTH, 26, P_DIST, 64, P_SRR, 24, P_DTIM, 64, P_DSND, 30, P_DFB, 46,
-        P_DBAS, 10, P_DWID, 30, P_SPU, 70, P_VOL, 49, P_PAN, 66);
-    BEAT(p, 5, "x..x..x...x.....|x..x..x...x.....|x..x..x...x.....|x..x..x...x.....",
-         55, 62, 60, 58, 55, 62, 60, 57, 55, 62, 60, 58, 55, 63, 62, 60);
-    trim(p, 83);
+    /* A09 MAMMOTH, direction v5 (Lazar, Fell, saintmatan, the Monomachine's metal demos): G minor at 164. Kick, hats
+     * (and the snare's noise), the pad, the DROP bass, the FM (the snare's clang and an elephant's calls), FX-CHORUS */
+    p = pat_v5(8, "MAMMOTH", 164, MACHINES(M_GSIN, M_GNOI, M_ENS, M_GSIN, M_FMP, M_FXC));
+    mm_metal11(p, 62);                                                       /* the comb at 270 samples, ~163 Hz */
+    trim(p, 45);
+    p->kit[3][P_LEVL] = (uint8_t)CLAMP(p->kit[3][P_LEVL] * 110 / 100, 0, 127);
+    p->kit[2][P_LEVL] = (uint8_t)CLAMP(p->kit[2][P_LEVL] * 248 / 100, 0, 127);
+    p->kit[5][P_LEVL] = (uint8_t)CLAMP(p->kit[5][P_LEVL] * 140 / 100, 0, 127);
 
     /* A10 RIVETS, flavour 1, after Autechre: C# minor at 118, swung. The drums lead, a broken funk with space in it: a
      * hard kick on one and the off-beats, ratcheting into the turn; a short crushed snare on the backbeat with ghost
