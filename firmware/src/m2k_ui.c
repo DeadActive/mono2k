@@ -398,6 +398,8 @@ static struct {
     int32_t icon_ph, icon_spd;         /* Q8 frames, and frames per second Q8 */
     uint32_t icon_hit;                 /* when the track in view last trigged (its mark jumps) */
     uint8_t icon_amp;                  /* how hard: the track's meter then, 0..63 */
+    int32_t mhist[16];                 /* the track in view's meter, a frame each (SWAV-SAW's teeth read it late) */
+    uint8_t mh, saw_lv[3], saw_fall[3];
     int32_t meter[M2K_TRACKS];
     int16_t lfo_hist[88];
     uint8_t lfo_w;
@@ -1100,6 +1102,15 @@ static void mark_3d(int x, int y, int m)
         rect_grad(x + 32 - w / 2, y + ICON_N + 1 + j, w / 2, 1, 4, 28 - j * 5, 0);
         rect_grad(x + 32, y + ICON_N + 1 + j, w / 2, 1, 28 - j * 5, 4, 0);
     }
+    if (m == M_SAW && sq.playing) {
+        /* SWAV-SAW while it plays: each tooth as tall as the track's level, each a little behind the one before and
+         * falling at its own pace, stacked back to front, a front tooth cutting out what it covers */
+        for (int k = 0; k < 3; k++) {
+            if (k) blit(SAW_MASK[k][ui.saw_lv[k]], ICON_N, ICON_N, x, y - lift, 4);
+            blit(SAW_TEETH[k][ui.saw_lv[k]], ICON_N, ICON_N, x, y - lift, 1);
+        }
+        return;
+    }
     blit(ICON_BITS[m][f], ICON_N, ICON_N, x, y - lift, 1);
 }
 
@@ -1760,6 +1771,16 @@ const uint8_t *m2k_frame(uint32_t ms)
      * when stopped */
     if (boost) { ui.icon_spd = 30 << 8; ui.icon_hit = ms | 1u; ui.icon_amp = (uint8_t)(ui.meter[ui.trk] >> 9); }
     int32_t ibase = sq.playing ? (int32_t)(((int32_t)seq_bpm() << 8) / 20) : 6 << 8;
+    /* SWAV-SAW's teeth: the level on a log scale (-36 dB the lowest of 8), each tooth three frames behind the one
+     * before; up at once, down a level every frame, two, three: the back falls first, the front lingers */
+    ui.mh = (uint8_t)((ui.mh + 1) & 15);
+    ui.mhist[ui.mh] = ui.meter[ui.trk];
+    for (int k = 0; k < 3; k++) {
+        int32_t mv = ui.mhist[(ui.mh - 3 * k) & 15];
+        int l = CLAMP(((ilog2_q8((uint32_t)mv | 1u) - 9 * 256) * 8) / (6 * 256), 0, 7);
+        if (l >= ui.saw_lv[k]) { ui.saw_lv[k] = (uint8_t)l; ui.saw_fall[k] = 0; }
+        else if (++ui.saw_fall[k] > k) { ui.saw_fall[k] = 0; ui.saw_lv[k]--; }
+    }
     ui.icon_spd += (ibase - ui.icon_spd) >> 3;
     ui.icon_ph += (int32_t)((ui.icon_spd * (int32_t)dt) / 1000);
     ui.lfo_hist[ui.lfo_w] = (int16_t)mon.lfo[ui.trk][ui.page == PG_LFO ? ui.sub >> 1 : 0];

@@ -26,8 +26,9 @@ U = G * SS / 12.0           # one unit, in drawing pixels
 SL = 0.5                    # the slit
 
 
-def mark(name, ph=None):
-    """the mark, flat (ph None), or at a phase 0..1 of its own motion, one loop seamless"""
+def mark(name, ph=None, tooth=None, level=0, halo=False):
+    """the mark, flat (ph None), or at a phase 0..1 of its own motion, one loop seamless; SAW's one tooth alone at a
+    level 0..7 (tooth), or that tooth's footprint with its halo (halo: what it hides of the teeth behind)"""
     im = Image.new("L", (G * SS, G * SS), 0)
     a = ph is not None
     w2 = 2 * math.pi * (ph or 0.0)                    # the loop's angle
@@ -140,10 +141,19 @@ def mark(name, ph=None):
     elif name == "SAW":         # the supersaw: three teeth, detuned, each in front of the last and cut out of it
         off, T, B = 2.75, 2.0, 10.0
         w = 10 - 2 * off
-        if a:                   # moving: the detune breathing, the teeth sliding together and back
-            off = 2.45 + 0.3 * math.cos(w2)
         for k in range(3):
-            pts = [(1 + k * off, B), (1 + k * off + w, T), (1 + k * off + w, B)]
+            if tooth is not None and k != tooth:
+                continue
+            Tk = T
+            if tooth is not None:   # one tooth at a level (the screen composes them, each as tall as the music)
+                Tk = 6.2 - 5.6 * level / 7
+            elif a:                 # moving: the peaks rippling, each a sixth of a cycle behind the one before
+                Tk = 6.2 - 5.6 * (0.5 + 0.5 * math.sin(w2 - k * math.pi / 3))
+            pts = [(1 + k * off, B), (1 + k * off + w, Tk), (1 + k * off + w, B)]
+            if halo:
+                P(pts)
+                d.line([(x * U, y * U) for x, y in pts + [pts[0]]], fill=W, width=int(2 * SL * U), joint="curve")
+                continue
             P(pts, 0)
             d.line([(x * U, y * U) for x, y in pts + [pts[0]]], fill=0, width=int(2 * SL * U), joint="curve")
             P(pts)
@@ -279,7 +289,7 @@ def pattern(level, x, y):
     return (x % 2 == 0) & (y % 2 == 0)
 
 
-def render(sdf, ay, ax):
+def render(sdf, ay, ax, full=False):
     ys, xs = np.mgrid[0:N, 0:N]
     u = (xs + 0.5) / N * 2.1 - 1.05
     v = -((ys + 0.5) / N * 2.1 - 1.05)
@@ -312,7 +322,7 @@ def render(sdf, ay, ax):
     ink = np.zeros(u.shape, bool)
     for l in range(2, 7):
         ink |= (level == l) & pattern(l, xs, ys)
-    return ink & hit
+    return hit if full else ink & hit
 
 
 def pack(ink):
@@ -351,6 +361,21 @@ def main():
             lines.append("    {" + ",".join("0x%02x" % x for x in pack(ink)) + "},\n")
         lines.append("  },\n")
     lines.append("};\n")
+    # SWAV-SAW's teeth one by one at 8 levels, and each one's footprint, from the first frame's view: the screen stacks
+    # them back to front, each as tall as the music
+    teeth, masks = [], []
+    for k in range(3):
+        teeth.append([]); masks.append([])
+        for lv in range(8):
+            sd = make_sdf(np.array(mark("SAW", 0.0, tooth=k, level=lv).resize((GS, GS), Image.BOX)) > 127)
+            teeth[k].append(render(sd, 0.0, 0.28))
+            sh = make_sdf(np.array(mark("SAW", 0.0, tooth=k, level=lv, halo=True).resize((GS, GS), Image.BOX)) > 127)
+            masks[k].append(render(sh, 0.0, 0.28, full=True))
+    for nm, arr in (("SAW_TEETH", teeth), ("SAW_MASK", masks)):
+        lines.append("static const uint8_t %s[3][8][%d] = {\n" % (nm, N * N // 8))
+        for k in range(3):
+            lines.append("  {\n" + "".join("    {" + ",".join("0x%02x" % x for x in pack(ink)) + "},\n" for ink in arr[k]) + "  },\n")
+        lines.append("};\n")
     lines.append("static const uint8_t MARK_BITS[%d][%d] = {\n" % (len(NAMES), N * N // 8))
     for fl in flats:
         lines.append("    {" + ",".join("0x%02x" % x for x in pack(fl)) + "},\n")

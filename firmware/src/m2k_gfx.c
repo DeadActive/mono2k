@@ -220,7 +220,7 @@ static void blit(const uint8_t *bits, int w, int h, int x, int y, int mode)
     for (int j = 0; j < h; j++)
         for (int i = 0; i < w; i++) {
             int on = (bits[j * bpr + (i >> 3)] >> (7 - (i & 7))) & 1;
-            if (on) px(x + i, y + j, mode == 3 ? 2 : 1);
+            if (on) px(x + i, y + j, mode == 3 ? 2 : mode == 4 ? 0 : 1);   /* 4: cleared where set (a cut-out) */
             else if (mode == 2) px(x + i, y + j, 0);
         }
 }
