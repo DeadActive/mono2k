@@ -1689,24 +1689,56 @@ static void param_page(void)
     footer();
 }
 
+/* the boot: the logotype as the web's hero draws it, one bit-crusher. Its outline solid, inside a Bayer dither from
+ * sparse to solid left to right, drifting slowly and smoothly at random; it resolves out of coarse blocks (4 px to 1
+ * in 0.52 s, the dither coming up), breaks once (rows shifted, slices slid, a band inverted, 0.98 .. 1.26 s), then
+ * holds until the glitch out */
+static inline int logo_bit(const uint8_t *b, int x, int y) { return (b[y * ((LOGO_W + 7) >> 3) + (x >> 3)] >> (7 - (x & 7))) & 1; }
+
 static void boot(uint32_t t)
 {
     cls();
-    int y0 = 92;
-    /* the logo, swept in left to right behind a dithered edge */
-    int p = (int)CLAMP((int)t * 64 / 650, 0, 64);
-    for (int j = 0; j < LOGO_H; j++)
-        for (int i = 0; i < LOGO_W; i++) {
-            int th = (4 + i) * 48 / 240 + (T_BAYER[(y0 + j) & 7][(4 + i) & 7] >> 2);
-            if (th < p && ((LOGO_BITS[j * ((LOGO_W + 7) >> 3) + (i >> 3)] >> (7 - (i & 7))) & 1)) px(4 + i, y0 + j, 1);
+    const int x0 = 4, y0 = 92, T = (int)t;
+    int bs = T < 520 ? 4 - T / 130 : 1;                                       /* the resolution, resolving */
+    int up = T < 400 ? T * 256 / 400 : 256;                                   /* the dither coming up, Q8 */
+    int brk = T >= 980 && T < 1260 ? (int)(sinp((uint32_t)(T - 980) * (0x80000000u / 280)) >> 7) : 0;   /* Q8 */
+    uint8_t dens[LOGO_W];
+    for (int x = 0; x < LOGO_W; x++) {                                        /* the drift: slow sines out of step */
+        int32_t a = sinp((uint32_t)x * 41700000u + (uint32_t)T * 321000u) >> 8;
+        int32_t b2 = sinp((uint32_t)x * 11600000u - (uint32_t)T * 212000u) >> 8;
+        int32_t d = LOGO_DENS[x] + ((a * b2 * 7) >> 14) + ((sinp((uint32_t)x * 88900000u + (uint32_t)T * 752000u) * 3) >> 15);
+        dens[x] = (uint8_t)CLAMP((d * up) >> 8, 0, 64);
+    }
+    uint32_t seed = (uint32_t)(T / 45) * 7919u + 12345u;
+    #define RND() (seed = seed * 1103515245u + 12345u, (int)((seed >> 16) & 0x7FFF))            /* 0 .. 32767 */
+    int8_t slice[LOGO_W / 8 + 1];
+    for (int i = 0; i <= LOGO_W / 8; i++)
+        slice[i] = (int8_t)(brk && RND() < 11469 ? ((RND() - 16384) * LOGO_H / 4 * brk) >> 23 : 0);   /* +-H / 8 */
+    int band = 0, shift = 0, inv = 0;
+    for (int y = 0; y < LOGO_H; y++) {
+        if (brk && band-- <= 0) {
+            band = 2 + RND() % 9;
+            int act = RND() < 3277 + (13107 * brk >> 8);                       /* 0.1 .. 0.5 of the bands */
+            shift = act ? ((RND() - 16384) * 34 * brk) >> 23 : 0;               /* +-17 px */
+            inv = act && RND() < 4915;
         }
+        for (int x = 0; x < LOGO_W; x++) {
+            int sx = x - shift, sy = y + slice[x >> 3], bx = sx, by = sy;
+            if (bs > 1) { bx = (sx + 96) / bs - 96 / bs; by = (sy + 96) / bs - 96 / bs; sx = bx * bs; sy = by * bs; }   /* floored */
+            int v = 0;
+            if (sx >= 0 && sx < LOGO_W && sy >= 0 && sy < LOGO_H && logo_bit(LOGO_BITS, sx, sy))
+                v = logo_bit(LOGO_EDGE, sx, sy) || T_BAYER[by & 7][bx & 7] < dens[sx];
+            if (v ^ inv) px(x0 + x, y0 + y, 1);
+        }
+    }
+    #undef RND
     /* two gradient bands, the screen's grid drawn in */
-    int g = (int)CLAMP(((int)t - 250) * 240 / 500, 0, 240);
+    int g = (int)CLAMP((T - 250) * 240 / 500, 0, 240);
     rect_grad(0, y0 - 22, g, 12, 0, 64, 0);
     rect_grad(240 - g, y0 + LOGO_H + 10, g, 12, 64, 0, 0);
     dotted_v(GX, 0, g * (y0 - 24) / 240);
     static const char sub[] = "SIX MONO MACHINES";
-    int n = (int)CLAMP(((int)t - 650) / 28, 0, (int)sizeof sub - 1);
+    int n = (int)CLAMP((T - 650) / 28, 0, (int)sizeof sub - 1);
     char o[24];
     m_cpy(o, sub, (uint32_t)n);
     o[n] = 0;
@@ -1717,7 +1749,6 @@ static void boot(uint32_t t)
         text(&F_S, 4, 222, "LOFI 2000", 1, 1);
         text_r(&F_S, 236, 222, "6 X 64", 1, 1);
     }
-    if (t < 360) glitch(fb, t % 120, 0x2000u + t / 120, 3);
 }
 
 /* a message takes the header for a moment: inverted, its text, a gradient tail; it never covers the page */

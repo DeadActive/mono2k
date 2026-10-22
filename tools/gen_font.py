@@ -21,6 +21,81 @@ FONTS = [
 ]
 
 
+def logo_paths():
+    """the brand's logotype as web/panel.js holds it: its box and [path, fill rule] pairs"""
+    import re, json
+    js = open(os.path.join(ROOT, "web", "panel.js")).read()
+    m = re.search(r"LOGO: \{ w: (\d+), h: (\d+), paths: (\[\[.*?\]\]) \}", js)
+    return int(m.group(1)), int(m.group(2)), json.loads(m.group(3))
+
+
+def flatten(d):
+    """an SVG path's subpaths as polygons: M L H V C Z, absolute (all the logotype uses), cubics in 24 steps"""
+    import re
+    tok = re.findall(r"[MLHVCZmlhvcz]|-?\d*\.?\d+(?:e-?\d+)?", d)
+    polys, cur, i, cmd, x, y = [], [], 0, None, 0.0, 0.0
+    num = lambda: float(tok[i])
+    while i < len(tok):
+        if tok[i].isalpha():
+            cmd = tok[i]; i += 1
+            if cmd in "Zz":
+                if cur: polys.append(cur); cur = []
+                continue
+        assert cmd in "MLHVC", cmd
+        if cmd == "M":
+            if cur: polys.append(cur)
+            x, y = float(tok[i]), float(tok[i + 1]); i += 2; cur = [(x, y)]; cmd = "L"
+        elif cmd == "L":
+            x, y = float(tok[i]), float(tok[i + 1]); i += 2; cur.append((x, y))
+        elif cmd == "H":
+            x = float(tok[i]); i += 1; cur.append((x, y))
+        elif cmd == "V":
+            y = float(tok[i]); i += 1; cur.append((x, y))
+        else:
+            p = [float(t) for t in tok[i:i + 6]]; i += 6
+            x0, y0 = x, y
+            for k in range(1, 25):
+                t = k / 24; u = 1 - t
+                cur.append((u ** 3 * x0 + 3 * u * u * t * p[0] + 3 * u * t * t * p[2] + t ** 3 * p[4],
+                            u ** 3 * y0 + 3 * u * u * t * p[1] + 3 * u * t * t * p[3] + t ** 3 * p[5]))
+            x, y = p[4], p[5]
+    if cur: polys.append(cur)
+    return polys
+
+
+def logo_mask(width):
+    """the logotype, width px wide, 1-bit: a pixel set where most of its 4 x 4 samples fall inside a path (each path
+    by its own rule, the paths joined)"""
+    W, H, paths = logo_paths()
+    sc = width / W
+    height = int(round(H * sc))
+    S = 4
+    acc = [[0] * width for _ in range(height)]
+    for d, rule in paths:
+        polys = [[(px * sc, py * sc) for px, py in poly] for poly in flatten(d)]
+        edges = [(a, b) for poly in polys for a, b in zip(poly, poly[1:] + poly[:1]) if a[1] != b[1]]
+        for sy in range(height * S):
+            yy = (sy + 0.5) / S
+            xs = []
+            for (x0, y0), (x1, y1) in edges:
+                if (y0 <= yy < y1) or (y1 <= yy < y0):
+                    xs.append((x0 + (yy - y0) * (x1 - x0) / (y1 - y0), 1 if y1 > y0 else -1))
+            xs.sort()
+            for sx in range(width * S):
+                xx = (sx + 0.5) / S
+                w = n = 0
+                for cx, dirn in xs:
+                    if cx > xx: break
+                    w += dirn; n += 1
+                inside = (n & 1) if rule == "evenodd" else (w != 0)
+                if inside: acc[sy // S][sx // S] |= 1 << ((sy % S) * S + sx % S)
+    img = Image.new("1", (width, height), 0)
+    for y in range(height):
+        for x in range(width):
+            if bin(acc[y][x]).count("1") >= S * S // 2: img.putpixel((x, y), 1)
+    return img
+
+
 def load(size, wght):
     f = ImageFont.truetype(TTF, size)
     try:
@@ -127,29 +202,30 @@ def main():
                      (name, h, base, first, last, track, name, name, name))
         print("%s: %dpx w%d, line %d, %d bytes" % (name, size, wght, h, len(bits)))
 
-    # the logotype: MONO2K, black weight, fit to 232 px
-    logo_font = None
-    for size in range(120, 30, -1):
-        f = load(size, 900)
-        w = sum(round(f.getlength(c)) for c in "MONO2K") - 1 * 5
-        if w <= 232:
-            logo_font = f
-            break
-    bb = logo_font.getbbox("MONO2K")
-    lw, lh = 232, bb[3] - bb[1]
-    logo = Image.new("1", (lw, lh), 0)
-    d = ImageDraw.Draw(logo)
-    d.fontmode = "1"
-    x = 0
-    for c in "MONO2K":
-        d.text((x, -bb[1]), c, font=logo_font, fill=1)
-        x += round(logo_font.getlength(c)) - 1
-    lb = pack(logo)
+    # the logotype: the brand's (web/panel.js, LOGO), 232 px wide, rasterized from its paths (each its own fill rule,
+    # sampled 4 x 4 a pixel). LOGO_BITS its fill, LOGO_EDGE its outline (a fill pixel with an empty neighbour), as the
+    # web's hero draws it: the outline solid, the inside dithered
+    on = logo_mask(232)
+    lw, lh = on.size
+    edge = Image.new("1", (lw, lh), 0)
+    for y in range(lh):
+        for x in range(lw):
+            if on.getpixel((x, y)) and any(not (0 <= x + dx < lw and 0 <= y + dy < lh) or not on.getpixel((x + dx, y + dy))
+                                           for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                edge.putpixel((x, y), 1)
+    lb, eb = pack(on), pack(edge)
     lines.append("#define LOGO_W %d\n#define LOGO_H %d\nstatic const uint8_t LOGO_BITS[%d] = {\n" % (lw, lh, len(lb)))
     for j in range(0, len(lb), 24):
         lines.append("    " + ",".join("0x%02x" % b for b in lb[j:j + 24]) + ",\n")
+    lines.append("};\nstatic const uint8_t LOGO_EDGE[%d] = {\n" % len(eb))
+    for j in range(0, len(eb), 24):
+        lines.append("    " + ",".join("0x%02x" % b for b in eb[j:j + 24]) + ",\n")
     lines.append("};\n")
-    previews.append(logo)
+    # the dither's density per column, sparse to solid left to right (the hero's 0.14 + 0.86 u^1.3), of 64
+    dens = [round((0.14 + 0.86 * (x / lw) ** 1.3) * 64) for x in range(lw)]
+    lines.append("static const uint8_t LOGO_DENS[%d] = {%s};\n" % (lw, ",".join(str(v) for v in dens)))
+    previews.append(on)
+    previews.append(edge)
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as f:
