@@ -48,7 +48,7 @@ enum { L_TRCK, L_DEST, L_WAVE, L_TRIG, L_MULT, L_SPD, L_PHAS, L_DPTH };
 
 /* global (pattern) parameters */
 enum {
-    G_TMPO, G_SWNG, G_LEN, G_ACNT,          /* tempo is 30 + 2*v .. but see m2k_bpm(); accent amount */
+    G_TMPO, G_SWNG, G_LEN, G_ACNT,          /* tempo is 30 + v BPM (seq_bpm); accent amount */
     G_TAPE, G_ADPC, G_GLCH, G_GSIZ,          /* the lofi bus */
     G_VERB, G_DAMP, G_HISS, G_DRIV,
     G_COUNT

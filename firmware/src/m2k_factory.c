@@ -338,6 +338,18 @@ static int sid_val(int prm, int v)
     }
 }
 
+/* format 13: HOLD in beats, as the Monomachine's (v / 32 of a beat, measured at 60, 120 and 240 BPM), no longer 14.6 ms
+ * a step: the kit's and its locks' HOLD to the step nearest the time they held, at the pattern's tempo (INF stays) */
+static uint8_t hold_to(int v, int bpm) { return v >= 127 ? 127 : (uint8_t)CLAMP((v * bpm * 146 + 9375) / 18750, 0, 126); }
+
+static void hold_v12(m2k_pattern_t *p)
+{
+    int bpm = 30 + p->glob[G_TMPO];
+    for (int t = 0; t < M2K_TRACKS; t++) p->kit[t][P_HOLD] = hold_to(p->kit[t][P_HOLD], bpm);
+    for (int i = 0; i < M2K_LOCKS; i++)
+        if (p->lock[i].trk != 0xFF && p->lock[i].param == P_HOLD) p->lock[i].val = hold_to(p->lock[i].val, bpm);
+}
+
 /* format 12: GND-SIN on the Monomachine's page, TUNE on its eighth knob (CC 55) and MONO2K's own before it. A..H were
  * TUNE FOLD SUB NOIS PDEP PDEC CLIK HARM, are FOLD SUB NOIS PDEP PDEC CLIK HARM TUNE: the kit, its locks and every LFO
  * aimed at one of them (from any track) move, values as they were */
@@ -1253,4 +1265,6 @@ static void factory(void)
     for (unsigned i = 0; i < sizeof FM_OLD; i++) fm_v9(&pat[FM_OLD[i]]);
     /* and every part, its GND-SIN tracks written on that machine's old page (TUNE first): onto the Monomachine's */
     for (int i = 0; i < 16; i++) gsin_v11(&pat[i]);
+    /* and its HOLDs, written in 14.6 ms steps (the times in the comments): in beats at the part's tempo, once */
+    for (int i = 0; i < 16; i++) hold_v12(&pat[i]);
 }

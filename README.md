@@ -88,8 +88,9 @@ build/host/m2k_ref build/ref/m2k < tools/ref/amp.spec
 Done so far, all measured on OS 1.32B:
 
 - **The amp envelope.** The attack rises in a straight line in 0.90 ms × e^(0.0814·v), decay and release fall 20 dB
-  in 8.3 ms × e^(0.0665·v), the hold lasts 14.6 ms a step; a key let go ends the hold and the decay. MONO2K follows
-  within a few percent from 0 to 127.
+  in 8.3 ms × e^(0.0665·v), the hold lasts v / 32 of a beat at the tempo (32 is a beat, 8 a sixteenth: measured at 60,
+  120 and 240 BPM within 0.3 %, `tools/ref/chain_hold46`, group `hold`; it was a fixed 14.6 ms a step until format 13,
+  fit at one tempo); a key let go ends the hold and the decay. MONO2K follows within a few percent from 0 to 127.
 - **SWAV-SAW** on SWAVE-SAW's page: the unison pairs' detune and levels, the square and sine subs, within 0.2 c and
   0.5 dB (`tools/ref/swave_saw*.spec`).
 - **SWAV-ENS** on SWAVE-ENS's page (`tools/ref/chain_ens15..20.spec`, `ensacc`): PCH2–4 off its interval table (−12

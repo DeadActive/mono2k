@@ -201,6 +201,7 @@ static inline uint32_t noise_step(uint32_t *s) { uint32_t x = *s; x ^= x << 13; 
 
 #define GN_A 23460                     /* GND-NOIS's white: 0.716 of full scale (the Monomachine's level) */
 #define GN_HR 2                        /* and out of the machine 12 dB down, the chain's input 12 dB up */
+#define HOLD_K (M2K_SR * 60u * 8u / M2K_SUB)   /* HOLD's control blocks a step at 1 BPM, Q8 (a step is 1 / 32 beat) */
 #define RG_HR 1                        /* FX-RING out of the machine 6 dB down (its input reaches 1.94 x full scale) */
 #define RG_CEIL 65500                  /* FX-RING's input clip, 2.03 x a track's ceiling (T_CLIP) at LEV 100: clean to INP ~82 */
 #define PUL_A 3430                     /* SWAVE-PULS's pulse: 0.105 of GND-SIN's sine */
@@ -884,6 +885,8 @@ static void mach_block(int ti, int m, int32_t pitch)
 
 /* -------------------------------------------------------------------------------------------- envelopes */
 
+static uint32_t hold_bpm = 120;       /* the pattern's tempo, for HOLD (set by each track's block) */
+
 static void env_block(trk_t *t)
 {
     /* amp: attack, hold (127: while the gate is open), decay (127: none), release on note-off, timed as the
@@ -894,8 +897,9 @@ static void env_block(trk_t *t)
         if (t->aenv >= (1u << 30)) {
             t->aenv = 1u << 30;
             t->astage = 2;
-            int h = t->eff[P_HOLD];
-            t->hold = h == 127 ? -1 : (int32_t)T_AHOLD[h];
+            int h = t->eff[P_HOLD];                         /* v / 32 of a beat at the pattern's tempo, as the
+                                                             * Monomachine's (measured at 60, 120 and 240 BPM) */
+            t->hold = h == 127 ? -1 : (int32_t)((((uint32_t)h * HOLD_K) / hold_bpm + 128) >> 8);
         }
         break;
     case 2:
@@ -1097,6 +1101,7 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     const m2k_pattern_t *pp = &pat[cur_pat];
     int m = pp->machine[ti];
     if (t->gate_left > 0 && --t->gate_left == 0) { t->gate = 0; t->gate_left = -1; }   /* the step's gate: hold and decay go on */
+    hold_bpm = 30u + pp->glob[G_TMPO];
     env_block(t);
     m_set(tout[ti], 0, sizeof tout[ti]);
     m_set(tvol[ti], 0, sizeof tvol[ti]);

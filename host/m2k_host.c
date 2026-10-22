@@ -547,7 +547,7 @@ static int selftest(void)
         lk(&a, 0, 8, P_SYN + 1, 99);
         lk(&a, 0, 12, P_SYN, 65);
         int n = pat_pack(&a, bl);
-        CHECK(bl[1] == 12, "format: patterns are written as version 12");
+        CHECK(bl[1] == 13, "format: patterns are written as version 13");
         n = pat_pack_v(&a, bl, 4);
         CHECK(pat_unpack(&b, bl, n), "format: a version-4 pattern loads");
         CHECK(b.kit[0][P_DIST] == T_V5_DIST[34] && b.kit[0][P_DTIM] == 32 && b.kit[0][P_DSND] == 64 &&
@@ -618,6 +618,7 @@ static int selftest(void)
             m_cpy(&w, &pat[9], sizeof w);                             /* A10 SMOKE (no FM, no SID) */
             for (int t = 0; t < M2K_TRACKS; t++) if (w.machine[t] == M_GSIN) w.machine[t] = M_GPRC;   /* (no page that converts) */
             for (int t = 0; t < M2K_TRACKS; t++) for (int k = 0; k < P_WBNK; k++) w.kit[t][k] = (uint8_t)((t * 31 + k * 7) & 127);
+            for (int t = 0; t < M2K_TRACKS; t++) w.kit[t][P_HOLD] = 127;  /* INF: HOLD's conversion (13) leaves it */
             int wn = pat_pack_v(&w, wb, 7);
             int same = pat_unpack(&w2, wb, wn);
             for (int t = 0; t < M2K_TRACKS; t++) same = same && !memcmp(w2.kit[t], w.kit[t], P_WBNK) && w2.kit[t][P_WBNK] == 0;
@@ -737,6 +738,47 @@ static int selftest(void)
                 for (int t = 0; t < M2K_TRACKS; t++)
                     if (pat[d].machine[t] == M_GSIN) { gs++; gok += pat[d].kit[t][P_SYN + 7] == 64; }
             CHECK(gs > 0 && gok == gs, "factory: bank A's GND-SIN tracks on today's page (TUNE on H)");
+        }
+        /* and its HOLDs, written in 14.6 ms steps, in beats at each part's tempo: A01 MAMMOTH (164 BPM) T4's 263 ms
+         * (18) is 23 steps of 11.4 ms, its locks 24 14 30 20 26 (350 .. 438 ms) 31 18 38 26 33 */
+        {
+            m2k_init(2000);
+            int ok = pat[0].glob[G_TMPO] == 164 - 30 && pat[0].kit[3][P_HOLD] == 23, nl = 0;
+            for (int i = 0; i < M2K_LOCKS; i++)
+                if (pat[0].lock[i].trk == 3 && pat[0].lock[i].param == P_HOLD) {
+                    int v = pat[0].lock[i].val;
+                    nl++;
+                    ok = ok && (v == 23 || v == 31 || v == 18 || v == 38 || v == 26 || v == 33);
+                }
+            CHECK(ok && nl > 0, "factory: bank A's HOLDs in beats at each part's tempo (A01's T4: 263 ms, 23 steps at 164)");
+        }
+        /* HOLD in beats (13): a version-12 HOLD (14.6 ms a step) to the step nearest the time it held at the pattern's
+         * tempo, its locks with it, INF kept; a version-13 pattern as it is */
+        {
+            static m2k_pattern_t w, w2;
+            static uint8_t wb[BLOB_MAX];
+            m_cpy(&w, &pat[2], sizeof w);                                         /* A03 HAZE */
+            for (int i = 0; i < M2K_LOCKS; i++) w.lock[i].trk = 0xFF;
+            w.glob[G_TMPO] = 164 - 30;                                            /* 164 BPM: a step 11.4 ms */
+            w.kit[0][P_HOLD] = 18; w.kit[1][P_HOLD] = 0; w.kit[2][P_HOLD] = 127; w.kit[3][P_HOLD] = 120;
+            lk(&w, 0, 4, P_HOLD, 40);
+            w.machine[5] = M_GSIN;                                                /* a version-12 GND-SIN page: as it is */
+            const uint8_t gs[8] = {11, 22, 33, 44, 55, 66, 77, 60};
+            m_cpy(&w.kit[5][P_SYN], gs, 8);
+            int wn = pat_pack_v(&w, wb, 12);
+            int ok = pat_unpack(&w2, wb, wn) && !memcmp(&w2.kit[5][P_SYN], gs, 8);
+            int lh = 0;
+            for (int i = 0; i < M2K_LOCKS; i++) if (w2.lock[i].trk == 0 && w2.lock[i].step == 4) lh = w2.lock[i].param == P_HOLD && w2.lock[i].val == 51;
+            /* 18 x 14.6 = 263 ms: 23 x 11.43 = 263; 40 x 14.6 = 584 ms: 51; 120 x 14.6 = 1752 ms: 153 steps, held at 126 */
+            ok = ok && w2.kit[0][P_HOLD] == 23 && w2.kit[1][P_HOLD] == 0 && w2.kit[2][P_HOLD] == 127 && w2.kit[3][P_HOLD] == 126 && lh;
+            int wn2 = pat_pack(&w2, wb);
+            static m2k_pattern_t w3;
+            ok = ok && pat_unpack(&w3, wb, wn2) && w3.kit[0][P_HOLD] == 23;
+            w.glob[G_TMPO] = 60 - 30;                                             /* 60 BPM: a step 31.25 ms */
+            wn = pat_pack_v(&w, wb, 12);
+            ok = ok && pat_unpack(&w2, wb, wn) && w2.kit[0][P_HOLD] == 8;          /* 263 ms: 8 x 31.25 = 250 */
+            CHECK(ok, "format: version 12 -> 13, HOLD from 14.6 ms a step to 1 / 32 beat at the pattern's tempo, its locks too,"
+                      " INF kept, 126 at most; GND-SIN's page as it was; version 13 as it is");
         }
         /* GND-SIN onto the Monomachine's page (12): TUNE to H, the other knobs one earlier, values as they were; its
          * locks and an LFO aimed at it from another track go with them; another machine's page stays */

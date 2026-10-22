@@ -1,0 +1,165 @@
+# The Monomachine's side of chain_hold46.spec (`regress.py mmloops ROM` runs it, a part a process): the same
+# GND-SIN and controls by MIDI, the tempo on its panel (TEMPO, the LEVEL knob a BPM a detent), each HOLD held
+# 4.5 s from its note-on
+= t060
+assign 0 1
+wait 800
+midi 176 7 100
+midi 176 56 0
+midi 176 58 40
+midi 176 59 10
+midi 176 60 64
+midi 176 61 64
+midi 176 62 64
+midi 176 63 0
+midi 176 72 0
+midi 176 73 127
+midi 176 74 0
+midi 176 75 0
+midi 176 76 0
+midi 176 77 0
+midi 176 78 64
+midi 176 79 64
+midi 176 81 64
+midi 176 82 0
+midi 176 84 64
+midi 176 55 64
+wait 1500
+tap Tempo
+wait 300
+enc 8 -60
+shot h46_tempo_060
+tap Exit
+wait 300
+midi 176 57 2
+wait 400
+midi 144 60 100
+record 4.5 h46_t060_h002
+midi 128 60 0
+wait 800
+midi 176 57 8
+wait 400
+midi 144 60 100
+record 4.5 h46_t060_h008
+midi 128 60 0
+wait 800
+midi 176 57 32
+wait 400
+midi 144 60 100
+record 4.5 h46_t060_h032
+midi 128 60 0
+wait 800
+midi 176 57 96
+wait 400
+midi 144 60 100
+record 4.5 h46_t060_h096
+midi 128 60 0
+wait 800
+= t120
+assign 0 1
+wait 800
+midi 176 7 100
+midi 176 56 0
+midi 176 58 40
+midi 176 59 10
+midi 176 60 64
+midi 176 61 64
+midi 176 62 64
+midi 176 63 0
+midi 176 72 0
+midi 176 73 127
+midi 176 74 0
+midi 176 75 0
+midi 176 76 0
+midi 176 77 0
+midi 176 78 64
+midi 176 79 64
+midi 176 81 64
+midi 176 82 0
+midi 176 84 64
+midi 176 55 64
+wait 1500
+tap Tempo
+wait 300
+enc 8 0
+shot h46_tempo_120
+tap Exit
+wait 300
+midi 176 57 2
+wait 400
+midi 144 60 100
+record 4.5 h46_t120_h002
+midi 128 60 0
+wait 800
+midi 176 57 8
+wait 400
+midi 144 60 100
+record 4.5 h46_t120_h008
+midi 128 60 0
+wait 800
+midi 176 57 32
+wait 400
+midi 144 60 100
+record 4.5 h46_t120_h032
+midi 128 60 0
+wait 800
+midi 176 57 96
+wait 400
+midi 144 60 100
+record 4.5 h46_t120_h096
+midi 128 60 0
+wait 800
+= t150
+assign 0 1
+wait 800
+midi 176 7 100
+midi 176 56 0
+midi 176 58 40
+midi 176 59 10
+midi 176 60 64
+midi 176 61 64
+midi 176 62 64
+midi 176 63 0
+midi 176 72 0
+midi 176 73 127
+midi 176 74 0
+midi 176 75 0
+midi 176 76 0
+midi 176 77 0
+midi 176 78 64
+midi 176 79 64
+midi 176 81 64
+midi 176 82 0
+midi 176 84 64
+midi 176 55 64
+wait 1500
+tap Tempo
+wait 300
+enc 8 30
+shot h46_tempo_150
+tap Exit
+wait 300
+midi 176 57 2
+wait 400
+midi 144 60 100
+record 4.5 h46_t150_h002
+midi 128 60 0
+wait 800
+midi 176 57 8
+wait 400
+midi 144 60 100
+record 4.5 h46_t150_h008
+midi 128 60 0
+wait 800
+midi 176 57 32
+wait 400
+midi 144 60 100
+record 4.5 h46_t150_h032
+midi 128 60 0
+wait 800
+midi 176 57 96
+wait 400
+midi 144 60 100
+record 4.5 h46_t150_h096
+midi 128 60 0
+wait 800

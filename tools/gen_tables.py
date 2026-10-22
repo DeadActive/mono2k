@@ -50,14 +50,12 @@ def a_atk(v):
     return 0.000903 * math.exp(0.0814 * v)
 def a_dec(v):
     return 3 * 0.00829 * math.exp(0.06646 * v)
-def a_hold(v):
+def a_hold(v):                         # HOLD up to format 12, 14.6 ms a step (format 13: 1 / 32 beat, in the engine)
     return 0.0146 * v
 out.append(arr("T_AATK_INC", "uint32_t", [min(1 << 30, round((1 << 30) * SUB / (a_atk(v) * SR))) for v in range(128)], 8))
 out.append(arr("T_ADEC_COEF", "uint32_t", [round((2 ** 31 - 1) * math.exp(-6.9078 * SUB / (a_dec(v) * SR))) for v in range(128)], 8))
-out.append(arr("T_AHOLD", "uint32_t", [round(a_hold(v) * SR / SUB) for v in range(128)], 8))
 out.append(arr("T_AATK_MS10", "uint32_t", [round(a_atk(v) * 10000) for v in range(128)], 8))
 out.append(arr("T_ADEC_MS10", "uint32_t", [round(a_dec(v) * 10000) for v in range(128)], 8))
-out.append(arr("T_AHLD_MS10", "uint32_t", [round(a_hold(v) * 10000) for v in range(128)], 8))
 # the modulation effect's sweep: 0.1 Hz .. 10 Hz, as a phase step per sample, and for the screen in 0.1 Hz
 def mod_hz(v):
     return 0.1 * 100 ** (v / 127.0)

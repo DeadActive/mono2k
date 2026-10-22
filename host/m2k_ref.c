@@ -169,6 +169,13 @@ int main(int argc, char **argv)
         while (*c && *c != '\n') {
             int cc, v, used, skip = 0;
             /* "mm:cc=v" is the Monomachine's alone (a control MONO2K keeps elsewhere); "m2k:cc=v" is MONO2K's alone */
+            if (!strncmp(c, "bpm=", 4)) {   /* "bpm=N": the pattern's tempo (the Monomachine's set on its panel) */
+                if (sscanf(c + 4, "%d%n", &v, &used) != 1 || v < 30 || v > 157) break;
+                p->glob[G_TMPO] = (uint8_t)(v - 30);
+                c += 4 + used;
+                while (*c == ' ' || *c == '\t') c++;
+                continue;
+            }
             if (!strncmp(c, "mm:", 3)) { c += 3; skip = 1; }
             else if (!strncmp(c, "m2k:", 4)) c += 4;
             if (*c == 'p') {               /* "m2k:pN=v": MONO2K's kit parameter N as it is (one no controller reaches) */

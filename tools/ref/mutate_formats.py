@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11): each mutant is one small change to a conversion;
+# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11, hold_v12): each mutant is one small change to a conversion;
 # the self-test must fail on every one. A survivor is a conversion the self-test does not hold.
 #   .venv/bin/python tools/ref/mutate_formats.py [TREE]     (default: this checkout; it restores each file it touches)
 import subprocess, sys, os
@@ -59,6 +59,14 @@ M = [
  ("GSIN bank A not turned at build", F, "    for (int i = 0; i < 16; i++) gsin_v11(&pat[i]);", "    (void)0;"),
  ("SID converted on a version-11 pattern", P, "    if (ver < 11) sid_v10(p);", "    if (ver < 12) sid_v10(p);"),
  ("SID converted on a version-12 pattern", P, "    if (ver < 11) sid_v10(p);", "    if (ver < 13) sid_v10(p);"),
+ ("HOLD not converted", P, "    if (ver < 13) hold_v12(p);", "    if (ver < 1) hold_v12(p);"),
+ ("HOLD converted on a version-13 pattern", P, "    if (ver < 13) hold_v12(p);", "    if (ver < 14) hold_v12(p);"),
+ ("HOLD truncated, not rounded", F, "(v * bpm * 146 + 9375) / 18750", "(v * bpm * 146) / 18750"),
+ ("HOLD INF converted", F, "return v >= 127 ? 127 :", "return v > 127 ? 127 :"),
+ ("HOLD at 120 BPM whatever the part's", F, "    int bpm = 30 + p->glob[G_TMPO];\n    for (int t = 0; t < M2K_TRACKS; t++) p->kit[t][P_HOLD]", "    int bpm = 120;\n    for (int t = 0; t < M2K_TRACKS; t++) p->kit[t][P_HOLD]"),
+ ("HOLD locks left", F, "        if (p->lock[i].trk != 0xFF && p->lock[i].param == P_HOLD) p->lock[i].val = hold_to(p->lock[i].val, bpm);", "        (void)i;"),
+ ("HOLD not capped at 126", F, "CLAMP((v * bpm * 146 + 9375) / 18750, 0, 126)", "CLAMP((v * bpm * 146 + 9375) / 18750, 0, 127)"),
+ ("HOLD bank A not converted at build", F, "    for (int i = 0; i < 16; i++) hold_v12(&pat[i]);", "    (void)0;"),
 ]
 def run():
     r = subprocess.run("cc -O2 -w -Ifirmware/src -Ifirmware/gen -o build/host/m2k_mut host/m2k_host.c -lm && build/host/m2k_mut --selftest",

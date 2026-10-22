@@ -247,7 +247,8 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_TIME: case K_HOLD: case K_DECT: case K_ATIM: case K_AHLD: case K_ADEC: case K_AREL: {
         int k = pi->kind;
         if ((k == K_HOLD || k == K_DECT || k == K_AHLD || k == K_ADEC) && v == 127) { s_cpy(out, "INF"); break; }
-        uint32_t ms10 = k == K_ATIM ? T_AATK_MS10[v] : k == K_AHLD ? T_AHLD_MS10[v] : (k == K_ADEC || k == K_AREL) ? T_ADEC_MS10[v] : T_ENV_MS10[v];
+        uint32_t ms10 = k == K_ATIM ? T_AATK_MS10[v] : k == K_AHLD ? (uint32_t)v * 18750u / seq_bpm()     /* v / 32 beat */
+                        : (k == K_ADEC || k == K_AREL) ? T_ADEC_MS10[v] : T_ENV_MS10[v];
         if (ms10 < 100) { s_dec1(out, (int)ms10); *unit = "MS"; }
         else if (ms10 < 10000) { s_int(out, (int)(ms10 / 10)); *unit = "MS"; }
         else if (ms10 < 1000000) { s_dec1(out, (int)(ms10 / 1000)); *unit = "S"; }

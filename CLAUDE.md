@@ -49,7 +49,10 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   7 SWAV-ENS on SWAVE-ENS's page (`ens_v6`); 8 the wave bank's choice (`P_WBNK`, kits 71 wide; the self-test packs the
   older layouts with `pat_pack_v`); 9 the bus's controls on new laws (`bus_v9`, tables `T_V9_*`); 10 FM+STAT's and
   FM+DYN's pages (`fm_v9`); 11 SID-6581's page (`sid_v10`); 12 GND-SIN's page (TUNE on H, CC 55, as the
-  Monomachine's; MONO2K's own FOLD..HARM on A..G, nothing at init: `gsin_v11`). Older ones are converted on load.
+  Monomachine's; MONO2K's own FOLD..HARM on A..G, nothing at init: `gsin_v11`); 13 HOLD in beats, v / 32 of one at the
+  pattern's tempo, as the Monomachine's (`hold_v12` takes 14.6 ms steps to the nearest at the part's tempo; bank A is
+  written in them and turned at build). Older ones are converted on load. The Monomachine's tempo is set on its panel
+  (TEMPO, the LEVEL knob a BPM a detent; `chain_hold46.panel`): the loop and spec modes leave it at 120.
   A step's flags bits 3..5 are its trig types (`ST_NOAMP`, `ST_NOFLT`, `ST_NOLFO`; clear is ALL, as every older pattern
   has them: no format change). FM+'s 24 ratio steps decode as the Monomachine's sound does, `fr24` (v * 24 + 8) >> 7,
   not as its screen labels them (`chain_fmstep43`, FM+STAT's 2FRQ `chain_fmstep44`). The owner's sheet (FM MACHINE

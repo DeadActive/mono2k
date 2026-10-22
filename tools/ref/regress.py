@@ -26,10 +26,12 @@ GAPS_JSON = os.path.join(HERE, "regress_gaps.json")
 SPECS = ["chain_levels", "chain_dist2", "chain_filt2", "chain_map3", "chain_clip3", "chain_eq2", "chain_srr2",
          "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14", "chain_ens20", "chain_ensacc", "chain_dist21",
          "chain_fm26", "chain_sid36", "chain_pul38", "chain_kick40", "chain_ens41", "chain_gnoi42", "chain_fmstep43",
-         "chain_fmstep44", "ring45"]
+         "chain_fmstep44", "ring45", "chain_hold46"]
 # loop specs (NAME.loops): a two-track loop per case, "= name" then its lines (mm_ref ROM loop / m2k_ref --loop), each
 # render kept as name.wav beside the others; `regress.py mmloops ROM` renders the Monomachine's
 LOOPS = {"ring45"}
+# panel specs: the Monomachine's side from NAME.panel (mm_ref ROM panel, a "= part" a process), MONO2K's from NAME.spec
+PANELS = {"chain_hold46"}
 MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2": "mm_cfilt2", "chain_map3": "mm_cmap3",
           "chain_clip3": "mm_cclip3", "chain_eq2": "mm_ceq2", "chain_srr2": "mm_csrr2", "chain_delay": "mm_cdelay",
           "chain_delay2": "mm_cdelay2", "chain_ftime5": "mm_cftime5", "chain_res6": "mm_cres6",
@@ -37,7 +39,8 @@ MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2
           "chain_sidbend14": "mm_csidbend14", "chain_ens20": "mm_cens20", "chain_ensacc": "mm_censacc",
           "chain_dist21": "mm_cdist21", "chain_fm26": "mm_cfm26", "chain_sid36": "mm_csid36", "chain_pul38": "mm_cpul38",
           "chain_kick40": "mm_ckick40", "chain_ens41": "mm_cens41", "chain_gnoi42": "mm_cgnoi42",
-          "chain_fmstep43": "mm_cfmstep43", "chain_fmstep44": "mm_cfmstep44", "ring45": "mm_lring45"}
+          "chain_fmstep43": "mm_cfmstep43", "chain_fmstep44": "mm_cfmstep44", "ring45": "mm_lring45",
+          "chain_hold46": "mm_chold46"}
 
 
 def db(v):
@@ -342,6 +345,17 @@ def m_ring(x, a, ld):                    # FX-RING: the right channel's level at
     return out
 
 
+def m_hold_ms(x, a, ld):                 # the amp's hold: ms from the onset to the first fall 0.5 dB under the level
+    s = x.mean(axis=1) if x.ndim == 2 else x   # just after the attack (5..12 ms on, past a click), RMS over a period
+    n = int(SR / f0_of(a.get("note", 60)))
+    c = np.concatenate([[0], np.cumsum(s * s)])
+    e = 20 * np.log10(np.sqrt(np.maximum(c[n:] - c[:-n], 0) / n) + 1e-9)
+    on = int(np.argmax(e > e.max() - 30))
+    pl = np.median(e[on + int(0.005 * SR):on + int(0.012 * SR)])
+    after = np.nonzero(e[on + int(0.012 * SR):] < pl - 0.5)[0]
+    return [float((after[0] + int(0.012 * SR)) * 1000 / SR) if len(after) else float("nan")]
+
+
 _JT = {}
 
 
@@ -448,7 +462,7 @@ def m_grit(x, a, ld):                     # the energy off the note's harmonics,
     return [character.analyse_x(x, a["note"])["grit"]]
 
 
-METRICS = {"ring": m_ring, "res_fit": m_res_fit, "rms": m_rms, "h1": m_h1, "h1_rel": m_h1_rel, "harm": m_harm, "thd": m_thd, "peak_hz": m_peak_hz,
+METRICS = {"ring": m_ring, "hold_ms": m_hold_ms, "res_fit": m_res_fit, "rms": m_rms, "h1": m_h1, "h1_rel": m_h1_rel, "harm": m_harm, "thd": m_thd, "peak_hz": m_peak_hz,
            "res_db": m_res_db, "resp_at": m_resp_at, "srr_image": m_srr_image, "level_at": m_level_at, "echo_ms": m_echo_ms,
            "echoes": m_echoes, "echo_bands": m_echo_bands, "fenv_ms": m_fenv_ms, "tone_rel": m_tone_rel, "pitch_c": m_pitch_c, "bend_c": m_bend_c,
            "ens_voice": m_ens_voice, "c3_partials": m_c3_partials, "chorus_mix": m_chorus_mix, "lr_corr": m_lr_corr,
@@ -732,6 +746,10 @@ def cases():
     add("ring", "ring45", "r45_mix000", "ring", {"hz": [fs_, up], "floor": -110.0}, 0.5)   # the dry source, no product
     for n in ("wav032", "wav064", "wav096", "wav127"):              # the carrier's odd harmonics, k c + s
         add("ring", "ring45", f"r45_{n}", "ring", {"hz": [up] + [k * fc_ + fs_ for k in (3, 5, 7)]}, 0.7)
+    # the amp's HOLD in beats, v / 32 of one at the pattern's tempo (chain_hold46: 60, 120, 150 BPM)
+    for b in (60, 120, 150):
+        for h in (2, 8, 32, 96):
+            add("hold", "chain_hold46", f"h46_t{b:03d}_h{h:03d}", "hold_ms", {"note": 60}, 2.5)
     peak = ("FX-RING's carrier: the Monomachine's is peakier above WAVE 96 (its peak 4.4 dB further over the fundamental"
             " at 127): harmonics past the 15th, which T_RINGW has not")
     for n in ("wav096", "wav127"):
@@ -894,7 +912,7 @@ def render_m2k(cs, d):
     os.makedirs(d, exist_ok=True)
     want = {(c["spec"], c["name"]) for c in cs} | {(c["spec"], c["args"]["ref"]) for c in cs if "ref" in c["args"]}
     lines = []
-    for spec in sorted({s for s, _ in want} - LOOPS):
+    for spec in sorted({s for s, _ in want} - LOOPS):       # (a panel spec's MONO2K side is a plain spec)
         for l in open(os.path.join(HERE, spec + ".spec")):
             if l.strip() and not l.startswith("#") and (spec, l.split()[0]) in want:
                 lines.append(l)
@@ -1023,6 +1041,17 @@ if __name__ == "__main__":
         for spec in sorted(LOOPS):
             render_loops([os.path.join(ROOT, "build/ref/mm_ref"), sys.argv[2], "loop"], spec, set(loops(spec)),
                          os.path.join(ROOT, "build", "ref", MM_DIR[spec]), mm=True)
+        for spec in sorted(PANELS):                        # each part on its own emulator, all into the spec's folder
+            from concurrent.futures import ThreadPoolExecutor
+            d = os.path.join(ROOT, "build", "ref", MM_DIR[spec]); os.makedirs(d, exist_ok=True)
+            parts, cur = [], None
+            for l in open(os.path.join(HERE, spec + ".panel")):
+                if l.startswith("#"): continue
+                if l.startswith("= "): cur = []; parts.append(cur)
+                elif cur is not None and l.strip(): cur.append(l)
+            run1 = lambda p: subprocess.run([os.path.join(ROOT, "build/ref/mm_ref"), sys.argv[2], "panel", d], input="".join(p),
+                                            text=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            with ThreadPoolExecutor(6) as ex: list(ex.map(run1, parts))
     elif sys.argv[1:2] == ["capture"]:
         capture()
     elif sys.argv[1:2] == ["check"]:
