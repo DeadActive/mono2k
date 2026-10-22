@@ -59,10 +59,9 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
    the second core as CS-1 does, the 1-bit framebuffer blitted in strips with the palette's two colours. The projects'
    images move to the 1 MiB flash (`m2k_proj.c` get / put), and RAM keeps the playing bank, not all 64 patterns.
 2. **Calibration against the Monomachine**, machine by machine: levels, spectra, the machines' own envelopes. The amp
-   envelope, SWAV-SAW, SWAV-PUL, SWAV-ENS, the three FM+, SID-6581, GND-SIN, GND-NOIS and the whole track chain are
-   done (below); VO-6 is next. Its level, measured with DIST at 64 (`tools/ref/chain_dist21.spec`, `regress.py` group
-   `machine_level`, known gaps below): 5.3 dB quieter than the Monomachine's.
-   Driven hard, all of them meet its ceilings.
+   envelope, SWAV-SAW, SWAV-PUL, SWAV-ENS, the three FM+, SID-6581, GND-SIN, GND-NOIS, FX-RING, VO-6's voice and the
+   whole track chain are done (below); VO-6's consonants and V-SW's switch are next. Driven hard, all of them meet its
+   ceilings.
 3. More machines (DPRO-BBOX, FX-REVERB and the rest of the FX family), songs, MIDI out and clock.
 
 ## Author
@@ -163,6 +162,15 @@ Done so far, all measured on OS 1.32B:
   fundamental at 127): harmonics past the 15th. A ring saved at INP 100 drives its input harder than before. DYNAMIX (ATK REL THRS MIX | RAT GAIN RMS INP): a compressor on each block's peak and RMS (RMS the blend),
   followed in log2, over a threshold of −60..0 dB by a ratio of 1:1..20:1 (a limiter at 127), made up by up to 24 dB,
   MIX parallel. The self-test holds what each does.
+- **VOX-6** on VO-6's page (`tools/ref/chain_vo47.spec`, group `vo6`; VOC1 VOC2 V-SW VOIC | CONS CLEN CVOL TUNE,
+  format 14, `vox_v13`), measured on the OS as a cascade formant voice: an impulse a period (a flat spectrum) and white
+  noise crossfaded by VOIC (measured every 4), a 188 Hz high-pass, four resonators in series, F1 on VOC1 (187 .. 705
+  Hz), F2 on VOC2 (451 .. 2757 Hz), F3 2495 and F4 3527 Hz fixed, widths 101 63 127 246 Hz (its spectra within 1.7 dB);
+  its pitch whole hertz, rounded down (TUNE +-2 semitones). Its level is a compressor's: the Monomachine's loudness
+  over 117 vowels is the cascade's at a tenth of the dB (10:1), followed on the cascade's mean square (25 ms), the gain
+  down at once and up at most 0.23 dB a ms from a low start at each trig, which is the voice's fade-in. F1 and F2
+  within 0.2 % of the Monomachine's peaks, level within 0.3 dB over vowels, VOIC and C1 .. C6. Still to come: the
+  consonants (CONS CLEN CVOL: 20, B .. Z, the screen's) and V-SW's switch (the vowel changing during the fade, a pop).
 - **SWAV-PUL**, new, on SWAVE-PULS's page (`tools/ref/chain_pul38.spec`, group `pul`; UNIL UNIW SUB1 SUB2 | PW PWAD
   PWRS TUNE): a pulse whose duty is PW / 128 (a square at 64, silent at 0 and 127), against GND-SIN's sine at 0.105,
   its voices started together at each trig; PWAD sweeps PW on at 5.38 steps a second a step, PWRS ON starting it again
@@ -250,7 +258,7 @@ Done so far, all measured on OS 1.32B:
   8-bit lines, so ping-pong past 0.37 s (and any delay past 0.74 s) slows the line's clock and darkens, where the
   Monomachine stays bright; SWAV-SAW's top harmonics at C7 are 2–6 dB short. Each machine's own level, clean (DIST
   64, group `machine_level`): GND-SIN, SWAV-SAW (alone, with unison, with SUB1 up to 80) and SWAV-ENS within 0.8 dB;
-  the three FM+, SID-6581 and GND-NOIS within 0.2 dB; the rest still to calibrate: VO-6 5.3 dB quieter, and SWAV-SAW's sine sub at C1 1.1–1.2 dB under at SUB1 127. DIGI-WAV is not compared:
+  the three FM+, SID-6581, GND-NOIS and VO-6 within 0.2 dB; SWAV-SAW's sine sub at C1 1.1–1.2 dB under at SUB1 127. DIGI-WAV is not compared:
   it plays MONO2K's own waves, not the DigiPro's.
 
 Patterns saved before are moved onto each new scale as they load (version 1: the envelope; 5: the chain, each old

@@ -546,6 +546,61 @@ out.append("static const uint16_t T_VOWEL[8][3] = {%s};\n" %
            ", ".join("{%d, %d, %d}" % (q3(a), q3(b), q3(c)) for _, a, b, c in vowels))
 out.append("static const char *const T_VOWEL_NAME[8] = {%s};\n" % ", ".join('"%s"' % v[0] for v in vowels))
 
+# VO-6 as the Monomachine plays it, measured on its OS (scratch vo6/): a cascade formant voice. Its source an impulse a
+# period (a flat spectrum, its power the same at every pitch) and white noise, crossfaded by VOIC; a one-pole high-pass
+# at 188 Hz; four resonators in series (two-pole low-passes, unity at DC): F1 on VOC1, F2 on VOC2, F3 2495 Hz, F4
+# 3527 Hz, their widths 101 63 127 246 Hz (fit to its whispered spectra within 1.7 dB rms, its voiced harmonics within
+# 1.4). F1 and F2 per VOC value, read every 4 off its whispered spectra (F2 at 28 a misread, interpolated; over 116,
+# where it runs into F3, on its own trend to the 2745 Hz its voiced 127 shows), between them log-linear
+VO_F1 = {0: 199, 4: 210, 8: 220, 12: 230, 16: 236, 20: 242, 24: 255, 28: 265, 32: 274, 36: 284, 40: 292, 44: 298, 48: 310, 52: 319, 56: 330, 60: 355, 64: 368, 68: 400, 72: 415, 76: 426, 80: 447, 84: 468, 88: 483, 92: 505, 96: 531, 100: 543, 104: 560, 108: 573, 112: 594, 116: 622, 120: 651, 124: 668, 127: 702}
+VO_F2 = {0: 457, 4: 472, 8: 493, 12: 416, 16: 416, 20: 417, 24: 418, 28: 416, 32: 776, 36: 801, 40: 847, 44: 884, 48: 955, 52: 997, 56: 1045, 60: 1126, 64: 1164, 68: 1226, 72: 1297, 76: 1381, 80: 1435, 84: 1523, 88: 1605, 92: 1691, 96: 1779, 100: 1859, 104: 1985, 108: 2100, 112: 2195, 116: 2300, 120: 2481, 124: 2635, 127: 2757}
+VO_BW = (100.9, 63.2, 127.2, 246.2)
+VO_F34 = (2495.3, 3527.1)
+VO_HP = 188.1
+def vo_curve(tab):
+    ks = sorted(tab)
+    return [math.exp(lerp_log(ks, [math.log(tab[k]) for k in ks], v)) for v in range(128)]
+def lerp_log(ks, ys, v):
+    for a, b in zip(ks, ks[1:]):
+        if a <= v <= b: return ys[ks.index(a)] + (v - a) / (b - a) * (ys[ks.index(b)] - ys[ks.index(a)])
+    return ys[-1]
+VO_F1C, VO_F2C = vo_curve(VO_F1), vo_curve(VO_F2)
+vo_g = lambda fr: round(2 ** 24 * math.tan(math.pi * fr / SR))
+out.append(arr("T_VO_G1", "uint32_t", [vo_g(fr) for fr in VO_F1C], 8))
+out.append(arr("T_VO_K1", "uint32_t", [round(2 ** 24 * VO_BW[0] / fr) for fr in VO_F1C], 8))
+out.append(arr("T_VO_G2", "uint32_t", [vo_g(fr) for fr in VO_F2C], 8))
+out.append(arr("T_VO_K2", "uint32_t", [round(2 ** 24 * VO_BW[1] / fr) for fr in VO_F2C], 8))
+out.append("static const uint32_t T_VO_GK34[4] = {%d, %d, %d, %d};   /* F3's g k, F4's */\n" %
+           (vo_g(VO_F34[0]), round(2 ** 24 * VO_BW[2] / VO_F34[0]), vo_g(VO_F34[1]), round(2 ** 24 * VO_BW[3] / VO_F34[1])))
+out.append("#define VO_HP_G %d                  /* the source's high-pass, 188 Hz: zop_lp's G */\n" %
+           round(2 ** 24 * math.tan(math.pi * VO_HP / SR) / (1 + math.tan(math.pi * VO_HP / SR))))
+out.append(arr("T_VO_F1HZ", "uint16_t", [round(fr) for fr in VO_F1C], 16))
+out.append(arr("T_VO_F2HZ", "uint16_t", [round(fr) for fr in VO_F2C], 16))
+# VOIC: the voice and the noise, Q15, as measured every 4 (the voice against VOIC 0's, the noise's leak into the
+# harmonics taken off; the noise against 127's), then each set right by MONO2K's own split against the Monomachine's
+# (both measured alike; the voice over 100, under the noise's leak in both, straight to 116's as measured): the voice whole to 16 and gone at 127, the noise in from 16; between, linear
+VO_GV = {0: 1.0, 4: 1.0, 8: 1.028, 12: 1.027, 16: 1.024, 20: 1.02, 24: 1.016, 28: 1.012, 32: 1.006, 36: 1.004, 40: 1.0, 44: 0.992, 48: 0.986, 52: 0.979, 56: 0.965, 60: 0.951, 64: 0.935, 68: 0.917, 72: 0.883, 76: 0.849, 80: 0.805, 84: 0.745, 88: 0.676, 92: 0.588, 96: 0.488, 100: 0.358, 104: 0.319, 108: 0.279, 112: 0.24, 116: 0.201, 120: 0.131, 124: 0.064, 127: 0.0}
+VO_GN = {0: 0.0, 4: 0.0, 8: 0.0, 12: 0.0, 16: 0.0, 20: 0.049, 24: 0.081, 28: 0.109, 32: 0.139, 36: 0.161, 40: 0.185, 44: 0.222, 48: 0.251, 52: 0.285, 56: 0.328, 60: 0.373, 64: 0.418, 68: 0.465, 72: 0.524, 76: 0.58, 80: 0.641, 84: 0.703, 88: 0.765, 92: 0.826, 96: 0.882, 100: 0.936, 104: 0.976, 108: 0.995, 112: 0.992, 116: 1.0, 120: 1.0, 124: 1.0, 127: 1.0}
+def vo_lin(tab, v):
+    ks = sorted(tab)
+    for a, b in zip(ks, ks[1:]):
+        if a <= v <= b: return tab[a] + (v - a) / (b - a) * (tab[b] - tab[a])
+    return tab[ks[-1]]
+out.append(arr("T_VO_GV", "uint16_t", [round(32767 * vo_lin(VO_GV, v)) for v in range(128)], 16))
+out.append(arr("T_VO_GN", "uint16_t", [round(32767 * vo_lin(VO_GN, v)) for v in range(128)], 16))
+# format 14: MONO2K's old VOX-6 page (VOWL VSWP VTIM SHFT BRTH RESO BUZZ VIBR) to the Monomachine's: VOWL's vowel
+# (the old table's F1 F2, between its eight) to the nearest VOC1 VOC2, BRTH (its noise T_VOL's law) to VOIC's
+def vo_near(curve, fr): return min(range(128), key=lambda v: abs(math.log(curve[v] / fr)))
+def old_vowel(v):
+    x = v * 7 / 127; i = min(int(x), 6); u = x - i
+    a, b = vowels[i], vowels[i + 1]
+    return math.exp(math.log(a[1]) + u * (math.log(b[1]) - math.log(a[1]))), math.exp(math.log(a[2]) + u * (math.log(b[2]) - math.log(a[2])))
+out.append("static const uint8_t T_VOX14[128][2] = {%s};   /* old VOWL -> VOC1, VOC2 */\n" % ", ".join(
+    "{%d, %d}" % (vo_near(VO_F1C, old_vowel(v)[0]), vo_near(VO_F2C, old_vowel(v)[1])) for v in range(128)))
+out.append(arr("T_VOX14_BR", "uint8_t", [min(range(128), key=lambda w: abs(vo_lin(VO_GN, w) - (v / 127.0) ** 2)) for v in range(128)], 16))
+out.append("static const char *const T_VO_CONS[21] = {%s};\n" % ", ".join('"%s"' % n for n in
+           "- B D F G H J K L M N P R RR S SJ T TH TJ V Z".split()))
+
 # single-cycle waves for WAV-PRO: 32 x 256, int16. Additive spectra, some digital
 rnd = random.Random(2000)
 waves, names = [], []

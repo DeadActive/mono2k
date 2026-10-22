@@ -114,7 +114,10 @@ typedef struct {
     uint32_t menv[3];                  /* Q30 envelopes owned by the machine */
     uint32_t lfsr, lfsr2;              /* the noise; GND-NOIS's second (ST) */
     zop_t gn[2][4];                    /* GND-NOIS: each noise's pink one-poles and the brown's top */
-    svf_t fm[3];                       /* formants (VOX) */
+    zsvf_t vo[4];                      /* VO-6's formants, F1 .. F4 in series */
+    zop_t vohp;                        /* and its source's high-pass */
+    int64_t vo_pw;                     /* and its compressor: the cascade's mean square, followed */
+    int32_t vo_g;                      /* its gain (Q12 log2) */
     /* the chain: EQ, the filter (LP1 before the clip, the HP's two-pole, its one-pole and LP2 after), SRR */
     zsvf_t eq, lp1, hp2;
     zop_t hp1, lp2a, lp2b;
@@ -202,6 +205,13 @@ static inline uint32_t noise_step(uint32_t *s) { uint32_t x = *s; x ^= x << 13; 
 #define GN_A 23460                     /* GND-NOIS's white: 0.716 of full scale (the Monomachine's level) */
 #define GN_HR 2                        /* and out of the machine 12 dB down, the chain's input 12 dB up */
 #define HOLD_K (M2K_SR * 60u * 8u / M2K_SUB)   /* HOLD's control blocks a step at 1 BPM, Q8 (a step is 1 / 32 beat) */
+#define VO_INC_Q16 6382652533ULL      /* VO-6: a phase increment a hertz, Q16 (2^48 / 44100) */
+#define VO_R 10                        /* its compressor: the ratio */
+#define VO_T 3143                      /* its level where the gain is unity (Q8 log2 of the cascade's rms; tuned) */
+#define VO_UP 57                       /* its gain up at most 0.23 dB a ms: Q12 log2 a block */
+#define VO_DET 475                     /* its detector, a one-pole on the mean square a block, Q15 (25 ms) */
+#define VO_G0 (-16806)                 /* its gain at a trig, Q12 log2 (-24.7 dB: 34.8 under its target at C3 on VOC 64 / 64) */
+#define VO_NZ 1023                     /* its noise against its voice, Q12 (tuned: alike at VOC 64 / 64) */
 #define RG_HR 1                        /* FX-RING out of the machine 6 dB down (its input reaches 1.94 x full scale) */
 #define RG_CEIL 65500                  /* FX-RING's input clip, 2.03 x a track's ceiling (T_CLIP) at LEV 100: clean to INP ~82 */
 #define PUL_A 3430                     /* SWAVE-PULS's pulse: 0.105 of GND-SIN's sine */
@@ -270,6 +280,9 @@ static void mach_trig(trk_t *t, int m)
         break;
     case M_ENS:                        /* the voices start together on a trig (chain_ens18: two trigs alike) */
         t->ph[0] = t->ph[1] = t->ph[2] = t->ph[3] = 0;
+        break;
+    case M_VOX:                        /* the compressor's gain from near silence at each trig: the fade-in */
+        t->vo_g = VO_G0;
         break;
     default:
         break;
@@ -844,37 +857,49 @@ static void mach_block(int ti, int m, int32_t pitch)
         }
         break;
     }
-    case M_VOX: {                      /* VOWL VSWP VTIM SHFT BRTH RESO BUZZ VIBR */
-        int32_t env = (int32_t)(t->menv[0] >> 15);
-        t->menv[0] = mulu_hi(t->menv[0], T_ENV_COEF[P7(t, P_SYN + 2)], 31);
-        int32_t vpos = (P8(t, P_SYN + 0) * 7) / 127 + ((PB8(t, P_SYN + 1) * 2 * env) >> 15) * 7 / 64;  /* Q8, 0..7 */
-        vpos = CLAMP(vpos, 0, 7 * 256);
-        int vi = vpos >> 8, vf = vpos & 255, vj = vi < 7 ? vi + 1 : 7;
-        int32_t shift = PB8(t, P_SYN + 3) >> 6;      /* +-256 q3 = about an octave */
-        int32_t r = T_RES_R[64 + (P7(t, P_SYN + 5) >> 1)];
-        for (int k = 0; k < 3; k++) {
-            int32_t c = T_VOWEL[vi][k] + (((T_VOWEL[vj][k] - T_VOWEL[vi][k]) * vf) >> 8) + shift;
-            svf_set(&t->fm[k], c, r);
-        }
-        /* vibrato: 5.5 Hz, in after a moment */
-        t->ph[3] += 8570000u;                       /* 5.5 Hz at the control rate */
-        if (t->ms[3] < 4096) t->ms[3] += 16;
-        int32_t vib = (sinp(t->ph[3]) * P7(t, P_SYN + 7) >> 15) * t->ms[3] >> 12;   /* +-127 */
-        uint32_t inc = inc_of(pitch + vib / 2);
-        uint32_t inv = 0xFFFFFFFFu / (inc | 1);
-        int32_t br = T_VOL[P7(t, P_SYN + 4)], buzz = P7(t, P_SYN + 6);
+    case M_VOX: {                      /* VOC1 VOC2 V-SW VOIC CONS CLEN CVOL TUNE */
+        /* after the Monomachine's VO-6, measured on its OS (gen_tables VO_*): a cascade formant voice. An impulse a
+         * period (the first difference of a band-limited saw: a flat spectrum, its level the same at any pitch) and
+         * white noise, crossfaded by VOIC; a 188 Hz high-pass; four resonators in series, two-pole low-passes unity at
+         * DC: F1 on VOC1, F2 on VOC2, F3 2495 Hz, F4 3527 Hz. Its pitch in whole hertz, rounded down, as the
+         * Monomachine's (TUNE +-2 semitones). Then a compressor, as the Monomachine's level says (its loudness over 117
+         * vowels is the cascade's at a tenth of the dB, 10:1, residual 0.9 dB): the cascade's mean square followed
+         * (25 ms), the gain down at once and up at most 0.23 dB a ms, from the same low gain at each trig (the
+         * Monomachine's fade-in, straight in dB, 35 dB at C3 and longer where its gain is higher). CONS CLEN CVOL and V-SW's switch: still to come (their knobs kept) */
+        uint32_t hz = (uint32_t)(((uint64_t)inc_of(pitch + (P7(t, P_SYN + 7) - 64) * 2) * M2K_SR) >> 32);
+        if (hz < 8) hz = 8;
+        uint32_t inc = (uint32_t)(((uint64_t)hz * VO_INC_Q16) >> 16), inv = 0xFFFFFFFFu / inc;
+        int32_t sg = (int32_t)iexp2_q16((ilog2_q8(130) - ilog2_q8(hz)) >> 1);      /* Q16: sqrt(130 / hz) */
+        int v1 = P7(t, P_SYN + 0), v2 = P7(t, P_SYN + 1), vc = P7(t, P_SYN + 3);
+        zsvf_set(&t->vo[0], T_VO_G1[v1], T_VO_K1[v1]);
+        zsvf_set(&t->vo[1], T_VO_G2[v2], T_VO_K2[v2]);
+        zsvf_set(&t->vo[2], T_VO_GK34[0], T_VO_GK34[1]);
+        zsvf_set(&t->vo[3], T_VO_GK34[2], T_VO_GK34[3]);
+        t->vohp.G = VO_HP_G;
+        int32_t gv = (int32_t)(((int64_t)T_VO_GV[vc] * sg) >> 16), gn = (int32_t)(((int64_t)T_VO_GN[vc] * VO_NZ) >> 12);
+        /* the compressor: its target from the cascade's level so far, the gain to it at once down, slewed up */
+        int32_t lv = (ilog2_q8((uint32_t)((t->vo_pw >> 16) | 1)) + 16 * 256) >> 1;  /* the rms, Q8 log2 */
+        int32_t gt = ((VO_T - lv) * (VO_R - 1) * 16) / VO_R;                       /* Q12, 10:1 over everything */
+        t->vo_g = gt < t->vo_g ? gt : t->vo_g + VO_UP < gt ? t->vo_g + VO_UP : gt;
+        uint32_t cg = iexp2_q16(t->vo_g >> 4);                                     /* Q16 */
+        int64_t pw = 0;
         for (int i = 0; i < M2K_SUB; i++) {
-            int32_t src = blep_saw(t->ph[0], inc, inv);
-            if (buzz) src -= (blep_saw(t->ph[0] + 0x30000000u, inc, inv) * buzz) >> 7;
-            if (br) src += ((((int32_t)noise_step(&t->lfsr) >> 16) - src) * br) >> 15;
+            int32_t sw = blep_saw(t->ph[0], inc, inv);
             t->ph[0] += inc;
-            int32_t b0, b1, b2;
-            svf_tick(&t->fm[0], src, 0, &b0);
-            svf_tick(&t->fm[1], src, 0, &b1);
-            svf_tick(&t->fm[2], src, 0, &b2);
-            int32_t s = (((b0 * t->fm[0].k) >> 12) + (((b1 * t->fm[1].k) >> 12) * 5 >> 3) + (((b2 * t->fm[2].k) >> 12) * 3 >> 3));
-            o[i] = (int16_t)sat16(s);
+            int32_t im = sw - t->ms[0];                /* an impulse a period, band-limited */
+            t->ms[0] = sw;
+            int32_t nz = (int32_t)noise_step(&t->lfsr) >> 16;
+            int32_t x = (int32_t)(((int64_t)im * gv) >> 15) + (int32_t)(((int64_t)nz * gn) >> 15);
+            x -= zop_lp(&t->vohp, x);
+            int32_t y;
+            zsvf_tick(&t->vo[0], x, &y, 0, 0);
+            zsvf_tick(&t->vo[1], y, &y, 0, 0);
+            zsvf_tick(&t->vo[2], y, &y, 0, 0);
+            zsvf_tick(&t->vo[3], y, &y, 0, 0);
+            pw += (int64_t)y * y;
+            o[i] = (int16_t)sat16((int32_t)(((int64_t)y * cg) >> 16));
         }
+        t->vo_pw = t->vo_pw ? t->vo_pw + ((((pw >> 4) - t->vo_pw) * VO_DET) >> 15) : (pw >> 4) | 1;   /* followed */
         break;
     }
     default:

@@ -547,7 +547,7 @@ static int selftest(void)
         lk(&a, 0, 8, P_SYN + 1, 99);
         lk(&a, 0, 12, P_SYN, 65);
         int n = pat_pack(&a, bl);
-        CHECK(bl[1] == 13, "format: patterns are written as version 13");
+        CHECK(bl[1] == 14, "format: patterns are written as version 14");
         n = pat_pack_v(&a, bl, 4);
         CHECK(pat_unpack(&b, bl, n), "format: a version-4 pattern loads");
         CHECK(b.kit[0][P_DIST] == T_V5_DIST[34] && b.kit[0][P_DTIM] == 32 && b.kit[0][P_DSND] == 64 &&
@@ -590,14 +590,14 @@ static int selftest(void)
                 if (!pat_unpack(&c, bl, n)) { moved++; continue; }
                 for (int t = 0; t < M2K_TRACKS; t++) {               /* SWAV-ENS's page converts at 7, FM+'s at 10 */
                     int conv = pat[d].machine[t] == M_ENS || pat[d].machine[t] == M_FMS || pat[d].machine[t] == M_FMD ||
-                               pat[d].machine[t] == M_SID || pat[d].machine[t] == M_GSIN;
+                               pat[d].machine[t] == M_SID || pat[d].machine[t] == M_GSIN || pat[d].machine[t] == M_VOX;
                     moved += c.kit[t][P_PTCH] != pat[d].kit[t][P_PTCH] || (!conv && memcmp(c.kit[t], pat[d].kit[t], 8) != 0);
                     for (int s = 0; s < M2K_STEPS; s++)
                         moved += c.step[t][s].note != pat[d].step[t][s].note || c.step[t][s].flags != pat[d].step[t][s].flags;
                 }
                 for (int i = 0; i < M2K_LOCKS; i++) {
                     int m = pat[d].lock[i].trk != 0xFF ? pat[d].machine[pat[d].lock[i].trk] : M_ENS;
-                    if (m != M_ENS && m != M_FMS && m != M_FMD && m != M_SID && m != M_GSIN && (pat[d].lock[i].param < 8 || pat[d].lock[i].param == P_PTCH))
+                    if (m != M_ENS && m != M_FMS && m != M_FMD && m != M_SID && m != M_GSIN && m != M_VOX && (pat[d].lock[i].param < 8 || pat[d].lock[i].param == P_PTCH))
                         moved += c.lock[i].val != pat[d].lock[i].val;
                 }
             }
@@ -698,8 +698,8 @@ static int selftest(void)
             wn = pat_pack(&w2, wb);
             int wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
             CHECK(wn2 == wn && !memcmp(wb, wb2, (size_t)wn), "format: today's version loads unchanged");
-            for (int t = 0; t < M2K_TRACKS; t++)             /* (a version-10 SID or GND-SIN page is the old one: none) */
-                if (w2.machine[t] == M_GSIN || w2.machine[t] == M_SID) w2.machine[t] = M_GPRC;
+            for (int t = 0; t < M2K_TRACKS; t++)             /* (a version-10 SID, GND-SIN or VOX-6 page is the old one: none) */
+                if (w2.machine[t] == M_GSIN || w2.machine[t] == M_SID || w2.machine[t] == M_VOX) w2.machine[t] = M_GPRC;
             wn = pat_pack_v(&w2, wb, 10);                   /* and a version-10 pattern: its FM pages already the new ones */
             wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
             int wn3 = pat_pack(&w2, wb);
@@ -751,6 +751,45 @@ static int selftest(void)
                     ok = ok && (v == 23 || v == 31 || v == 18 || v == 38 || v == 26 || v == 33);
                 }
             CHECK(ok && nl > 0, "factory: bank A's HOLDs in beats at each part's tempo (A01's T4: 263 ms, 23 steps at 164)");
+        }
+        /* VOX-6 onto VO-6's page (14): the old vowel to the nearest VOC1 VOC2 (an E, 400 and 2100 Hz, lands within 8 %
+         * of both), BRTH to VOIC; a VOWL lock to VOC1's, a BRTH lock to VOIC's, the rest gone; an LFO on BRTH moves to
+         * VOIC, one on VIBR stops; a version-14 pattern as it is; A02 CUTUP's voice turned at build */
+        {
+            static m2k_pattern_t w, w2, w3;
+            static uint8_t wb[BLOB_MAX];
+            m_cpy(&w, &pat[2], sizeof w);                                         /* A03 HAZE */
+            for (int i = 0; i < M2K_LOCKS; i++) w.lock[i].trk = 0xFF;
+            w.machine[0] = M_VOX;
+            const uint8_t ov[8] = {36, 70, 30, 64, 80, 70, 40, 20};              /* VOWL (an E) VSWP VTIM SHFT BRTH .. */
+            m_cpy(&w.kit[0][P_SYN], ov, 8);
+            lk(&w, 0, 2, P_SYN + 0, 0);                                           /* a VOWL lock: an A */
+            lk(&w, 0, 3, P_SYN + 4, 127);                                         /* a BRTH lock */
+            lk(&w, 0, 4, P_SYN + 5, 50);                                          /* a RESO lock: gone */
+            w.kit[1][P_LFO + L_TRCK] = enc(0, M2K_TRACKS); w.kit[1][P_LFO + L_DEST] = P_SYN + 4 + 1;          /* on BRTH */
+            w.kit[1][P_LFO + 8 + L_TRCK] = enc(0, M2K_TRACKS); w.kit[1][P_LFO + 8 + L_DEST] = P_SYN + 7 + 1;  /* on VIBR */
+            w.kit[2][P_HOLD] = 40;                                                /* a version-13 HOLD: in beats already */
+            int wn = pat_pack_v(&w, wb, 13);
+            int ok = pat_unpack(&w2, wb, wn) && w2.kit[2][P_HOLD] == 40;
+            const uint8_t *k = &w2.kit[0][P_SYN];
+            double e1 = T_VO_F1HZ[k[0]] / 400.0, e2 = T_VO_F2HZ[k[1]] / 2100.0;
+            ok = ok && e1 > 0.92 && e1 < 1.08 && e2 > 0.92 && e2 < 1.08 && k[0] == T_VOX14[36][0] && k[1] == T_VOX14[36][1];
+            ok = ok && k[2] == 0 && k[3] == T_VOX14_BR[80] && k[3] > 0 && k[4] == 0 && k[5] == 64 && k[6] == 64 && k[7] == 64;
+            int la = 0, lb = 0, lr = 0;
+            for (int i = 0; i < M2K_LOCKS; i++) {
+                const m2k_lock_t *l = &w2.lock[i];
+                if (l->trk != 0) continue;
+                if (l->step == 2) la = l->param == P_SYN + 0 && l->val == T_VOX14[0][0];
+                if (l->step == 3) lb = l->param == P_SYN + 3 && l->val == T_VOX14_BR[127];
+                if (l->step == 4) lr = 1;
+            }
+            ok = ok && la && lb && !lr && w2.kit[1][P_LFO + L_DEST] == P_SYN + 3 + 1 && w2.kit[1][P_LFO + 8 + L_DEST] == 0;
+            int wn2 = pat_pack(&w2, wb);
+            ok = ok && pat_unpack(&w3, wb, wn2) && !memcmp(&w3.kit[0][P_SYN], k, 8);
+            m2k_init(2000);
+            ok = ok && pat[1].machine[3] == M_VOX && pat[1].kit[3][P_SYN + 0] == T_VOX14[0][0] && pat[1].kit[3][P_SYN + 5] == 64;
+            CHECK(ok, "format: version 13 -> 14, VOX-6 onto VO-6's page (the vowel to its F1 F2, BRTH to VOIC, their locks and"
+                      " LFOs with them, the rest gone; its HOLD not turned again); version 14 as it is; CUTUP's voice turned at build");
         }
         /* HOLD in beats (13): a version-12 HOLD (14.6 ms a step) to the step nearest the time it held at the pattern's
          * tempo, its locks with it, INF kept; a version-13 pattern as it is */

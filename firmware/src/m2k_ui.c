@@ -12,7 +12,7 @@
 
 enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
-    K_ALGO, K_VOIC, K_WAVE, K_VOWL, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
+    K_ALGO, K_VOIC, K_WAVE, K_VOF1, K_VOF2, K_CONS, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
     K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD,
     K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ, K_ONOFF, K_MSRC, K_MFRQ
 };
@@ -87,8 +87,8 @@ static const mi_t MI[M_COUNT] = {
      {{"WAVE", "WAVE", K_WAVE}, {"SCAN", "SCAN BY ENV", K_BI}, {"STIM", "SCAN TIME", K_DECT}, {"SYNC", "HARD SYNC", K_NUM},
       {"BITS", "WAVE BITS", K_NUM}, {"DTUN", "OSC 2 DETUNE", K_BI}, {"MIX2", "OSC 2 LEVEL", K_NUM}, {"STEP", "PHASE STEPS", K_NUM}}},
     {"VOX-6", "VOX", "VOICE", "VOICE", {1, 2, 5},
-     {{"VOWL", "VOWEL", K_VOWL}, {"VSWP", "VOWEL SWEEP", K_BI}, {"VTIM", "SWEEP TIME", K_TIME}, {"SHFT", "FORMANT SHIFT", K_BI},
-      {"BRTH", "BREATH", K_NUM}, {"RESO", "RESONANCE", K_NUM}, {"BUZZ", "BUZZ", K_NUM}, {"VIBR", "VIBRATO", K_NUM}}},
+     {{"VOC1", "VOWEL F1", K_VOF1}, {"VOC2", "VOWEL F2", K_VOF2}, {"V-SW", "VOWEL SWITCH", K_ONOFF}, {"VOIC", "WHISPER", K_NUM},
+      {"CONS", "CONSONANT", K_CONS}, {"CLEN", "CONS LENGTH", K_NUM}, {"CVOL", "CONS VOLUME", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
     {"FM+PAR", "FM+", "TRIPLE", "SYNTH", {4, 5, 3},
      {{"1FRQ", "RATIO 1", K_FR24}, {"1ENV", "DEPTH / DECAY 1", K_BI}, {"2FRQ", "RATIO 2", K_FR24}, {"2ENV", "DEPTH / DECAY 2", K_BI},
       {"3FRQ", "RATIO 3", K_FR24}, {"3ENV", "DEPTH / DECAY 3", K_BI}, {"TONE", "TONE", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
@@ -148,6 +148,7 @@ static int kind_choices(int k);
 static int choice_of(int kind, int v)
 {
     int n = kind_choices(kind);
+    if (kind == K_CONS) return v <= 6 ? 0 : (v - 1) / 6 > 20 ? 20 : (v - 1) / 6;   /* the Monomachine's: - 0..6, then 6 each */
     return kind == K_FR24 ? fr24(v) : n ? (v * n) >> 7 : 0;
 }
 
@@ -167,6 +168,7 @@ static int kind_choices(int k)
     case K_LTRG: case K_GSIZ: return 5;
     case K_MULT: return 8;
     case K_INT25: return 25;
+    case K_CONS: return 21;
     default: return 0;
     }
 }
@@ -301,7 +303,9 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_ALGO: s_cpy(out, ALGO_N[c]); break;
     case K_VOIC: s_int(out, c + 1); *unit = "VOICES"; break;
     case K_WAVE: s_cpy(out, (pat[cur_pat].kit[t][P_WBNK] * 2) >> 7 ? T_WAVE64_NAME[v >> 1 > 63 ? 63 : v >> 1] : T_WAVE_NAME[c]); break;
-    case K_VOWL: s_cpy(out, T_VOWEL_NAME[(v * 7 + 63) / 127]); *unit = "VOWEL"; break;
+    case K_VOF1: s_int(out, T_VO_F1HZ[v]); *unit = "HZ F1"; break;
+    case K_VOF2: s_int(out, T_VO_F2HZ[v]); *unit = "HZ F2"; break;
+    case K_CONS: s_cpy(out, T_VO_CONS[c]); break;
     case K_TRK: { char *e = s_cpy(out, "T"); s_int(e, c + 1); break; }
     case K_DEST:
         if (v == 0) s_cpy(out, "OFF");
@@ -493,7 +497,7 @@ static void edit(int k, int d)
     int v = knob_value(code);
     fmt(pi, ui.trk, v, old, &u);
     int n = kind_choices(pi->kind), nv;
-    if (n) nv = enc(CLAMP(choice_of(pi->kind, v) + d, 0, n - 1), n);
+    if (n) { int c = CLAMP(choice_of(pi->kind, v) + d, 0, n - 1); nv = pi->kind == K_CONS ? (c ? 6 * c + 3 : 0) : enc(c, n); }
     else nv = CLAMP(v + d, kind_min(pi->kind), kind_max(pi->kind));
     if (code == SETTING(16)) {
         ui.proj_sel = (uint8_t)((nv * M2K_PROJECTS) >> 7);

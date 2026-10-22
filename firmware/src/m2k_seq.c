@@ -326,7 +326,7 @@ static const uint8_t MACH_DEF[M_COUNT][8] = {
     /* SWAV-SAW */ {0, 0, 0, 0, 0, 0, 0, 64},     /* the Monomachine's init: the base saw alone */
     /* SWAV-ENS */ {85, 100, 120, 0, 64, 0, 64, 64},   /* +4 +7 +11 (the Monomachine's: all OFF, 62) */
     /* DIGI-WAV */ {40, 64, 64, 0, 0, 70, 0, 0},
-    /* VOX-6    */ {10, 80, 60, 64, 10, 70, 20, 20},
+    /* VOX-6    */ {64, 64, 127, 0, 0, 64, 64, 64},   /* the Monomachine's VO-6 init: a voice on the middle vowel */
     /* FM+PAR   */ {61, 64, 82, 64, 104, 80, 64, 64},  /* the Monomachine's init: 1/2, 1, 2; the third decaying */
     /* SWAV-PUL */ {0, 0, 0, 0, 64, 0, 0, 64},     /* the Monomachine's init: the square alone */
     /* FX-CHORS */ {40, 50, 30, 64, 64, 64, 127, 100}, /* MONO2K's own: a slow chorus, half wet, no feedback */

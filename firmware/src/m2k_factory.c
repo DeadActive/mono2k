@@ -338,6 +338,36 @@ static int sid_val(int prm, int v)
     }
 }
 
+/* format 14: VOX-6 on the Monomachine's VO-6 page (VOC1 VOC2 V-SW VOIC CONS CLEN CVOL TUNE), from MONO2K's own (VOWL
+ * VSWP VTIM SHFT BRTH RESO BUZZ VIBR): the vowel nearest the old one (T_VOX14: VOWL's F1 F2 to the nearest VOC1 VOC2),
+ * BRTH to VOIC (the noise's share alike), V-SW off, no consonant, CLEN CVOL TUNE in the middle. A VOWL lock becomes
+ * VOC1's, a BRTH lock VOIC's, the others go (their knobs are gone); an LFO on VOWL stays on VOC1, one on BRTH moves to
+ * VOIC, one on the rest stops */
+static void vox_v13(m2k_pattern_t *p)
+{
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        if (p->machine[t] != M_VOX) continue;
+        uint8_t *k = &p->kit[t][P_SYN], o[8];
+        m_cpy(o, k, 8);
+        k[0] = T_VOX14[o[0]][0]; k[1] = T_VOX14[o[0]][1]; k[2] = 0; k[3] = T_VOX14_BR[o[4]];
+        k[4] = 0; k[5] = 64; k[6] = 64; k[7] = 64;
+        for (int i = 0; i < M2K_LOCKS; i++) {
+            m2k_lock_t *l = &p->lock[i];
+            if (l->trk != t || l->param < P_SYN || l->param >= P_SYN + 8) continue;
+            if (l->param == P_SYN) l->val = T_VOX14[l->val][0];
+            else if (l->param == P_SYN + 4) { l->param = P_SYN + 3; l->val = T_VOX14_BR[l->val]; }
+            else l->trk = 0xFF;
+        }
+    }
+    for (int t = 0; t < M2K_TRACKS; t++)
+        for (int l = 0; l < 3; l++) {
+            uint8_t *b = &p->kit[t][P_LFO + 8 * l];
+            int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1;
+            if (p->machine[to] != M_VOX || dest < P_SYN || dest >= P_SYN + 8) continue;
+            b[L_DEST] = (uint8_t)(dest == P_SYN ? P_SYN + 1 : dest == P_SYN + 4 ? P_SYN + 3 + 1 : 0);
+        }
+}
+
 /* format 13: HOLD in beats, as the Monomachine's (v / 32 of a beat, measured at 60, 120 and 240 BPM), no longer 14.6 ms
  * a step: the kit's and its locks' HOLD to the step nearest the time they held, at the pattern's tempo (INF stays) */
 static uint8_t hold_to(int v, int bpm) { return v >= 127 ? 127 : (uint8_t)CLAMP((v * bpm * 146 + 9375) / 18750, 0, 126); }
@@ -1267,4 +1297,6 @@ static void factory(void)
     for (int i = 0; i < 16; i++) gsin_v11(&pat[i]);
     /* and its HOLDs, written in 14.6 ms steps (the times in the comments): in beats at the part's tempo, once */
     for (int i = 0; i < 16; i++) hold_v12(&pat[i]);
+    /* and its VOX-6 tracks (A02 CUTUP's), written on MONO2K's old page: onto VO-6's, once */
+    for (int i = 0; i < 16; i++) vox_v13(&pat[i]);
 }

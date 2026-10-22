@@ -26,7 +26,7 @@ GAPS_JSON = os.path.join(HERE, "regress_gaps.json")
 SPECS = ["chain_levels", "chain_dist2", "chain_filt2", "chain_map3", "chain_clip3", "chain_eq2", "chain_srr2",
          "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14", "chain_ens20", "chain_ensacc", "chain_dist21",
          "chain_fm26", "chain_sid36", "chain_pul38", "chain_kick40", "chain_ens41", "chain_gnoi42", "chain_fmstep43",
-         "chain_fmstep44", "ring45", "chain_hold46"]
+         "chain_fmstep44", "ring45", "chain_hold46", "chain_vo47"]
 # loop specs (NAME.loops): a two-track loop per case, "= name" then its lines (mm_ref ROM loop / m2k_ref --loop), each
 # render kept as name.wav beside the others; `regress.py mmloops ROM` renders the Monomachine's
 LOOPS = {"ring45"}
@@ -40,7 +40,7 @@ MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2
           "chain_dist21": "mm_cdist21", "chain_fm26": "mm_cfm26", "chain_sid36": "mm_csid36", "chain_pul38": "mm_cpul38",
           "chain_kick40": "mm_ckick40", "chain_ens41": "mm_cens41", "chain_gnoi42": "mm_cgnoi42",
           "chain_fmstep43": "mm_cfmstep43", "chain_fmstep44": "mm_cfmstep44", "ring45": "mm_lring45",
-          "chain_hold46": "mm_chold46"}
+          "chain_hold46": "mm_chold46", "chain_vo47": "mm_cvo47"}
 
 
 def db(v):
@@ -356,6 +356,46 @@ def m_hold_ms(x, a, ld):                 # the amp's hold: ms from the onset to 
     return [float((after[0] + int(0.012 * SR)) * 1000 / SR) if len(after) else float("nan")]
 
 
+def vo_mono(x):
+    return x.mean(axis=1) if x.ndim == 2 else x
+
+
+def m_vo_f0(x, a, ld):                   # VO-6: its pitch, the peak near the note (+-20 %), cents from the note
+    s = vo_mono(x)[int(0.4 * SR):int(0.95 * SR)]
+    n = len(s); S = np.abs(np.fft.rfft(s * np.hanning(n))); df = SR / n; L = np.log(S + 1e-12); g = f0_of(a["note"])
+    i = int(g * 0.8 / df) + int(np.argmax(S[int(g * 0.8 / df):int(g * 1.2 / df)]))   # (TUNE's +-2 semitones inside)
+    return [float(1200 * np.log2((i + 0.5 * (L[i - 1] - L[i + 1]) / (L[i - 1] - 2 * L[i] + L[i + 1])) * df / g))]
+
+
+def m_vo_formant(x, a, ld):              # a whispered VO-6's spectral peaks in given ranges, Hz (Welch, 16384 points,
+    s = vo_mono(x)[int(0.3 * SR):int(0.95 * SR)]; n = 16384; w = np.hanning(n); acc = np.zeros(n // 2 + 1); k = 0   # the
+    for i in range(0, len(s) - n, n // 2):                                    # power smoothed over 60 Hz)
+        acc += np.abs(np.fft.rfft(s[i:i + n] * w)) ** 2; k += 1
+    f = np.fft.rfftfreq(n, 1 / SR); m = int(60 / (SR / n))
+    d = 10 * np.log10(np.convolve(acc / k, np.ones(2 * m + 1) / (2 * m + 1), mode="same") + 1e-20)
+    out = []
+    for lo, hi in a["ranges"]:                 # the power's centre within 3 dB of the top: a broad formant's flat top
+        sel = (f > lo) & (f < hi); i = np.nonzero(sel)[0][np.argmax(d[sel])]   # does not move it (its argmax would)
+        j, k = i, i
+        while j > 0 and d[j - 1] > d[i] - 3: j -= 1
+        while k < len(d) - 1 and d[k + 1] > d[i] - 3: k += 1
+        pw = 10 ** (d[j:k + 1] / 10); out.append(float(np.sum(f[j:k + 1] * pw) / np.sum(pw)))
+    return out
+
+
+def m_vo_split(x, a, ld):                # a voice's harmonic power and the rest (its noise), dB
+    s = vo_mono(x)[int(0.35 * SR):int(0.95 * SR)]; n = len(s); w = np.hanning(n); t = np.arange(n) / SR
+    f0 = f0_of(a["note"]) * 2 ** (m_vo_f0(x, a, ld)[0] / 1200)
+    hp = sum(abs(np.sum(s * w * np.exp(-2j * np.pi * k * f0 * t)) * 2 / w.sum()) ** 2 / 2 for k in range(1, int(8000 / f0)))
+    tot = np.mean(s * s)
+    return [10 * np.log10(hp + 1e-20), 10 * np.log10(max(tot - hp, 1e-12))]
+
+
+def m_vo_onset(x, a, ld):                # the fade-in: dB against the held level, 10 ms windows from given times
+    s = vo_mono(x); ss = np.mean(s[int(0.6 * SR):int(0.9 * SR)] ** 2)
+    return [10 * np.log10(np.mean(s[int(t * SR):int((t + 0.01) * SR)] ** 2) / ss + 1e-12) for t in a["at"]]
+
+
 _JT = {}
 
 
@@ -462,7 +502,8 @@ def m_grit(x, a, ld):                     # the energy off the note's harmonics,
     return [character.analyse_x(x, a["note"])["grit"]]
 
 
-METRICS = {"ring": m_ring, "hold_ms": m_hold_ms, "res_fit": m_res_fit, "rms": m_rms, "h1": m_h1, "h1_rel": m_h1_rel, "harm": m_harm, "thd": m_thd, "peak_hz": m_peak_hz,
+METRICS = {"ring": m_ring, "hold_ms": m_hold_ms, "vo_f0": m_vo_f0, "vo_formant": m_vo_formant, "vo_split": m_vo_split,
+           "vo_onset": m_vo_onset, "res_fit": m_res_fit, "rms": m_rms, "h1": m_h1, "h1_rel": m_h1_rel, "harm": m_harm, "thd": m_thd, "peak_hz": m_peak_hz,
            "res_db": m_res_db, "resp_at": m_resp_at, "srr_image": m_srr_image, "level_at": m_level_at, "echo_ms": m_echo_ms,
            "echoes": m_echoes, "echo_bands": m_echo_bands, "fenv_ms": m_fenv_ms, "tone_rel": m_tone_rel, "pitch_c": m_pitch_c, "bend_c": m_bend_c,
            "ens_voice": m_ens_voice, "c3_partials": m_c3_partials, "chorus_mix": m_chorus_mix, "lr_corr": m_lr_corr,
@@ -517,8 +558,7 @@ def cases():
         add("machine_level", "chain_dist21", f"d21m_{sig}_d064", "rms", {"t": (0.3, 0.95)}, 1.0)
     for sig in ("fms", "fmd", "fmp"):              # on the Monomachine's pages: the carrier at half GND-SIN's
         add("machine_level", "chain_dist21", f"d21m_{sig}_d064", "rms", {"t": (0.3, 0.95)}, 1.0)
-    add("machine_level", "chain_dist21", "d21m_vox_d064", "rms", {"t": (0.3, 0.95)}, 1.0,
-        xfail="VO-6: MONO2K 5.3 dB quieter")
+    add("machine_level", "chain_dist21", "d21m_vox_d064", "rms", {"t": (0.3, 0.95)}, 1.0)   # (VO-6 rebuilt: closed)
     add("machine_level", "chain_dist21", "d21m_wav_d064", "rms", {"t": (0.3, 0.95)}, 1.0, info=True)   # not the
     # same waves: DIGI-WAV plays MONO2K's own, the Monomachine's DPRO-WAVE its DigiPro set (never copied)
     for v in range(0, 31, 2):
@@ -750,6 +790,24 @@ def cases():
     for b in (60, 120, 150):
         for h in (2, 8, 32, 96):
             add("hold", "chain_hold46", f"h46_t{b:03d}_h{h:03d}", "hold_ms", {"note": 60}, 2.5)
+    # VO-6 on the Monomachine's page (chain_vo47): F1 and F2 whispered (Hz, within 3 %), its level over the vowels
+    # voiced and whispered (dB, within 1.5), VOIC's voice and noise (within 1.5 dB), its pitch in whole hertz (cents),
+    # its fade-in from the trig (dB at 20 .. 150 ms against the held level, within 3)
+    for v in (0, 24, 48, 72, 96, 127):
+        add("vo6", "chain_vo47", f"vo47_f1_{v:03d}", "vo_formant", {"ranges": [[120, 900]]}, "3%")
+    for v in (8, 40, 72, 104):
+        add("vo6", "chain_vo47", f"vo47_f2_{v:03d}", "vo_formant", {"ranges": [[420 if v < 30 else 480, 2400]]}, "3%")
+    for ab in ("000_000", "064_064", "127_127", "024_100", "100_024", "088_120", "040_116"):
+        add("vo6", "chain_vo47", f"vo47_lv_{ab}", "rms", {}, 1.5)
+        add("vo6", "chain_vo47", f"vo47_lw_{ab}", "rms", {}, 1.5)
+    for v in (40, 72, 100):
+        add("vo6", "chain_vo47", f"vo47_vc_{v:03d}", "vo_split", {"note": 48}, 1.5)
+    for n in (30, 48, 66, 90):
+        add("vo6", "chain_vo47", f"vo47_nt_{n}", "vo_f0", {"note": n}, 2.0 if n < 36 else 1.0)   # (low: a faint h1)
+        add("vo6", "chain_vo47", f"vo47_nt_{n}", "rms", {}, 1.5)
+    for t in (0, 40, 127):
+        add("vo6", "chain_vo47", f"vo47_tn_{t:03d}", "vo_f0", {"note": 48}, 1.0)
+    add("vo6", "chain_vo47", "vo47_lv_064_064", "vo_onset", {"at": [0.02, 0.05, 0.08, 0.11, 0.15]}, 3.0)
     peak = ("FX-RING's carrier: the Monomachine's is peakier above WAVE 96 (its peak 4.4 dB further over the fundamental"
             " at 127): harmonics past the 15th, which T_RINGW has not")
     for n in ("wav096", "wav127"):
