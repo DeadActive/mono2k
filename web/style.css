@@ -277,7 +277,17 @@ a.label { color: var(--ink); text-decoration: none; }
 .brand { display: inline-flex; align-items: center; justify-self: start; color: var(--ink); padding: 4px 0; }
 .brand svg { display: block; height: 27.5px; width: auto; fill: currentColor; }
 .brand .isodots { fill: var(--paper); }                         /* the hero K's dither, a few dots of paper in the ink */
-.brand:hover svg { opacity: 0.7; }
+/* on hover the isotype crushes and breaks, as the hero does: its dither falls to coarser blocks while its three pieces
+ * slip sideways along their slits for a few frames, then it locks solid until the pointer leaves */
+.brand:hover .iso, .brand:focus-visible .iso { animation: iso-crush 280ms steps(1, end) forwards; }
+.brand:hover .iso:nth-of-type(1), .brand:focus-visible .iso:nth-of-type(1) { animation-name: iso-crush, iso-slip-r; }
+.brand:hover .iso:nth-of-type(2), .brand:focus-visible .iso:nth-of-type(2) { animation-name: iso-crush, iso-slip-l; }
+.brand:hover .iso:nth-of-type(3), .brand:focus-visible .iso:nth-of-type(3) { animation-name: iso-crush, iso-slip-m; }
+@keyframes iso-crush { 0% { fill: url(#isotex-a); } 22% { fill: url(#isotex-b); } 44% { fill: url(#isotex-a); } 66%, 100% { fill: currentColor; } }
+@keyframes iso-slip-r { 0% { transform: translateX(36px); } 22% { transform: translateX(-12px); } 44% { transform: translateX(24px); } 66%, 100% { transform: none; } }
+@keyframes iso-slip-l { 0% { transform: translateX(-24px); } 22% { transform: translateX(24px); } 44% { transform: translateX(-12px); } 66%, 100% { transform: none; } }
+@keyframes iso-slip-m { 0% { transform: translateX(12px); } 22% { transform: translateX(-36px); } 44% { transform: none; } 66%, 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .brand:hover .iso, .brand:focus-visible .iso { animation: none; fill: currentColor; } }
 .brand:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
 .subnav { position: relative; z-index: 1; display: flex; justify-content: flex-end; align-items: center; gap: var(--s3); min-height: 40px; padding: 0 var(--gut); border-bottom: 1px solid var(--ink); background: var(--paper); }
 .subnav a { position: relative; font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink); text-decoration: none; opacity: 0.5; padding: 12px 0; }

@@ -16,6 +16,7 @@ window.M2K_CHANGES = [
       ["web", "A Manual, an Installer page and a Patch Editor, under a new sub-header."],
       ["web", "The brand's isotype in the header and on the panel; the logotype as the hero, a slowly drifting bit-crusher that breaks now and then and crushes on the beat."],
       ["web", "The Patch Editor's audition keys float at the bottom of the window; new link arrows."],
+      ["web", "The header's isotype crushes and breaks on hover, then locks solid."],
       ["web", "This change log."],
     ],
   },
