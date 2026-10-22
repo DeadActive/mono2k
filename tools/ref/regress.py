@@ -25,7 +25,8 @@ REF_JSON = os.path.join(HERE, "regress_ref.json")
 GAPS_JSON = os.path.join(HERE, "regress_gaps.json")
 SPECS = ["chain_levels", "chain_dist2", "chain_filt2", "chain_map3", "chain_clip3", "chain_eq2", "chain_srr2",
          "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14", "chain_ens20", "chain_ensacc", "chain_dist21",
-         "chain_fm26", "chain_sid36", "chain_pul38", "chain_kick40", "chain_ens41", "chain_gnoi42", "chain_fmstep43"]
+         "chain_fm26", "chain_sid36", "chain_pul38", "chain_kick40", "chain_ens41", "chain_gnoi42", "chain_fmstep43",
+         "chain_fmstep44"]
 MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2": "mm_cfilt2", "chain_map3": "mm_cmap3",
           "chain_clip3": "mm_cclip3", "chain_eq2": "mm_ceq2", "chain_srr2": "mm_csrr2", "chain_delay": "mm_cdelay",
           "chain_delay2": "mm_cdelay2", "chain_ftime5": "mm_cftime5", "chain_res6": "mm_cres6",
@@ -33,7 +34,7 @@ MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2
           "chain_sidbend14": "mm_csidbend14", "chain_ens20": "mm_cens20", "chain_ensacc": "mm_censacc",
           "chain_dist21": "mm_cdist21", "chain_fm26": "mm_cfm26", "chain_sid36": "mm_csid36", "chain_pul38": "mm_cpul38",
           "chain_kick40": "mm_ckick40", "chain_ens41": "mm_cens41", "chain_gnoi42": "mm_cgnoi42",
-          "chain_fmstep43": "mm_cfmstep43"}
+          "chain_fmstep43": "mm_cfmstep43", "chain_fmstep44": "mm_cfmstep44"}
 
 
 def db(v):
@@ -699,6 +700,7 @@ def cases():
             hz = [(1 + r) * fc6, (1 + 2 * r) * fc6] + ([abs(1 - r) * fc6] if abs(1 - r) > 0.05 else [])
             for k in ("s1", "p1", "p2", "p3"):
                 add("fmstep", "chain_fmstep43", f"fs43{k}_{v:03d}", "fm_side", {"hz": hz}, 1.5)
+            add("fmstep", "chain_fmstep44", f"fs44s2_{v:03d}", "fm_side", {"hz": hz}, 1.5)   # FM+STAT's 2FRQ alike
     # SID-6581 on the Monomachine's page (chain_sid36)
     mix = "SID's MIX: MONO2K's is the chip's triangle AND saw; the Monomachine's combines them otherwise (its level matches)"
     top = ("SID's top: the Monomachine's dips ~2.5 dB around 4-5 kHz and stops at 15 kHz (its noise quieter as it"

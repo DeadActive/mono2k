@@ -52,7 +52,10 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   Monomachine's; MONO2K's own FOLD..HARM on A..G, nothing at init: `gsin_v11`). Older ones are converted on load.
   A step's flags bits 3..5 are its trig types (`ST_NOAMP`, `ST_NOFLT`, `ST_NOLFO`; clear is ALL, as every older pattern
   has them: no format change). FM+'s 24 ratio steps decode as the Monomachine's sound does, `fr24` (v * 24 + 8) >> 7,
-  not as its screen labels them (`chain_fmstep43`).
+  not as its screen labels them (`chain_fmstep43`, FM+STAT's 2FRQ `chain_fmstep44`). The owner's sheet (FM MACHINE
+  RATIOS.xlsx) against the Monomachine's sound, every seven ratio knobs swept: FM+DYN's columns are right (1FRQ / 64,
+  (2FRQ / 64)^2); FM-PAR's copy the screen (five boundaries a value late, steps 5..9 out of order); FM STATIC's (v / 64)
+  are not what it plays: FM+STAT steps the same 24 as FM+PAR, both ratios. MONO2K matched at every value.
   GND-NOIS is the Monomachine's (ST RED STON, TUNE on H; machine 14, the newest); MONO2K's own noise is GND-PERC and
   keeps machine number 1 (`M_GPRC`), so no conversion: patterns store machine numbers, new machines go last.
   Every part of bank A is written on GND-SIN's old page (`pat_v5` lays its old init, `GSIN_V11`) and turned at build;
