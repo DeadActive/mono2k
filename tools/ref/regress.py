@@ -26,7 +26,10 @@ GAPS_JSON = os.path.join(HERE, "regress_gaps.json")
 SPECS = ["chain_levels", "chain_dist2", "chain_filt2", "chain_map3", "chain_clip3", "chain_eq2", "chain_srr2",
          "chain_delay", "chain_delay2", "chain_ftime5", "chain_res6", "chain_drive12", "chain_tune13", "chain_sidbend14", "chain_ens20", "chain_ensacc", "chain_dist21",
          "chain_fm26", "chain_sid36", "chain_pul38", "chain_kick40", "chain_ens41", "chain_gnoi42", "chain_fmstep43",
-         "chain_fmstep44"]
+         "chain_fmstep44", "ring45"]
+# loop specs (NAME.loops): a two-track loop per case, "= name" then its lines (mm_ref ROM loop / m2k_ref --loop), each
+# render kept as name.wav beside the others; `regress.py mmloops ROM` renders the Monomachine's
+LOOPS = {"ring45"}
 MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2": "mm_cfilt2", "chain_map3": "mm_cmap3",
           "chain_clip3": "mm_cclip3", "chain_eq2": "mm_ceq2", "chain_srr2": "mm_csrr2", "chain_delay": "mm_cdelay",
           "chain_delay2": "mm_cdelay2", "chain_ftime5": "mm_cftime5", "chain_res6": "mm_cres6",
@@ -34,7 +37,7 @@ MM_DIR = {"chain_levels": "mm_clevels", "chain_dist2": "mm_cdist2", "chain_filt2
           "chain_sidbend14": "mm_csidbend14", "chain_ens20": "mm_cens20", "chain_ensacc": "mm_censacc",
           "chain_dist21": "mm_cdist21", "chain_fm26": "mm_cfm26", "chain_sid36": "mm_csid36", "chain_pul38": "mm_cpul38",
           "chain_kick40": "mm_ckick40", "chain_ens41": "mm_cens41", "chain_gnoi42": "mm_cgnoi42",
-          "chain_fmstep43": "mm_cfmstep43", "chain_fmstep44": "mm_cfmstep44"}
+          "chain_fmstep43": "mm_cfmstep43", "chain_fmstep44": "mm_cfmstep44", "ring45": "mm_lring45"}
 
 
 def db(v):
@@ -323,6 +326,22 @@ def m_fm_side(x, a, ld):                  # FM+: partials at given Hz, dB under 
     return out
 
 
+def m_ring(x, a, ld):                    # FX-RING: the right channel's level at given Hz (dB of full scale, floored),
+    t0, n = a.get("t", 0.5), int(a.get("n", 1.0) * SR)  # and with "pk" its peak against the first, dB. A flat-top
+    s = x[int(t0 * SR):int(t0 * SR) + n, 1]            # window: no scalloping, so a component a hair off its bin (the
+    u = np.arange(len(s)) * 2 * np.pi / len(s)          # two instruments' carriers differ by 0.04 Hz) reads its level
+    w = 0.21557895 - 0.41663158 * np.cos(u) + 0.277263158 * np.cos(2 * u) - 0.083578947 * np.cos(3 * u) + 0.006947368 * np.cos(4 * u)
+    sp = np.abs(np.fft.rfft(s * w)) * 2 / w.sum()
+    df = SR / len(s)
+    out = []
+    for q in a["hz"]:
+        k = int(round(q / df))
+        out.append(max(a.get("floor", -150.0), db(sp[max(0, k - 3):k + 4].max())))
+    if a.get("pk"):
+        out.append(db(np.abs(s).max()) - out[0])
+    return out
+
+
 _JT = {}
 
 
@@ -429,7 +448,7 @@ def m_grit(x, a, ld):                     # the energy off the note's harmonics,
     return [character.analyse_x(x, a["note"])["grit"]]
 
 
-METRICS = {"res_fit": m_res_fit, "rms": m_rms, "h1": m_h1, "h1_rel": m_h1_rel, "harm": m_harm, "thd": m_thd, "peak_hz": m_peak_hz,
+METRICS = {"ring": m_ring, "res_fit": m_res_fit, "rms": m_rms, "h1": m_h1, "h1_rel": m_h1_rel, "harm": m_harm, "thd": m_thd, "peak_hz": m_peak_hz,
            "res_db": m_res_db, "resp_at": m_resp_at, "srr_image": m_srr_image, "level_at": m_level_at, "echo_ms": m_echo_ms,
            "echoes": m_echoes, "echo_bands": m_echo_bands, "fenv_ms": m_fenv_ms, "tone_rel": m_tone_rel, "pitch_c": m_pitch_c, "bend_c": m_bend_c,
            "ens_voice": m_ens_voice, "c3_partials": m_c3_partials, "chorus_mix": m_chorus_mix, "lr_corr": m_lr_corr,
@@ -701,6 +720,22 @@ def cases():
             for k in ("s1", "p1", "p2", "p3"):
                 add("fmstep", "chain_fmstep43", f"fs43{k}_{v:03d}", "fm_side", {"hz": hz}, 1.5)
             add("fmstep", "chain_fmstep44", f"fs44s2_{v:03d}", "fm_side", {"hz": hz}, 1.5)   # FM+STAT's 2FRQ alike
+    # FX-RING on the Monomachine's RINGMOD (ring45.loops): the input after the source's VOL, clip and LEV, INP's square
+    # law into its clip, WAVE's carrier, MIX, EXT's fade; the products' levels at the right channel
+    fs_, fc_ = f0_of(60), f0_of(66)
+    up, lo, c3p, c3m = fc_ + fs_, fc_ - fs_, fc_ + 3 * fs_, abs(fc_ - 3 * fs_)
+    for n in ("inp016", "inp040", "inp064", "vol032", "lev040", "mix064", "ext064"):
+        add("ring", "ring45", f"r45_{n}", "ring", {"hz": [up, lo]}, 0.5)
+    for n in ("d48i088", "d48i127", "d64i127", "vol127"):           # clipped: the input's own odd products with them
+        add("ring", "ring45", f"r45_{n}", "ring", {"hz": [up, c3p, c3m]}, [0.5, 1.5, 1.5])
+    add("ring", "ring45", "r45_lev000", "ring", {"hz": [up]}, 1.0)                  # at the source's LEV 0, nothing
+    add("ring", "ring45", "r45_mix000", "ring", {"hz": [fs_, up], "floor": -110.0}, 0.5)   # the dry source, no product
+    for n in ("wav032", "wav064", "wav096", "wav127"):              # the carrier's odd harmonics, k c + s
+        add("ring", "ring45", f"r45_{n}", "ring", {"hz": [up] + [k * fc_ + fs_ for k in (3, 5, 7)]}, 0.7)
+    peak = ("FX-RING's carrier: the Monomachine's is peakier above WAVE 96 (its peak 4.4 dB further over the fundamental"
+            " at 127): harmonics past the 15th, which T_RINGW has not")
+    for n in ("wav096", "wav127"):
+        add("ring", "ring45", f"r45_{n}", "ring", {"hz": [up], "pk": 1}, [0.5, 0.7], xfail=peak)
     # SID-6581 on the Monomachine's page (chain_sid36)
     mix = "SID's MIX: MONO2K's is the chip's triangle AND saw; the Monomachine's combines them otherwise (its level matches)"
     top = ("SID's top: the Monomachine's dips ~2.5 dB around 4-5 kHz and stops at 15 kHz (its noise quieter as it"
@@ -827,11 +862,39 @@ def capture():
     print(f"captured {len(out['cases'])} cases into {os.path.relpath(REF_JSON, ROOT)}")
 
 
+def loops(spec):
+    """a loop spec's loops: name -> its lines"""
+    out, name = {}, None
+    for l in open(os.path.join(HERE, spec + ".loops")):
+        if l.startswith("#") or not l.strip():
+            continue
+        if l.startswith("= "):
+            name = l[2:].strip(); out[name] = ""
+        else:
+            out[name] += l
+    return out
+
+
+def render_loops(exe, spec, names, d, mm=False):
+    """each named loop of a spec rendered on its own (in parallel), kept as d/name.wav"""
+    import shutil, tempfile
+    from concurrent.futures import ThreadPoolExecutor
+    L = loops(spec)
+    os.makedirs(d, exist_ok=True)
+    def one(n):
+        with tempfile.TemporaryDirectory() as t:
+            subprocess.run(exe + [t] + ([] if mm else ["--loop"]), input=L[n], text=True, cwd=ROOT, check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            shutil.copy(os.path.join(t, "loop_mm.wav" if mm else "loop_m2k_driv0.wav"), os.path.join(d, n + ".wav"))
+    with ThreadPoolExecutor(6) as ex:
+        list(ex.map(one, sorted(names)))
+
+
 def render_m2k(cs, d):
     os.makedirs(d, exist_ok=True)
     want = {(c["spec"], c["name"]) for c in cs} | {(c["spec"], c["args"]["ref"]) for c in cs if "ref" in c["args"]}
     lines = []
-    for spec in sorted({s for s, _ in want}):
+    for spec in sorted({s for s, _ in want} - LOOPS):
         for l in open(os.path.join(HERE, spec + ".spec")):
             if l.strip() and not l.startswith("#") and (spec, l.split()[0]) in want:
                 lines.append(l)
@@ -839,6 +902,8 @@ def render_m2k(cs, d):
                    cwd=ROOT, check=True)
     subprocess.run([os.path.join(ROOT, "build/host/m2k_ref"), d], input="".join(lines), text=True, cwd=ROOT,
                    check=True, stdout=subprocess.DEVNULL)
+    for spec in sorted({s for s, _ in want} & LOOPS):
+        render_loops([os.path.join(ROOT, "build/host/m2k_ref")], spec, {n for s_, n in want if s_ == spec}, d)
 
 
 def errors(c, r, m):
@@ -954,7 +1019,11 @@ def check(groups):
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["capture"]:
+    if sys.argv[1:2] == ["mmloops"]:                       # the Monomachine's renders of the loop specs
+        for spec in sorted(LOOPS):
+            render_loops([os.path.join(ROOT, "build/ref/mm_ref"), sys.argv[2], "loop"], spec, set(loops(spec)),
+                         os.path.join(ROOT, "build", "ref", MM_DIR[spec]), mm=True)
+    elif sys.argv[1:2] == ["capture"]:
         capture()
     elif sys.argv[1:2] == ["check"]:
         sys.exit(check(set(sys.argv[2:])))

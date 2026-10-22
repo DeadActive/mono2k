@@ -813,19 +813,27 @@ static int selftest(void)
             }
             printf("     FX-CHORUS ring, 80-250 ms against the hit: FB 64 %.1f dB, FB 127 %.1f dB\n", fbring[0], fbring[1]);
             CHECK(fbring[1] > fbring[0] + 10, "FX-CHORUS: its feedback rings (+0.9 at FB 127)");
-            double ring[2];
-            for (int mx = 0; mx < 2; mx++) {
-                FXPAT(M_FXR, M_SAW, 0);
-                pat[fp].kit[1][P_SYN + 3] = (uint8_t)(mx ? 127 : 0);
+            /* FX-RING hears the track before after its VOL and its LEV, as the Monomachine's RINGMOD: the source
+             * panned left, the FX right (its VOL 96 and LEV 127 unity); at MIX 0 and INP 45 (unity) the FX's side is the
+             * source's, at MIX 127 it is
+             * rung, and at the source's LEV 0 silent */
+            double rl[3], rr[3];
+            for (int c = 0; c < 3; c++) {
+                FXPAT(M_FXR, M_GSIN, 0);
+                pat[fp].kit[0][P_VOL] = 64; pat[fp].kit[0][P_PAN] = 0; pat[fp].kit[1][P_PAN] = 127;
+                pat[fp].kit[0][P_LEVL] = pat[fp].kit[1][P_LEVL] = 127; pat[fp].kit[1][P_VOL] = 96;   /* the FX's own at unity */
+                pat[fp].kit[0][P_HOLD] = 127; pat[fp].kit[0][P_GATE] = pat[fp].kit[1][P_GATE] = 127;  /* both held: steady */
+                pat[fp].kit[1][P_SYN + 7] = 45; pat[fp].kit[1][P_SYN + 3] = (uint8_t)(c ? 127 : 0);
+                if (c == 2) pat[fp].kit[0][P_LEVL] = 0;
                 fx_measure(fp, 0x3F, 1.0, kb, &pk, &rm);
-                ring[mx] = rm;
+                double sl = 0, sr = 0;
+                for (int i = M2K_SR / 4; i < M2K_SR; i++) { sl += (double)kb[2 * i] * kb[2 * i]; sr += (double)kb[2 * i + 1] * kb[2 * i + 1]; }
+                rl[c] = 10 * log10(sl + 1); rr[c] = 10 * log10(sr + 1);
             }
-            double dry;
-            FXPAT(M_GSIN, M_SAW, 0);
-            pat[fp].kit[0][P_VOL] = 64;
-            pat[fp].mute = 0x02;
-            fx_measure(fp, 0x01, 1.0, kb, &pk, &dry);
-            CHECK(fabs(ring[0] - dry) < 1.5 && fabs(ring[1] - ring[0]) > 1.0, "FX-RING: its input as it is at MIX 0, rung at 127");
+            printf("     FX-RING, its side against the source's: MIX 0 %+.2f dB, MIX 127 %+.2f dB; the source at LEV 0 %.0f dB\n",
+                   rr[0] - rl[0], rr[1] - rl[1], rr[2] - rr[1]);
+            CHECK(fabs(rr[0] - rl[0]) < 1.0 && fabs(rr[1] - rr[0]) > 1.0 && rr[2] - rr[1] < -60,
+                  "FX-RING: the source as it is at MIX 0 (INP 45), rung at 127, silent at the source's LEV 0");
             double spread[2];
             for (int c = 0; c < 2; c++) {
                 FXPAT(M_FXD, M_GSIN, 0);

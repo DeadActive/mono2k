@@ -330,7 +330,7 @@ static const uint8_t MACH_DEF[M_COUNT][8] = {
     /* FM+PAR   */ {61, 64, 82, 64, 104, 80, 64, 64},  /* the Monomachine's init: 1/2, 1, 2; the third decaying */
     /* SWAV-PUL */ {0, 0, 0, 0, 64, 0, 0, 64},     /* the Monomachine's init: the square alone */
     /* FX-CHORS */ {40, 50, 30, 64, 64, 64, 127, 100}, /* MONO2K's own: a slow chorus, half wet, no feedback */
-    /* FX-RING  */ {0, 0, 0, 127, 0, 0, 0, 100},     /* a sine carrier, all wet */
+    /* FX-RING  */ {0, 0, 0, 127, 0, 0, 0, 64},      /* a sine carrier, INP 64 (the Monomachine's init, but all wet: its MIX 0 is dry) */
     /* FX-DYNMX */ {20, 60, 64, 127, 64, 64, 0, 100}, /* a quick attack, 4:1-ish over -30 dB */
     /* GND-NOIS */ {0, 0, 0, 0, 0, 0, 0, 64},     /* the Monomachine's init: white, in the middle */
 };

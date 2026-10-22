@@ -157,6 +157,7 @@ static int16_t mod_mem[M2K_TRACKS][MOD_LEN] POOL;
 static int16_t ens_mem[M2K_TRACKS][ENS_LEN] POOL;
 static int16_t blk[M2K_TRACKS][M2K_SUB];      /* machine output of this block */
 static int16_t tout[M2K_TRACKS][M2K_SUB];     /* each track's output, after its amp, before its VOL: an FX machine's input */
+static int16_t tvol[M2K_TRACKS][M2K_SUB];     /* and after its VOL, its clip and its LEV, as the Monomachine's FX hear it (FX-RING) */
 static int16_t eside[M2K_TRACKS][M2K_SUB];    /* SWAV-ENS's and GND-NOIS's side out of the machine, before the chain */
 static int16_t bside[M2K_TRACKS][M2K_SUB];    /* FX-CHORUS's side (its width), added after the pan */
 
@@ -200,6 +201,8 @@ static inline uint32_t noise_step(uint32_t *s) { uint32_t x = *s; x ^= x << 13; 
 
 #define GN_A 23460                     /* GND-NOIS's white: 0.716 of full scale (the Monomachine's level) */
 #define GN_HR 2                        /* and out of the machine 12 dB down, the chain's input 12 dB up */
+#define RG_HR 1                        /* FX-RING out of the machine 6 dB down (its input reaches 1.94 x full scale) */
+#define RG_CEIL 65500                  /* FX-RING's input clip, 2.03 x a track's ceiling (T_CLIP) at LEV 100: clean to INP ~82 */
 #define PUL_A 3430                     /* SWAVE-PULS's pulse: 0.105 of GND-SIN's sine */
 #define PUL_S1 32767                   /* its sine subs, as measured: an octave down at full scale, two at 0.96 */
 #define PUL_S2 31500
@@ -684,23 +687,28 @@ static void mach_block(int ti, int m, int32_t pitch)
                 o[i] = (int16_t)sat16(x[i] + (int32_t)(((int64_t)(t->ms[2] - x[i]) * mix) >> 15));
                 bside[ti][i] = (int16_t)sat16((((t->ms[3] * wid) >> 15) * mix) >> 15);
             }
-        } else if (m == M_FXR) {   /* WAVE EXT - MIX - - - INP: the input times a carrier on the track's note, sine to
-                                    * triangle to square to saw by WAVE; EXT takes the carrier from the track before the
-                                    * input instead */
+        } else if (m == M_FXR) {   /* WAVE EXT - MIX - - - INP: after the Monomachine's RINGMOD, measured on its OS
+                                    * (scratch ring/FINDINGS.md): the track before after its VOL, its clip and its LEV,
+                                    * INP a square-law gain into a clip of its own (unity at 45, 7.9 x at 127), times a
+                                    * carrier on the track's note: WAVE's measured cycle, sine to triangle (64) to a
+                                    * square 10.4 dB down (127), odd harmonics only (T_RINGW). MIX crossfades dry and
+                                    * wet. EXT fades the carrier to the track before the input (the Monomachine fades
+                                    * it to its audio input, which the FM-1 has not); out RG_HR down, taken back */
             uint32_t inc = inc_of(pitch);
-            int wv = P7(t, P_SYN + 0), ext = P7(t, P_SYN + 1) * 258;
-            int seg = wv < 43 ? 0 : wv < 86 ? 1 : 2;
-            int32_t f = ((wv - seg * 43) * 32768) / 42;
-            if (f > 32768) f = 32768;
+            int wv = P7(t, P_SYN + 0), ext = P7(t, P_SYN + 1) * 258, iv = P7(t, P_SYN + 7);
+            int wi = wv >> 3;
+            int32_t wf = wi < 15 ? (wv & 7) << 12 : ((wv - 120) << 15) / 7;
+            const int16_t *ca = T_RINGW[wi], *cb = T_RINGW[wi + 1];
+            int32_t g = iv * iv * 2;                                               /* Q12, (INP / 45.25)^2 */
             for (int i = 0; i < M2K_SUB; i++) {
+                int32_t xi = ti ? CLAMP((tvol[ti - 1][i] * g) >> 12, -RG_CEIL, RG_CEIL) : 0;
                 uint32_t ph = t->ph[0] += inc;
-                int32_t sn = sinp(ph), tr = (int32_t)((ph ^ (uint32_t)((int32_t)ph >> 31)) >> 15) - 32768;
-                int32_t sq = (int32_t)ph < 0 ? -32767 : 32767, sw = (int32_t)(ph >> 16) - 32768;
-                int32_t c0 = seg == 0 ? sn : seg == 1 ? tr : sq, c1 = seg == 0 ? tr : seg == 1 ? sq : sw;
-                int32_t c = c0 + (((c1 - c0) * f) >> 15);
+                int j = (int)(ph >> 24), j1 = (j + 1) & 255, fr = (int)((ph >> 9) & 0x7FFF);
+                int32_t a = ca[j] + (((ca[j1] - ca[j]) * fr) >> 15), b = cb[j] + (((cb[j1] - cb[j]) * fr) >> 15);
+                int32_t c = a + (((b - a) * wf) >> 15);
                 if (ext) c += (int32_t)(((int64_t)((ti > 1 ? tout[ti - 2][i] : 0) - c) * ext) >> 15);
-                int32_t y = (x[i] * c) >> 15;
-                o[i] = (int16_t)sat16(x[i] + (int32_t)(((int64_t)(y - x[i]) * mix) >> 15));
+                int32_t y = (int32_t)(((int64_t)xi * c) >> 15);
+                o[i] = (int16_t)sat16((xi + (int32_t)(((int64_t)(y - xi) * mix) >> 15)) >> RG_HR);
             }
         } else {                   /* ATK REL THRS MIX RAT GAIN RMS INP: a compressor on the block's peak and its RMS
                                     * (RMS's blend), followed in log2, over THRS's -60 .. 0 dB by RAT, GAIN made up */
@@ -1091,6 +1099,7 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     if (t->gate_left > 0 && --t->gate_left == 0) { t->gate = 0; t->gate_left = -1; }   /* the step's gate: hold and decay go on */
     env_block(t);
     m_set(tout[ti], 0, sizeof tout[ti]);
+    m_set(tvol[ti], 0, sizeof tvol[ti]);
     if (!t->sounding && t->astage == 0) {
         t->amp0 = t->amp1 = 0;
         t->peak = 0;
@@ -1166,7 +1175,7 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     int mtype = PN(t, P_MODT, 3), mmix = P7(t, P_MODM) * 2, mdep = P7(t, P_MODD);
     uint32_t minc = T_MOD_INC[P7(t, P_MODR)];
     int32_t pk = 0;
-    int ish = m == M_GNOI ? 24 - GN_HR : 24;                                 /* GND-NOIS's headroom, taken back */
+    int ish = m == M_GNOI ? 24 - GN_HR : m == M_FXR ? 24 - RG_HR : 24;       /* GND-NOIS's, FX-RING's headroom, taken back */
     for (int i = 0; i < M2K_SUB; i++) {
         /* the filter: gain, EQ, LP1, the clip, the HP's two-pole (its resonance held by the ceiling too), its
          * one-pole, LP2 */
@@ -1240,6 +1249,7 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
         L[i] += (l * lev) >> 15;
         R[i] += (r * lev) >> 15;
         int32_t m = CLAMP(s, -T_CLIP, T_CLIP);
+        tvol[ti][i] = (int16_t)((m * lev) >> 15);
         dsend[i] = (m * ds) >> 15;
         rsend[i] += (((m * rs) >> 15) * lev) >> 15;
     }

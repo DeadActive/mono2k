@@ -144,15 +144,22 @@ Done so far, all measured on OS 1.32B:
 - **FX-CHORUS, FX-RINGMOD, FX-DYNAMIX** (FX-CHORS, FX-RING, FX-DYNMX on the screen), new, on the Monomachine's pages
   but MONO2K's own designs. On the emulator an FX machine hears the track before only once its KIT > EDIT KIT TRACK
   page has been opened (`mm_ref`'s loop does it); then RINGMOD and REVERB pass it, while THRU, CHORUS and DYNAMIX stay
-  at digital silence under every input and knob, so FX-CHORS and FX-DYNMX stay unmeasured; RINGMOD's laws are measured
-  and FX-RING is to be rebuilt to them. Each takes the previous track's output, after its amp and before its VOL (so VOL
-  0 keeps a track out of the mix and in the FX), INP its level (100 as it is), and opens on its own trigs as the
-  Monomachine's FX tracks do (HOLD 127 by default). CHORUS (DEL DEP SPD MIX | FB WID LP INP): two taps swept in
+  at digital silence under every input and knob, so FX-CHORS and FX-DYNMX stay unmeasured, and FX-RING is rebuilt on
+  RINGMOD's measurements (below). CHORUS and DYNAMIX take the previous track's output after its amp and before its VOL
+  (so VOL 0 keeps a track out of the mix and in the FX), INP its level (100 as it is); every FX opens on its own trigs
+  as the Monomachine's FX tracks do (HOLD 127 by default). CHORUS (DEL DEP SPD MIX | FB WID LP INP): two taps swept in
   opposite ways off one line, their mean the chorus, their difference its width added across the stereo after the pan,
   fed back through the first (FB up to +-0.9: at its top a short DEL rings as a comb, the Monomachine's metal clangs;
-  it reached only +-0.11 until fixed), the wet lowpassed. RINGMOD (WAVE EXT – MIX | – – – INP): the input times a carrier on
-  the track's note, sine to triangle to square to saw by WAVE; EXT takes the carrier from the track before the input
-  instead. DYNAMIX (ATK REL THRS MIX | RAT GAIN RMS INP): a compressor on each block's peak and RMS (RMS the blend),
+  it reached only +-0.11 until fixed), the wet lowpassed. RINGMOD (WAVE EXT – MIX | – – – INP), measured on the OS
+  (`tools/ref/ring45.loops`, group `ring`: two-track loops, the FX panned away from its source): it hears the track
+  before after its VOL, its clip and its LEV, as the Monomachine's FX do (LEV 40 is 15.9 dB down on both, LEV 0
+  silent); INP a square law, unity at 45, into a clip of its own that starts near INP 82 (its odd products within
+  0.5 dB of the Monomachine's); times a carrier on the note, WAVE's cycle built from the Monomachine's measured odd
+  harmonics 1..15 (none even at any WAVE): a sine, a triangle by 64, a square 10.4 dB down by 127, each harmonic
+  within 0.1 dB; MIX a linear crossfade; EXT fades the carrier out linearly, on the Monomachine to its audio input,
+  here to the track before the input (the FM-1 has none). Levels within 0.2 dB of the Monomachine's at INP 16..127,
+  VOL, LEV, MIX, EXT and DIST 48 / 64. Known gap: its carrier is peakier above WAVE 96 (4.4 dB more peak over the
+  fundamental at 127): harmonics past the 15th. A ring saved at INP 100 drives its input harder than before. DYNAMIX (ATK REL THRS MIX | RAT GAIN RMS INP): a compressor on each block's peak and RMS (RMS the blend),
   followed in log2, over a threshold of −60..0 dB by a ratio of 1:1..20:1 (a limiter at 127), made up by up to 24 dB,
   MIX parallel. The self-test holds what each does.
 - **SWAV-PUL**, new, on SWAVE-PULS's page (`tools/ref/chain_pul38.spec`, group `pul`; UNIL UNIW SUB1 SUB2 | PW PWAD

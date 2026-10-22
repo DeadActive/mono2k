@@ -71,9 +71,12 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   TRACK page has been opened and closed once (`mm_ref`'s loop mode does it after a `T` line with an FX machine).
   After it RINGMOD and REVERB carry the track before; THRU, CHORUS and DYNAMIX stay silent under every input (NEIBOR,
   BUS AB / CD / EF) and every knob, so FX-CHORS and FX-DYNMX cannot be measured: MONO2K's own designs on the
-  Monomachine's pages, held by the self-test. FX-RING can be (two-track loops, the FX panned away from its source).
-  Each reads the previous track's `tout` (after its amp, before its VOL; the Monomachine's FX hear the VOL), so a
-  track's order in `m2k_render` matters. `mm_ref ROM panel DIR < SCRIPT` drives the OS's panel (tap / enc / chord /
+  Monomachine's pages, held by the self-test. FX-RING can be (two-track loops, the FX panned away from its source),
+  and is rebuilt on its measurements (group `ring`, `tools/ref/ring45.loops`: a loop spec, `regress.py mmloops ROM`
+  renders the Monomachine's side): it hears the track before after its VOL, its clip and its LEV (`tvol`), as the
+  Monomachine's FX do; FX-CHORS and FX-DYNMX still read `tout` (after its amp, before its VOL: MONO2K's own, and
+  MAMMOTH's chorus is voiced on it). Either way a track's order in `m2k_render` matters. Read a product's level with
+  a flat-top window (the two instruments' carriers sit 0.04 Hz apart: a Hanning's scalloping reads it 1 dB off). `mm_ref ROM panel DIR < SCRIPT` drives the OS's panel (tap / enc / chord /
   assign / midi / wait / shot / record) to find where a setting lives; `Q track step` in a loop places the OS's own
   trigs (A01's demo trigs cleared first).
 - Fidelity regressions: `.venv/bin/python tools/ref/regress.py check [GROUP ...]` renders MONO2K with the chain specs

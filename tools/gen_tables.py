@@ -379,6 +379,45 @@ FM_R24 = [1 / 64, 1 / 32, 1 / 16, 3 / 32, 1 / 8, 5 / 32, 3 / 16, 1 / 4, 5 / 16, 
 out.append(arr("T_FMR24", "uint32_t", [round(r * 65536) for r in FM_R24], 8))
 out.append("static const char *const T_FMR24_NAME[24] = {%s};\n" % ", ".join(
     '"%s"' % n for n in "1/64 1/32 1/16 3/32 1/8 5/32 3/16 1/4 5/16 3/8 7/16 1/2 5/8 3/4 7/8 1 1.25 1.5 1.75 2 2.5 3 3.5 4".split()))
+
+# FX-RING's carrier as the Monomachine's RINGMOD plays it, measured on its OS (scratch ring/harm2.py: a GND-SIN source
+# into the FX, its sidebands k c + s, each read at the render's own carrier and source): at each WAVE, the fundamental's level against WAVE 0's (dB) and the odd harmonics
+# 3 .. 15 under it (dB; none even, at any WAVE), with their phases (theta_k - k theta_1, degrees, referred to WAVE 64's
+# triangle). Sine at 0, a triangle by 64, a square by 127, whose fundamental falls 10.4 dB on the way. One cycle of
+# 256 per measured WAVE, Q15; between, the engine crossfades
+RING_H = [
+    (0, 0.0, [None] * 7, [0] * 7),
+    (8, -0.5, [-37.5, -46.3, -52.0, -56.3, -59.7, -62.5, -64.9], [-77, -164, 113, 31, -51, -132, 147]),
+    (16, -1.0, [-31.0, -39.8, -45.5, -49.8, -53.2, -56.0, -58.4], [-91, 173, 80, -12, -102, 167, 77]),
+    (24, -1.5, [-27.0, -35.8, -41.6, -45.8, -49.3, -52.0, -54.5], [-107, 147, 43, -59, -160, 99, -2]),
+    (32, -1.9, [-24.1, -32.9, -38.7, -42.9, -46.4, -49.1, -51.5], [-124, 118, 3, -110, 137, 24, -88]),
+    (40, -2.2, [-21.9, -30.7, -36.4, -40.7, -44.1, -46.9, -49.3], [-143, 86, -41, -167, 68, -57, 178]),
+    (48, -2.4, [-20.1, -28.9, -34.6, -38.9, -42.3, -45.1, -47.5], [-163, 53, -87, 133, -5, -143, 78]),
+    (56, -2.5, [-18.7, -27.4, -33.2, -37.5, -40.9, -43.7, -46.0], [177, 19, -135, 72, -81, 127, -25]),
+    (64, -2.4, [-17.5, -26.3, -32.1, -36.3, -39.7, -42.5, -44.9], [156, -16, 176, 9, -157, 37, -128]),
+    (72, -3.4, [-17.7, -26.9, -33.2, -38.3, -42.9, -47.3, -51.9], [156, -16, 175, 8, -159, 35, -133]),
+    (80, -4.4, [-17.7, -26.8, -33.0, -37.9, -41.8, -44.9, -47.0], [156, -16, 178, 15, -146, 57, -99]),
+    (88, -5.5, [-17.3, -25.7, -30.8, -34.2, -36.6, -38.4, -39.6], [155, -18, 173, 3, -167, 22, -150]),
+    (96, -6.7, [-16.3, -23.4, -27.4, -30.1, -32.0, -33.5, -34.6], [152, -29, 148, -36, 139, -47, 125]),
+    (104, -7.9, [-14.8, -20.7, -24.1, -26.4, -28.2, -29.6, -30.8], [142, -56, 104, -99, 58, -147, 9]),
+    (112, -9.1, [-12.8, -17.9, -21.0, -23.2, -24.9, -26.3, -27.5], [123, -99, 37, 171, -55, 79, -147]),
+    (120, -10.0, [-10.8, -15.5, -18.5, -20.6, -22.3, -23.7, -24.9], [93, -159, -53, 54, 160, -94, 12]),
+    (127, -10.4, [-9.4, -13.9, -16.8, -19.0, -20.7, -22.1, -23.2], [59, 136, -146, -68, 10, 89, 167]),
+]
+def ring_cycle(h1, lv, ph):
+    a1 = 10 ** (h1 / 20)
+    cyc = []
+    for n in range(256):
+        th = 2 * math.pi * n / 256
+        v = a1 * math.sin(th)
+        for j, k in enumerate(range(3, 16, 2)):
+            if lv[j] is not None: v += a1 * 10 ** (lv[j] / 20) * math.sin(k * th + math.radians(ph[j]))
+        cyc.append(v)
+    return cyc
+RING_T = [ring_cycle(h1, lv, ph) for _, h1, lv, ph in RING_H]
+assert max(abs(v) for c in RING_T for v in c) <= 1.0
+out.append("static const int16_t T_RINGW[17][256] = {\n%s};\n" % ",\n".join(
+    "    {" + ", ".join(str(round(v * 32767)) for v in c) + "}" for c in RING_T))
 def lerp(pts, v, log=False):
     for (a, ya), (b, yb) in zip(pts, pts[1:]):
         if a <= v <= b:
