@@ -49,6 +49,8 @@
   textures();
   if (btn) btn.addEventListener("click", () => { theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]; apply(); });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (theme === "auto") window.dispatchEvent(new Event("m2k-theme")); });
+  /* an accordion a person opens deals its contents in (style.css, gl-deal); one opened by the page does not */
+  document.addEventListener("click", (e) => { const s = e.target.closest && e.target.closest("details > summary"); if (s) s.parentElement.classList.add("gl-dealt"); });
   label();
   window.M2K_SITE = { dark: () => { const t = document.documentElement.getAttribute("data-theme"); return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; } };
 })();

@@ -775,4 +775,6 @@
     watch(".sec__n, .hero__sub > *, .sec__body .lede, .cols2 > p, .keys", "rv-up");   /* not the foot: at the page's end it never scrolls far enough in */
     watch(".sec__body .display", "rv-wipe");
   }
+  /* an accordion a person opens deals its contents in (style.css, gl-deal); one opened by the page does not */
+  document.addEventListener("click", (e) => { const s = e.target.closest && e.target.closest("details > summary"); if (s) s.parentElement.classList.add("gl-dealt"); });
 })();

@@ -288,6 +288,43 @@ a.label { color: var(--ink); text-decoration: none; }
 @keyframes iso-slip-l { 0% { transform: translateX(-24px); } 22% { transform: translateX(24px); } 44% { transform: translateX(-12px); } 66%, 100% { transform: none; } }
 @keyframes iso-slip-m { 0% { transform: translateX(12px); } 22% { transform: translateX(-36px); } 44% { transform: none; } 66%, 100% { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .brand:hover .iso, .brand:focus-visible .iso { animation: none; fill: currentColor; } }
+
+/* the controls' glitch, in the hero's and the isotype's idiom: hovered, a burst of three frames (the rows slipped
+ * sideways in hard bands, gl-a then gl-b, the dither crushed 6 px, 4, then 2) before the control's own hover; pressed,
+ * it inverts and slips once; an accordion opened deals its contents in a few rows at a time. Nothing moves up or down,
+ * nothing runs on its own */
+.gldefs { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+@keyframes gl-burst {
+  0% { filter: url(#gl-a); background-image: var(--d-check); background-size: 6px 6px; image-rendering: pixelated; }
+  33% { filter: url(#gl-b); background-image: var(--d-check); background-size: 4px 4px; image-rendering: pixelated; }
+  66% { filter: none; background-image: var(--d-check); background-size: 2px 2px; image-rendering: pixelated; }
+  100% { filter: none; }
+}
+@keyframes gl-text { 0% { filter: url(#gl-a); } 40% { filter: url(#gl-b); } 80%, 100% { filter: none; } }
+@keyframes gl-press { 0% { filter: url(#gl-b); background: var(--ink); color: var(--paper); } 100% { filter: none; } }
+@keyframes gl-deal {
+  0% { clip-path: inset(0 0 100% 0); filter: url(#gl-a); }
+  25% { clip-path: inset(0 0 70% 0); filter: url(#gl-b); }
+  50% { clip-path: inset(0 0 40% 0); filter: url(#gl-a); }
+  75% { clip-path: inset(0 0 12% 0); filter: none; }
+  100% { clip-path: inset(0); filter: none; }
+}
+:is(.cta, .themebtn, .start, .bigbtn:not([disabled]), .ed__btn, .log__kinds button, .pats button, .read .ctls button,
+    .tracks .tsel, .tracks .tmute, .subnav a, .pager a, .cards a, .docs__side a, details > summary, .mcard):hover {
+  animation: gl-burst 210ms steps(1, end);
+}
+:is(.links a, .kofi, .doc p a, .doc li a, .doc td a, .lede a, .small a):hover { animation: gl-text 160ms steps(1, end); }
+:is(.cta, .themebtn, .start, .bigbtn:not([disabled]), .ed__btn, .log__kinds button, .pats button, .read .ctls button,
+    .tracks .tsel, .tracks .tmute, .subnav a, .pager a, .cards a, .docs__side a, details > summary, .ed__kb .k):active {
+  animation: gl-press 90ms steps(1, end);
+}
+details.gl-dealt[open] > :not(summary) { animation: gl-deal 240ms steps(1, end); }
+@media (prefers-reduced-motion: reduce) {
+  :is(.cta, .themebtn, .start, .bigbtn, .ed__btn, .log__kinds button, .pats button, .read .ctls button, .tracks .tsel,
+      .tracks .tmute, .subnav a, .pager a, .cards a, .docs__side a, details > summary, .mcard, .links a, .kofi, .doc a,
+      .lede a, .small a, .ed__kb .k):is(:hover, :active),
+  details.gl-dealt[open] > :not(summary) { animation: none; }
+}
 .brand:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
 .subnav { position: relative; z-index: 1; display: flex; justify-content: flex-end; align-items: center; gap: var(--s3); min-height: 40px; padding: 0 var(--gut); border-bottom: 1px solid var(--ink); background: var(--paper); }
 .subnav a { position: relative; font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink); text-decoration: none; opacity: 0.5; padding: 12px 0; }
