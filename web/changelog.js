@@ -11,8 +11,10 @@ window.M2K_CHANGES = [
     items: [
       ["sequencer", "Trig types: each step can trig the amp, the filter's envelope and the LFOs on their own, in eight states, as on the Monomachine. Older patterns play as they did."],
       ["machines", "FM+: the 24 ratio steps fall where the Monomachine's sound puts them; eight values that sat a step off now match."],
+      ["machines", "FX-RING rebuilt on the Monomachine's RINGMOD, measured: it hears the track before after its VOL and LEV, INP drives it on the Monomachine's curve into a clip of its own, and WAVE sweeps its carrier from a sine through a triangle to a square. A ring saved before at INP 100 now drives its input harder."],
       ["screen", "Each machine's mark moves in its own way, and jumps with the beat while a pattern plays."],
       ["screen", "SWAV-SAW's three peaks ride the music, each a little after the one before, each falling at its own pace."],
+      ["screen", "A new boot splash: the brand's logotype resolves out of coarse blocks, its dither drifting as the site's hero does, and breaks once before the first page."],
       ["web", "A Manual, an Installer page and a Patch Editor, under a new sub-header."],
       ["web", "The brand's isotype in the header and on the panel; the logotype as the hero, a slowly drifting bit-crusher that breaks now and then and crushes on the beat."],
       ["web", "The Patch Editor's audition keys float at the bottom of the window; new link arrows."],

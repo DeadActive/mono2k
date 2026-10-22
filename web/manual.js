@@ -129,12 +129,12 @@
     "DIGI-WAV": "MONO2K's own wavetables: a wave, scanning through the bank and its speed, sync, bits, detune, a second wave mixed in, stepped scanning.",
     "VOX-6": "A voice: a vowel, a sweep to another and its time, a formant shift, breath, resonance, buzz, vibrato.",
     "FX-CHORS": "An FX machine: a chorus on the track before, its delay, depth and speed, its feedback (all the way up, a comb that rings), width and lowpass. The heart of the metal sounds.",
-    "FX-RING": "An FX machine: the track before ring-modulated by a carrier wave, or by another track.",
+    "FX-RING": "An FX machine: the track before (after its VOL and LEV) ring-modulated by a carrier on the note, a sine through a triangle to a square by WAVE; INP drives it into a clip of its own; EXT takes the carrier from the track before that instead. As the Monomachine's RINGMOD, measured.",
     "FX-DYNMX": "An FX machine: dynamics on the track before, attack, release, threshold, ratio, make-up gain, RMS or peak.",
   };
   const cstr = (x, p) => { const m = new Uint8Array(x.memory.buffer); let s = ""; while (m[p]) s += String.fromCharCode(m[p++]); return s; };
   async function firmware() {
-    const r = await fetch("m2k.wasm?v=63");
+    const r = await fetch("m2k.wasm?v=64");
     const x = new WebAssembly.Instance(new WebAssembly.Module(await r.arrayBuffer()), {}).exports;
     if (x._initialize) x._initialize();
     x.w_init(2000);
