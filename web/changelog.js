@@ -13,6 +13,7 @@ window.M2K_CHANGES = [
       ["machines", "FM+: the 24 ratio steps fall where the Monomachine's sound puts them; eight values that sat a step off now match."],
       ["machines", "FX-RING rebuilt on the Monomachine's RINGMOD, measured: it hears the track before after its VOL and LEV, INP drives it on the Monomachine's curve into a clip of its own, and WAVE sweeps its carrier from a sine through a triangle to a square. A ring saved before at INP 100 now drives its input harder."],
       ["screen", "Each machine's mark moves in its own way, and jumps with the beat while a pattern plays."],
+      ["sound", "HOLD counts in beats at the pattern's tempo, as on the Monomachine (32 is a beat, 8 a sixteenth); it was a fixed time. Saved patterns and bank A keep the holds they had at their own tempo."],
       ["screen", "SWAV-SAW's three peaks ride the music, each a little after the one before, each falling at its own pace."],
       ["screen", "A new boot splash: the brand's logotype resolves out of coarse blocks, its dither drifting as the site's hero does, and breaks once before the first page."],
       ["web", "A Manual, an Installer page and a Patch Editor, under a new sub-header."],
