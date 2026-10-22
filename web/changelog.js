@@ -7,6 +7,12 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-10-23", title: "VO-6, the Monomachine's voice",
+    items: [
+      ["machines", "VOX-6 rebuilt on the Monomachine's VO-6 page, measured: VOC1 and VOC2 set the vowel's two formants, VOIC whispers it, its pitch and level as the Monomachine's (it fades in from each trig). CUTUP's voice keeps its vowels. The consonants come next."],
+    ],
+  },
+  {
     date: "2026-10-22", title: "Trig types, a new site, moving marks",
     items: [
       ["sequencer", "Trig types: each step can trig the amp, the filter's envelope and the LFOs on their own, in eight states, as on the Monomachine. Older patterns play as they did."],

@@ -127,14 +127,14 @@
     "SWAV-PUL": "A pulse with its unison, subs, its width and the width's sweep.",
     "SWAV-ENS": "An ensemble: three more voices at their intervals over the note, a wave, a pulse width, a chorus and its width. Chords, pads and stabs on one track.",
     "DIGI-WAV": "MONO2K's own wavetables: a wave, scanning through the bank and its speed, sync, bits, detune, a second wave mixed in, stepped scanning.",
-    "VOX-6": "A voice: a vowel, a sweep to another and its time, a formant shift, breath, resonance, buzz, vibrato.",
+    "VOX-6": "The Monomachine's VO-6: a formant voice. VOC1 sets the first formant, VOC2 the second (together, the vowel), VOIC whispers it, and its level holds itself as the Monomachine's does, fading in from each trig. The consonants (CONS CLEN CVOL) come next.",
     "FX-CHORS": "An FX machine: a chorus on the track before, its delay, depth and speed, its feedback (all the way up, a comb that rings), width and lowpass. The heart of the metal sounds.",
     "FX-RING": "An FX machine: the track before (after its VOL and LEV) ring-modulated by a carrier on the note, a sine through a triangle to a square by WAVE; INP drives it into a clip of its own; EXT takes the carrier from the track before that instead. As the Monomachine's RINGMOD, measured.",
     "FX-DYNMX": "An FX machine: dynamics on the track before, attack, release, threshold, ratio, make-up gain, RMS or peak.",
   };
   const cstr = (x, p) => { const m = new Uint8Array(x.memory.buffer); let s = ""; while (m[p]) s += String.fromCharCode(m[p++]); return s; };
   async function firmware() {
-    const r = await fetch("m2k.wasm?v=65");
+    const r = await fetch("m2k.wasm?v=66");
     const x = new WebAssembly.Instance(new WebAssembly.Module(await r.arrayBuffer()), {}).exports;
     if (x._initialize) x._initialize();
     x.w_init(2000);
