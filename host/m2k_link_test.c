@@ -85,7 +85,7 @@ static int wire_max;
 
 /* a request through the platform's hook; the status of the one answer, decoded into ans (-1 not taken, -2 no answer
  * or a malformed one) */
-static int ask(int cmd, const uint8_t *body, uint32_t n)
+static int req(int cmd, const uint8_t *body, uint32_t n)
 {
     uint8_t f[640];
     uint32_t w = 0;
@@ -111,13 +111,13 @@ static uint32_t crc32(const uint8_t *p, uint32_t n) { return ~crc_more(0xFFFFFFF
 static uint8_t rx[0x10000];
 static int read_store(uint32_t *len)
 {
-    if (ask(LK_INFO, 0, 0) != LK_OK || ans_n < 9u) return 0;
+    if (req(LK_INFO, 0, 0) != LK_OK || ans_n < 9u) return 0;
     uint32_t n = rd32(ans + 1), c = rd32(ans + 5);
     for (uint32_t at = 0; at < n;) {
         uint8_t q[5];
         wr32(q, at);
         q[4] = (uint8_t)(n - at > 128u ? 128u : n - at);
-        if (ask(LK_READ, q, 5) != LK_OK || rd32(ans + 1) != at || ans[5] != q[4]) return 0;
+        if (req(LK_READ, q, 5) != LK_OK || rd32(ans + 1) != at || ans[5] != q[4]) return 0;
         memcpy(rx + at, ans + 6, ans[5]);
         at += ans[5];
     }
@@ -131,16 +131,16 @@ static int write_store(const uint8_t *b, uint32_t n, uint32_t crc, uint32_t stop
     uint8_t q[4 + 256];
     wr32(q, n);
     wr32(q + 4, crc);
-    if (ask(LK_BEGIN, q, 8) != LK_OK) return -10 - ans[0];
+    if (req(LK_BEGIN, q, 8) != LK_OK) return -10 - ans[0];
     for (uint32_t at = 0, k = 0; at < n; k++) {
         if (k == stop_after) return -100;
         uint32_t c = n - at > 256u ? 256u : n - at;
         wr32(q, at);
         memcpy(q + 4, b + at, c);
-        if (ask(LK_WRITE, q, 4 + c) != LK_OK || rd32(ans + 1) != at + c) return -20 - ans[0];
+        if (req(LK_WRITE, q, 4 + c) != LK_OK || rd32(ans + 1) != at + c) return -20 - ans[0];
         at += c;
     }
-    return ask(LK_END, 0, 0);
+    return req(LK_END, 0, 0);
 }
 
 static int fails;
@@ -248,7 +248,7 @@ int main(int argc, char **argv)
 
     uint8_t f0[4] = {0x00, 0x59, 0x11, 0x00};
     check(!app_sysex(f0, 4), "the update entry's frames are left to it");
-    check(ask(LK_HELLO, 0, 0) == LK_OK && ans[1] == 1 && ans[2] == 64 && ans[3] == 1 && ans[4] == M2K_SOUNDS &&
+    check(req(LK_HELLO, 0, 0) == LK_OK && ans[1] == 1 && ans[2] == 64 && ans[3] == 1 && ans[4] == M2K_SOUNDS &&
           !memcmp(ans + 8, "MONO2K", 6) && rd32(ans + 24) == M2K_IMG_DATA,
           "HELLO: the link's version, 64 patterns, 1 project, 128 sounds, the name, the image's room");
 
@@ -281,9 +281,9 @@ int main(int argc, char **argv)
 
     uint8_t q[4 + 8];
     wr32(q, na); wr32(q + 4, crc32(a, na));
-    check(ask(LK_BEGIN, q, 8) == LK_OK, "(a write begun)");
+    check(req(LK_BEGIN, q, 8) == LK_OK, "(a write begun)");
     wr32(q, 256); memset(q + 4, 0, 8);
-    check(ask(LK_WRITE, q, 12) == LK_ORDER && rd32(ans + 1) == 0, "a chunk out of order is refused, the next offset said");
+    check(req(LK_WRITE, q, 12) == LK_ORDER && rd32(ans + 1) == 0, "a chunk out of order is refused, the next offset said");
     fm1_ms += 5000;
     lk_service();
     check(!lk_open && stored() && marked("LINKC", "SNDC"), "a write that stalls 4 s ends: the FM-1's state back in the flash");
@@ -294,13 +294,13 @@ int main(int argc, char **argv)
     check(stored() && marked("LINKC", "SNDC"), "a write cut short leaves the FM-1 as it was");
 
     sq.playing = 1;
-    check(ask(LK_INFO, 0, 0) == LK_PLAYING && ask(LK_BEGIN, q, 8) == LK_PLAYING, "while it plays: neither read nor write");
+    check(req(LK_INFO, 0, 0) == LK_PLAYING && req(LK_BEGIN, q, 8) == LK_PLAYING, "while it plays: neither read nor write");
     sq.playing = 0;
 
-    check(ask(LK_END, 0, 0) == LK_IDLE && ask(LK_WRITE, q, 12) == LK_IDLE, "an END or a chunk with no write begun: refused");
+    check(req(LK_END, 0, 0) == LK_IDLE && req(LK_WRITE, q, 12) == LK_IDLE, "an END or a chunk with no write begun: refused");
     wr32(q, BANK_LEN); wr32(q + 4, 0);
-    check(ask(LK_BEGIN, q, 8) == LK_BIG, "a store larger than the region: refused");
-    check(ask(0x30, 0, 0) == LK_BAD, "an unknown request: answered, refused");
+    check(req(LK_BEGIN, q, 8) == LK_BIG, "a store larger than the region: refused");
+    check(req(0x30, 0, 0) == LK_BAD, "an unknown request: answered, refused");
 
     flash_fail_at = flash_writes + 3;
     st = write_store(a, na, crc32(a, na), ~0u);

@@ -24,7 +24,9 @@ echo "== warnings"
 for cc in clang $(ls /opt/homebrew/bin/gcc-[0-9]* /usr/local/bin/gcc-[0-9]* 2>/dev/null) ${GCC:-}; do
     case "$($cc --version 2>/dev/null | head -1)" in *clang*) [ "$cc" = clang ] || continue ;; esac
     for src in host/m2k_host.c host/m2k_ref.c host/m2k_link_test.c; do
-        out=$($cc -O2 $W $I -o "$B/$(basename "$src" .c)" "$src" -lm 2>&1)
+        if ! out=$($cc -O2 $W $I -o "$B/$(basename "$src" .c)" "$src" -lm 2>&1); then
+            echo "  $cc $src: DOES NOT BUILD"; printf "%s\n" "$out" | grep "error:" | head -5; FAIL=1; continue
+        fi
         n=$(printf "%s" "$out" | grep -c "warning:")
         echo "  $cc $src: $n warnings"
         [ "$n" -eq 0 ] || { printf "%s\n" "$out"; FAIL=1; }
@@ -50,6 +52,7 @@ fi
 
 echo "== sanitizers"
 SAN="-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer"
+rm -f "$B/m2k_host_san" "$B/m2k_ref_san" "$B/m2k_link_san"      # (a build that fails runs nothing old)
 clang $SAN -w $I -o "$B/m2k_host_san" host/m2k_host.c -lm && clang $SAN -w $I -o "$B/m2k_ref_san" host/m2k_ref.c -lm &&
     clang $SAN -w $I -o "$B/m2k_link_san" host/m2k_link_test.c || FAIL=1
 mkdir -p "$B/screens" "$B/pitch" "$B/ref" "$B/link"
@@ -70,7 +73,7 @@ rep=$(grep -E "runtime error|ERROR: AddressSanitizer|SELFTEST FAILED|LINK FAILED
 if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  self-test, the FM-1 link, screens and their text, bank A, $(ls tools/ref/*.spec | wc -l | tr -d ' ') specs, the power loop: clean"; fi
 
 echo "== the format's conversions, mutated"
-.venv/bin/python tools/ref/mutate_formats.py > "$B/mutate.log" 2>&1 && tail -1 "$B/mutate.log" | sed 's/^/  /' || { grep -E "SURVIVED|unmutated" "$B/mutate.log"; FAIL=1; }
+.venv/bin/python tools/ref/mutate_formats.py > "$B/mutate.log" 2>&1 && tail -1 "$B/mutate.log" | sed 's/^/  /' || { grep -E "SURVIVED|MISSING|unmutated" "$B/mutate.log"; FAIL=1; }
 
 echo "== the wave banks"
 .venv/bin/python tools/wave_check.py > "$B/waves.log" 2>&1 && tail -1 "$B/waves.log" | sed 's/^/  /' || { cat "$B/waves.log"; FAIL=1; }
