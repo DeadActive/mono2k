@@ -62,15 +62,15 @@ static const ev_t TOUR[] = {
     {13600, 'k', 9, 1, 0}, {13700, 'e', E_K2, 20, 0}, {13800, 's', 0, 0, "17b_grid_lock"}, {14000, 'k', 9, 0, 0},
     {14200, 'e', E_ALGO, 1, 0}, {14260, 's', 0, 0, "18_machine_glitch"}, {14900, 's', 0, 0, "19_machine_card"},
     {15000, 'b', B_ARP, 1, 0}, {15020, 'b', B_ARP, 0, 0}, {15600, 's', 0, 0, "20_arp"},
-    {15700, 'b', B_GLO, 1, 0}, {15720, 'b', B_GLO, 0, 0}, {15740, 'b', B_GLO, 1, 0}, {15760, 'b', B_GLO, 0, 0},
-    {15780, 'b', B_GLO, 1, 0}, {15800, 'b', B_GLO, 0, 0}, {15820, 'b', B_GLO, 1, 0}, {15840, 'b', B_GLO, 0, 0},
-    {16300, 's', 0, 0, "21_set_light"},
-    {16400, 'e', E_K1, 1, 0}, {16900, 's', 0, 0, "22_set_dark"},
-    {17000, 'b', B_HOME, 1, 0}, {17020, 'b', B_HOME, 0, 0}, {17600, 's', 0, 0, "23_home_dark"},
-    {17700, 'b', B_EDIT, 1, 0}, {17720, 'b', B_EDIT, 0, 0}, {18400, 's', 0, 0, "24_syn_dark"},
-    {18500, 'b', B_EDIT, 1, 0}, {18520, 'b', B_EDIT, 0, 0}, {18600, 'b', B_EDIT, 1, 0}, {18620, 'b', B_EDIT, 0, 0},
-    {20300, 's', 0, 0, "26_syn_snd_dark"},
-    {20400, 'x', 0, 0, 0},
+    {15700, 'b', B_GLO, 1, 0}, {15720, 'b', B_GLO, 0, 0}, {16000, 'b', B_GLO, 1, 0}, {16020, 'b', B_GLO, 0, 0},
+    {16300, 'b', B_GLO, 1, 0}, {16320, 'b', B_GLO, 0, 0}, {16600, 'b', B_GLO, 1, 0}, {16620, 'b', B_GLO, 0, 0},
+    {17100, 's', 0, 0, "21_set_light"},     /* (taps 280 ms apart: closer, a second tap latches GLO) */
+    {17200, 'e', E_K1, 1, 0}, {17700, 's', 0, 0, "22_set_dark"},
+    {17800, 'b', B_HOME, 1, 0}, {17820, 'b', B_HOME, 0, 0}, {18400, 's', 0, 0, "23_home_dark"},
+    {18500, 'b', B_EDIT, 1, 0}, {18520, 'b', B_EDIT, 0, 0}, {19200, 's', 0, 0, "24_syn_dark"},
+    {19300, 'b', B_EDIT, 1, 0}, {19320, 'b', B_EDIT, 0, 0}, {19400, 'b', B_EDIT, 1, 0}, {19420, 'b', B_EDIT, 0, 0},
+    {21100, 's', 0, 0, "26_syn_snd_dark"},
+    {21200, 'x', 0, 0, 0},
 };
 
 /* the manual's scenes: B01's T1 with a trig of each of the eight types on every other step, in GRID (30); step 5's
@@ -91,15 +91,21 @@ static const ev_t MANUAL[] = {
     {12100, 'b', B_SEQ, 1, 0}, {12800, 's', 0, 0, "29c_seq_held"}, {12900, 'b', B_SEQ, 0, 0},
     {13000, 'b', B_HOME, 1, 0}, {13020, 'b', B_HOME, 0, 0}, {13600, 'b', B_GLO, 1, 0}, {13700, 'b', B_SEQ, 1, 0},
     {14300, 's', 0, 0, "29d_clear_ring"}, {14400, 'b', B_SEQ, 0, 0}, {14420, 'b', B_GLO, 0, 0},
-    {14500, 'b', B_GLO, 1, 0}, {14520, 'b', B_GLO, 0, 0}, {14540, 'b', B_GLO, 1, 0}, {14560, 'b', B_GLO, 0, 0},
-    {14580, 'b', B_GLO, 1, 0}, {14600, 'b', B_GLO, 0, 0}, {14620, 'b', B_GLO, 1, 0}, {14640, 'b', B_GLO, 0, 0},
-    {15200, 'e', E_K3, 1, 0}, {15800, 's', 0, 0, "29e_ask"}, {15900, 'b', B_OCTD, 1, 0}, {15920, 'b', B_OCTD, 0, 0},
-    {16000, 'b', B_PLAY, 1, 0}, {16020, 'b', B_PLAY, 0, 0}, {16100, 'b', B_FX, 1, 0}, {16200, 'k', 5, 1, 0},
-    {16800, 's', 0, 0, "29f_perform"}, {16900, 'k', 5, 0, 0}, {16920, 'b', B_FX, 0, 0},
-    {17000, 'b', B_LFO, 1, 0}, {17600, 's', 0, 0, "29g_lfo_held"}, {17700, 'b', B_LFO, 0, 0},
-    {17800, 'b', B_GLO, 1, 0}, {18400, 's', 0, 0, "29h_glo_map"}, {18500, 'b', B_GLO, 0, 0},
-    {18600, 'b', B_PLAY, 1, 0}, {18620, 'b', B_PLAY, 0, 0},
-    {18700, 'x', 0, 0, 0},
+    {14500, 'b', B_GLO, 1, 0}, {14520, 'b', B_GLO, 0, 0}, {14800, 'b', B_GLO, 1, 0}, {14820, 'b', B_GLO, 0, 0},
+    {15100, 'b', B_GLO, 1, 0}, {15120, 'b', B_GLO, 0, 0}, {15400, 'b', B_GLO, 1, 0}, {15420, 'b', B_GLO, 0, 0},
+    {15600, 'e', E_K3, 1, 0}, {16200, 's', 0, 0, "29e_ask"}, {16300, 'b', B_OCTD, 1, 0}, {16320, 'b', B_OCTD, 0, 0},
+    {16400, 'b', B_PLAY, 1, 0}, {16420, 'b', B_PLAY, 0, 0}, {17100, 'b', B_FX, 1, 0}, {17200, 'k', 5, 1, 0},
+    {17800, 's', 0, 0, "29f_perform"}, {17900, 'k', 5, 0, 0}, {17920, 'b', B_FX, 0, 0},
+    {18000, 'b', B_LFO, 1, 0}, {18600, 's', 0, 0, "29g_lfo_held"}, {18700, 'b', B_LFO, 0, 0},
+    {18800, 'b', B_GLO, 1, 0}, {19400, 's', 0, 0, "29h_glo_map"}, {19500, 'b', B_GLO, 0, 0},
+    {19600, 'b', B_PLAY, 1, 0}, {19620, 'b', B_PLAY, 0, 0},
+    /* SEQ double-tapped: its layer latched (29i, its message gone), tapped again let go; PLAY held a second alone:
+     * its card (29j) */
+    {20100, 'b', B_SEQ, 1, 0}, {20120, 'b', B_SEQ, 0, 0}, {20240, 'b', B_SEQ, 1, 0}, {20260, 'b', B_SEQ, 0, 0},
+    {22600, 's', 0, 0, "29i_seq_latched"}, {22700, 'b', B_SEQ, 1, 0}, {22720, 'b', B_SEQ, 0, 0},
+    {23000, 'b', B_PLAY, 1, 0}, {24200, 's', 0, 0, "29j_play_card"}, {24300, 'b', B_PLAY, 0, 0},
+    {24400, 'b', B_PLAY, 1, 0}, {24420, 'b', B_PLAY, 0, 0},
+    {24500, 'x', 0, 0, 0},
 };
 
 static void manual_scene(void)
@@ -196,6 +202,21 @@ static int text_sweep(void)
     /* the library: every category shown */
     ui.page = PG_SYN; ui.sub = (uint8_t)(nsub(PG_SYN) - 1);
     for (int c = 0; c < CAT_COUNT; c++) { ui.snd_cat = (uint8_t)c; now += 3000; ui.trans_t = 0; ui.toast_t = 0; m2k_frame(now); ta_check((int)now); }
+    /* each layer latched, its map marked; each button's help card */
+    static const uint8_t LAT[4] = {B_GLO, B_SEQ, B_HOME, B_FX};
+    ui.page = PG_AMP; ui.sub = 0;
+    for (int i = 0; i < 4; i++) {
+        ui.latch = (uint8_t)(LAT[i] + 1);
+        now += 3000; ui.trans_t = 0; ui.toast_t = 0; m2k_frame(now); ta_check((int)now);
+    }
+    ui.latch = 0;
+    static const uint8_t CB[6] = {B_SEL, B_ENV, B_ARP, B_PLAY, B_OCTD, B_OCTU};
+    for (int i = 0; i < 6; i++) {
+        now += 3000; ui.trans_t = 0; ui.toast_t = 0;
+        ui.btn[CB[i]] = 1; ui.card = (uint8_t)(CB[i] + 1); ui.card_used = 0; ui.card_t0 = now - 1500;
+        m2k_frame(now); ta_check((int)now);
+        ui.btn[CB[i]] = 0; ui.card = 0;
+    }
     printf("text sweep: %s\n", ta_found ? "TEXT TOUCHES OR IS CUT (above)" : "every text clear");
     return ta_found != 0;
 }
@@ -945,6 +966,8 @@ static int selftest(void)
             }
             ok = ok && la && lb && !lr && w2.kit[1][P_LFO + L_DEST] == P_SYN + 3 + 1 && w2.kit[1][P_LFO + 8 + L_DEST] == 0;
             int wn2 = pat_pack(&w2, wb);
+            ok = ok && pat_unpack(&w3, wb, wn2) && !memcmp(&w3.kit[0][P_SYN], k, 8);
+            wn2 = pat_pack_v(&w2, wb, 14);                                        /* a version-14 pattern: not again */
             ok = ok && pat_unpack(&w3, wb, wn2) && !memcmp(&w3.kit[0][P_SYN], k, 8);
             m2k_init(2000);
             ok = ok && pat[1].machine[3] == M_VOX && pat[1].kit[3][P_SYN + 0] == T_VOX14[0][0] && pat[1].kit[3][P_SYN + 5] == 64;
@@ -1766,8 +1789,10 @@ static int selftest(void)
         ui.now = 1000;
         m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);
         int tap = ui.grid == 1;
+        ui.now = 2000;                                /* (closer, the second tap latches the layer) */
         m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);
         tap &= ui.grid == 0;
+        ui.now = 3000;
         m2k_pattern_t *q = &pat[0];
         int len = seq_len(), t = ui.trk;
         for (int st = 0; st < M2K_STEPS; st++) q->step[t][st].flags = 0;
@@ -1824,6 +1849,7 @@ static int selftest(void)
         m2k_button(B_FX, 1); m2k_button(B_FX, 0);
         int fxpage = ui.page == PG_FX;
         ui.page = PG_HOME;
+        ui.now = 2000;
         seq_play(1);
         for (int f = 0; f < 44100; f += 128) m2k_render(pb, 128);
         m2k_button(B_FX, 1);
@@ -1884,6 +1910,115 @@ static int selftest(void)
         seq_play(0);
         CHECK(tapped && sel && fillq && solo && unsolo && allon && saw_fill && fill_ends,
               "GLO: white 8 taps the tempo (120), SELECT turns it, 7 fills the next loop and only it, 9-14 solo while held, 15 unmutes all");
+    }
+    /* the latch: GLO, SEQ, HOME, FX double-tapped stay as if held over the page the first tap left (taps slower step
+     * through the pages); the button again lets go, and so does a page button the layer has no use for */
+    {
+        m2k_init(47);
+        int wk[16], bk[11];
+        for (int k = 0; k < M2K_KEYS; k++) { if (ui.kw[k] >= 0 && ui.kw[k] < 16) wk[ui.kw[k]] = k; if (ui.kb[k] >= 0 && ui.kb[k] < 11) bk[ui.kb[k]] = k; }
+        ui.page = PG_AMP; ui.sub = 0;
+        ui.now = 1000; m2k_button(B_SEQ, 1); ui.now = 1060; m2k_button(B_SEQ, 0);
+        int g1 = ui.grid == 1;
+        ui.now = 1200; m2k_button(B_SEQ, 1); ui.now = 1260; m2k_button(B_SEQ, 0);
+        int seq_l = ui.latch == B_SEQ + 1 && ui.grid == 0 && seq_layer() && knob_at(0) == GL(G_LEN) && ui.page == PG_AMP;
+        int len0 = seq_len();
+        m2k_key(wk[7], 1); m2k_key(wk[7], 0);         /* white 8: HALF, the layer's */
+        int tool = seq_len() == len0 / 2;
+        ui.now = 3000; m2k_button(B_SEQ, 1); ui.now = 3050; m2k_button(B_SEQ, 0);
+        int seq_off = !ui.latch && ui.grid == 0;
+        ui.now = 5000; m2k_button(B_GLO, 1); ui.now = 5040; m2k_button(B_GLO, 0);
+        int on_glo = ui.page == PG_GLO;
+        ui.now = 5150; m2k_button(B_GLO, 1); ui.now = 5200; m2k_button(B_GLO, 0);
+        int glo_l = ui.latch == B_GLO + 1 && ui.page == PG_AMP;
+        m2k_key(wk[1], 1); m2k_key(wk[1], 0);         /* white 2: T2 muted */
+        int muted = (pat[cur_pat].mute >> 1) & 1;
+        const uint8_t *L = m2k_leds();
+        int led_glo = L[wk[0]] >= 64 && L[wk[1]] < 64 && L[M2K_KEYS + B_GLO] == (((ui.now >> 8) & 1) ? 255 : 0);
+        m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0); /* PLAY is PLAY meanwhile (the paste wants GLO held) */
+        int stays = ui.latch == B_GLO + 1 && sq.playing;
+        m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0);
+        stays &= !sq.playing;
+        ui.now = 6000; m2k_button(B_HOME, 1); m2k_button(B_HOME, 0);   /* HOME lets go of it, and is HOME */
+        int glo_off = !ui.latch && ui.page == PG_HOME;
+        ui.page = PG_AMP;
+        ui.now = 8000; m2k_button(B_HOME, 1); ui.now = 8050; m2k_button(B_HOME, 0);
+        ui.now = 8200; m2k_button(B_HOME, 1); ui.now = 8250; m2k_button(B_HOME, 0);
+        int home_l = ui.latch == B_HOME + 1 && ui.page == PG_AMP;
+        m2k_key(wk[2], 1); m2k_key(wk[2], 0);         /* white 3: A03 */
+        int picked = cur_pat == 2;
+        L = m2k_leds();
+        int led_home = L[wk[2]] >= 64 || ((ui.now & 1023) >= 900);
+        led_home &= L[wk[0]] >= 64 && L[bk[0]] >= 64;
+        m2k_button(B_SEL, 1); m2k_button(B_SEL, 0);   /* a page button: lets go, and is its page */
+        int home_off = !ui.latch && ui.page == PG_FILT;
+        ui.now = 10000; m2k_button(B_FX, 1); ui.now = 10050; m2k_button(B_FX, 0);
+        ui.now = 10150; m2k_button(B_FX, 1); ui.now = 10200; m2k_button(B_FX, 0);
+        int fx_l = ui.latch == B_FX + 1 && ui.page == PG_FILT && perf_layer();
+        m2k_key(bk[0], 1);
+        int pf = perf.on[0];
+        L = m2k_leds();
+        int led_pf = L[bk[0]] >= 64 && L[bk[1]] < 64;
+        m2k_key(bk[0], 0);
+        int pf_off = !perf.on[0];
+        ui.now = 11000; m2k_button(B_FX, 1); m2k_button(B_FX, 0);
+        int fx_off = !ui.latch && ui.page == PG_FILT;
+        ui.page = PG_GLO; ui.sub = 0;                 /* taps 300 ms apart step through GLO's pages */
+        ui.now = 13000; m2k_button(B_GLO, 1); ui.now = 13040; m2k_button(B_GLO, 0);
+        ui.now = 13340; m2k_button(B_GLO, 1); ui.now = 13380; m2k_button(B_GLO, 0);
+        int slow = !ui.latch && ui.page == PG_GLO && ui.sub == 2;
+        m2k_button(B_SEQ, 1);
+        L = m2k_leds();
+        int led_seq = L[wk[0]] >= 64 && L[wk[7]] >= 64 && L[wk[8]] < 64;
+        m2k_button(B_SEQ, 0);
+        CHECK(g1 && seq_l && tool && seq_off && on_glo && glo_l && muted && stays && glo_off && home_l && picked &&
+              home_off && fx_l && pf && pf_off && fx_off && slow,
+              "latch: SEQ, GLO, HOME, FX double-tapped stay held over the page left; again, HOME or a page lets go; slow taps page");
+        CHECK(led_glo && led_home && led_pf && led_seq,
+              "LEDs: GLO the tracks heard, a latched button blinking; HOME the used patterns and banks; PERFORM the effect on; SEQ 1-8");
+        /* a help card: OCT- held a second alone shows it and its release does nothing; held shorter, the octave; a key
+         * meanwhile, no card */
+        m2k_init(48);
+        ui.now = 1000; m2k_button(B_OCTD, 1); ui.now = 2100;
+        int card = card_up();
+        m2k_frame(ui.now);
+        m2k_button(B_OCTD, 0);
+        int quiet = ui.oct == 0 && !ui.octd;
+        ui.now = 3000; m2k_button(B_OCTD, 1); ui.now = 3300; m2k_button(B_OCTD, 0);
+        int oct = ui.oct == -1;
+        ui.now = 4000; m2k_button(B_PLAY, 1); m2k_key(wk[0], 1); ui.now = 5200;
+        int nocard = !card_up();
+        m2k_key(wk[0], 0); m2k_button(B_PLAY, 0);
+        seq_play(0);
+        CHECK(card && quiet && oct && nocard, "a help card: OCT- held a second alone, its release then nothing; shorter the octave; a key meanwhile, none");
+    }
+    /* REC held and SEQ: the track in view's steps cleared, in KEYS (REC's release then neither arms nor fills); again
+     * undone; held a second, the track's sound INIT too */
+    {
+        m2k_init(49);
+        ui.grid = 0; ui.trk = 1;
+        m2k_pattern_t *q = &pat[cur_pat];
+        q->step[1][3].flags = ST_TRIG; q->step[0][2].flags = ST_TRIG;
+        m2k_pattern_t keep;
+        m_cpy(&keep, q, sizeof keep);
+        ui.now = 1000; m2k_button(B_REC, 1); ui.now = 1100; m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);
+        int gone = !(q->step[1][3].flags & ST_TRIG) && (q->step[0][2].flags & ST_TRIG);
+        ui.now = 1600; m2k_frame(ui.now);
+        int nofill = !sq.fill;
+        m2k_button(B_REC, 0);
+        int norec = !sq.rec && ui.grid == 0;
+        ui.now = 2000; m2k_button(B_REC, 1); m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0); m2k_button(B_REC, 0);
+        int back = !memcmp(q->step[1], keep.step[1], sizeof keep.step[1]);
+        q->kit[1][P_SYN + 2] ^= 33;
+        ui.now = 4000; m2k_button(B_REC, 1); m2k_button(B_SEQ, 1);
+        for (int ms = 4000; ms <= 5300; ms += 16) { ui.now = (uint32_t)ms; m2k_frame(ui.now); }
+        m2k_button(B_SEQ, 0); m2k_button(B_REC, 0);
+        m2k_pattern_t fr;
+        pat_init(&fr, "X");
+        kit_default(&fr, 1, q->machine[1]);
+        int init = !memcmp(q->kit[1], fr.kit[1], 8) && !(q->step[1][3].flags & ST_TRIG) && !sq.rec;
+        CHECK(gone && nofill && norec && back && init,
+              "REC held and SEQ: the track's steps cleared (REC then neither arms nor fills), again undone, held a second its sound INIT too");
     }
     /* speeds: a track at 2x plays its steps twice as often as one at 1x, at 1/2x half as often, at 3/4x three quarters;
      * a new pattern sets them going from its first step; SEQ held, KNOB 2 is the track's speed */

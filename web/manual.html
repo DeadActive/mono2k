@@ -90,11 +90,11 @@
   <p>Each of the six tracks plays one machine: a sine, two kinds of noise, a chip, three kinds of FM, a supersaw and a pulse, a chord, digital waves, a voice, and three FX machines that work on the track before them. Every track has the Monomachine's chain after its machine: an amp envelope, a band of filters, distortion, an EQ, rate reduction and a delay of its own, then MONO2K's bits, wavefold and XOR.</p>
   <p>The sequencer is the Monomachine's, with the modern Elektron conditions: each step trigs the amp, the filter's envelope and the LFOs independently, carries locks, a chance or an A:B condition, and up to four ratchets.</p>
   <div class="callout"><b>Prototype</b><p>The firmware runs in the browser, and on its author's FM-1 while it is tried there: see <a href="#status">Status and safety</a>.</p></div>
-  <div class="callout"><b>Finding a function</b><p>On the FM-1, hold GLO, HOME or EDIT for a moment: the screen lists what each does held with the other buttons and the keys. Every combination is on one page here: <a href="#commands">Commands</a>; the common jobs step by step: <a href="#workflows">Workflows</a>.</p></div>
+  <div class="callout"><b>Finding a function</b><p>On the FM-1, hold GLO, HOME, EDIT, SEQ, FX or LFO for a moment: the screen lists what each does held with the other buttons and the keys; hold any other button a second for its card. Every combination is on one page here: <a href="#commands">Commands</a>; the common jobs step by step: <a href="#workflows">Workflows</a>.</p></div>
   <h2>Quick links</h2>
   <div class="cards">
     <a href="#commands"><b>Commands</b><span>Every button and combination, on one page</span></a>
-    <a href="#workflows"><b>Workflows</b><span>New patterns, clearing, sounds, pads, bars</span></a>
+    <a href="#workflows"><b>Workflows</b><span>New patterns, clearing, undo, sounds, live, pads, bars</span></a>
     <a href="#the-panel"><b>The panel</b><span>What every key, button and knob does</span></a>
     <a href="#machines"><b>Machines</b><span>The fifteen machines and their eight knobs</span></a>
     <a href="#steps"><b>Sequencer</b><span>Steps, notes, pages and length</span></a>
@@ -146,49 +146,69 @@
 
 <article id="commands" data-group="Getting started">
   <h1>Commands</h1>
-  <p class="sub">Every button and combination on one page. On the FM-1, hold GLO, HOME or EDIT for a moment and the screen lists its own.</p>
+  <p class="sub">Every button and combination on one page. On the FM-1, hold GLO, HOME, EDIT, SEQ, FX or LFO for a moment and the screen shows its own; hold any other button a second for its card.</p>
   <div class="figs">
     <figure class="fig"><canvas data-scr="27_glo_help"></canvas><figcaption>GLO held a moment: what it does with each button.</figcaption></figure>
-    <figure class="fig"><canvas data-scr="29_home_held"></canvas><figcaption>HOME held: the bank as the white keys pick it; the open pattern inverted, INIT ones dotted.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="29_home_held"></canvas><figcaption>HOME held: the bank's 16 slots as the white keys pick them, the one picked last named over them; the open one inverted, INIT ones dotted.</figcaption></figure>
     <figure class="fig"><canvas data-scr="29c_seq_held"></canvas><figcaption>SEQ held: the step tools on the white keys, the sequencer on the knobs.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="29f_perform"></canvas><figcaption>FX held: PERFORM, the bus's effects on the black keys while you hold them.</figcaption></figure>
   </div>
+  <h2>Six rules</h2>
+  <ol class="steps">
+    <li><b>REC copies, PLAY pastes, SEQ clears.</b> The button you hold says what: GLO the pattern (in GRID, the track's steps), HOME the patterns you pick, EDIT the track's sound, a step held in GRID that step.</li>
+    <li><b>Again undoes.</b> The same paste or clear a second time puts things back (on one pattern; several at once stay done). GLO + OCT− undoes the last edit, GLO + OCT+ redoes it.</li>
+    <li><b>Hold the clear for INIT.</b> Keep SEQ down a second: a ring fills on the screen and the pattern (or the patterns, or the track) goes INIT.</li>
+    <li><b>Only the flash asks.</b> Writing a sound over another, wiping every pattern, the demos back and loading a project ask first: OCT+ YES, OCT− NO.</li>
+    <li><b>Tap for the page, hold for the layer.</b> Double-tap GLO, SEQ, HOME or FX and the layer stays without holding (below).</li>
+    <li><b>Held is for now.</b> Solos, PERFORM's effects and LFO's knobs last while held; mutes, tools and edits stay.</li>
+  </ol>
   <h2>Buttons alone</h2>
   <table>
-    <thead><tr><th>Button</th><th>Does</th></tr></thead>
+    <thead><tr><th>Button</th><th>Tapped</th><th>Held</th></tr></thead>
     <tbody>
-      <tr><td>HOME, EDIT, ENV, SEL, FX, LFO, ARP, GLO</td><td>The pages: HOME, SYN, AMP, FILT, FX, LFO, ARP, GLO. Pressed again, the page's next page.</td></tr>
-      <tr><td>SEQ</td><td>Tapped: GRID, the keys become the steps; again, the keys play notes. Held: the SEQ layer (below).</td></tr>
-      <tr><td>PLAY</td><td>Start, stop.</td></tr>
-      <tr><td>REC</td><td>Tapped: record (playing: live; stopped: step entry). Held: FILL.</td></tr>
-      <tr><td>SAVE</td><td>Tapped: keep the pattern. Held: keep the project.</td></tr>
-      <tr><td>OCT− OCT+</td><td>The octave; in GRID the page (the bar); a held step's ratchet.</td></tr>
+      <tr><td>HOME</td><td>HOME</td><td>Pick patterns (below)</td></tr>
+      <tr><td>EDIT</td><td>SYN, then its next pages</td><td>The track's sound (below)</td></tr>
+      <tr><td>ENV, SEL, ARP</td><td>AMP, FILT, ARP; pressed again, the next page</td><td>A second: its card</td></tr>
+      <tr><td>FX</td><td>FX, then its next pages</td><td>PERFORM (below)</td></tr>
+      <tr><td>LFO</td><td>LFO, then its next pages</td><td>The knobs come back when let go (below)</td></tr>
+      <tr><td>GLO</td><td>GLO, then its next pages</td><td>FUNC: the combinations below</td></tr>
+      <tr><td>SEQ</td><td>GRID: the keys become the steps; again, notes</td><td>The step tools (below)</td></tr>
+      <tr><td>PLAY</td><td>Start, stop</td><td>A second: its card</td></tr>
+      <tr><td>REC</td><td>Record (playing: live; stopped: step entry)</td><td>FILL; with SEQ, clear the track (below)</td></tr>
+      <tr><td>SAVE</td><td>Keep the pattern</td><td>Keep the project</td></tr>
+      <tr><td>OCT− OCT+</td><td>The octave; in GRID the page; a held step's ratchet. In a question, NO and YES</td><td>OCT− and a knob: that knob back to its default. A second alone: its card</td></tr>
     </tbody>
   </table>
   <h2>Hold GLO and press</h2>
   <table>
     <thead><tr><th>With GLO</th><th>Does</th></tr></thead>
     <tbody>
-      <tr><td>REC / PLAY</td><td>Copy / paste: the pattern on HOME, the track's sound on a track's page.</td></tr>
-      <tr><td>SEQ</td><td>Clear the steps, the sounds kept (on HOME the pattern's, on a page the track's). Again within three seconds: INIT, the pattern blank or the track's sound afresh.</td></tr>
+      <tr><td>REC / PLAY</td><td>Copy / paste the pattern; in GRID, the track's steps.</td></tr>
+      <tr><td>SEQ</td><td>Clear the pattern's steps, its sounds kept; in GRID, the track's. Held a second: INIT (in GRID the track's sound too). Again: undone.</td></tr>
+      <tr><td>OCT− / OCT+</td><td>UNDO / REDO the last edit.</td></tr>
       <tr><td>SAVE</td><td>Reload the saved pattern.</td></tr>
       <tr><td>EDIT</td><td>The sound library (SYN &gt; SND).</td></tr>
       <tr><td>ARP</td><td>PADS on or off (below).</td></tr>
-      <tr><td>White keys 1–6</td><td>Mute or unmute tracks 1–6.</td></tr>
-      <tr><td>OCT+ / OCT−</td><td>In step entry: a rest, a step back.</td></tr>
+      <tr><td>White 1–6</td><td>Mute or unmute tracks 1–6.</td></tr>
+      <tr><td>White 7</td><td>FILL for the pattern's next loop, and only it.</td></tr>
+      <tr><td>White 8</td><td>Tap the tempo: two taps or more, on the beat.</td></tr>
+      <tr><td>White 9–14</td><td>Solo tracks 1–6 while held; several add up.</td></tr>
+      <tr><td>White 15</td><td>Unmute every track.</td></tr>
+      <tr><td>SELECT</td><td>The tempo.</td></tr>
     </tbody>
   </table>
   <h2>Hold HOME and press</h2>
   <table>
     <thead><tr><th>With HOME</th><th>Does</th></tr></thead>
     <tbody>
-      <tr><td>White keys 1–16</td><td>Pick the bank's patterns: the first opens (or is queued, playing), the others are picked with it. The screen shows the bank.</td></tr>
-      <tr><td>OCT− / OCT+</td><td>The bank, A to D.</td></tr>
-      <tr><td>SEQ</td><td>Clear the picked patterns' steps (the open one if none), the sounds kept. Again: INIT them.</td></tr>
+      <tr><td>White 1–16</td><td>Pick the bank's patterns: each opens (playing: queued for the bar's end) and is picked. The same key again before the bar: now.</td></tr>
+      <tr><td>Black 1–4</td><td>The bank, A to D (F#3 G#3 A#3 C#4).</td></tr>
+      <tr><td>SEQ</td><td>Clear the picked patterns' steps (the open one if none), the sounds kept. Held a second: INIT them.</td></tr>
       <tr><td>REC / PLAY</td><td>Copy the open pattern / paste it into the picked ones.</td></tr>
     </tbody>
   </table>
   <h2>Hold SEQ and press</h2>
-  <p>The white keys 1–8 are tools for the track in view, over the pattern's length (its locks move with its steps); the knobs are the sequencer's while SEQ is held.</p>
+  <p>The white keys 1–8 are tools for the track in view, over the pattern's length (its locks move with its steps); the knobs are the sequencer's while SEQ is held. GLO + OCT− undoes a tool.</p>
   <table>
     <thead><tr><th>With SEQ</th><th>Does</th></tr></thead>
     <tbody>
@@ -197,24 +217,75 @@
       <tr><td>White 3 / 4</td><td>SHIFT them a step earlier / later, round the length.</td></tr>
       <tr><td>White 5</td><td>RANDOM: a quarter of the steps, at the track's last note.</td></tr>
       <tr><td>White 6</td><td>LEN ×2: the pattern twice as long, the new bars a copy.</td></tr>
-      <tr><td>White 7 / 8</td><td>COPY the track's steps / PASTE them onto the track in view (pick another with SELECT first).</td></tr>
-      <tr><td>KNOB 1–4</td><td>LEN, SWING, ACCENT, TEMPO.</td></tr>
+      <tr><td>White 7</td><td>COOK: a few of its notes moved a tone, a third, a fourth or a fifth.</td></tr>
+      <tr><td>White 8</td><td>HALF: the pattern half as long (the steps after it kept).</td></tr>
+      <tr><td>REC / PLAY</td><td>Copy the track's steps / paste them onto the track in view (pick another with SELECT first).</td></tr>
+      <tr><td>KNOB 1–4</td><td>LEN; SPEED, the track's own (1/8×, 1/4×, 1/2×, 3/4×, 1×, 3/2×, 2×); SWING; TEMPO.</td></tr>
+      <tr><td>ALGORITHM</td><td>The accent's amount.</td></tr>
     </tbody>
   </table>
   <h2>Hold EDIT and press</h2>
   <table>
     <thead><tr><th>With EDIT</th><th>Does</th></tr></thead>
     <tbody>
-      <tr><td>SEQ</td><td>INIT the track's sound: its machine as it starts.</td></tr>
+      <tr><td>SEQ</td><td>INIT the track's sound: its machine as it starts. Again: undone.</td></tr>
       <tr><td>SAVE</td><td>Keep the track's sound in the library's first INIT slot.</td></tr>
       <tr><td>REC / PLAY</td><td>Copy / paste the track's sound.</td></tr>
     </tbody>
   </table>
+  <h2>Hold REC and press</h2>
+  <table>
+    <thead><tr><th>With REC</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td>SEQ</td><td>Clear the track in view's steps, in KEYS as in GRID: a take you don't want, gone to record again. Held a second: its sound INIT too. Again: undone. REC's release then neither records nor fills.</td></tr>
+    </tbody>
+  </table>
+  <h2>Hold FX: PERFORM</h2>
+  <p>The black keys are the bus's effects while you hold them; the white keys go on playing the track. The knobs are the bus's GLCH, TAPE, ADPC and DRIV, and what you turn stays.</p>
+  <table>
+    <thead><tr><th>Black key</th><th>Effect</th></tr></thead>
+    <tbody>
+      <tr><td>1–4</td><td>Repeat the last 1/4, 1/8, 1/16 or 1/32 of a bar.</td></tr>
+      <tr><td>5 / 6</td><td>REVERSE; STOP, a tape stop.</td></tr>
+      <tr><td>7 / 8 / 9 / 10</td><td>STUTTER; CRUSH; WOW; DRIVE.</td></tr>
+      <tr><td>11</td><td>KILL: silence, at once and clean.</td></tr>
+    </tbody>
+  </table>
+  <h2>Hold LFO</h2>
+  <p>What the knobs move while LFO is held comes back when it is let go: a sweep for a bar, a filter opened for a fill. OCT+ while it is held keeps the change.</p>
+  <h2>A step held in GRID</h2>
+  <table>
+    <thead><tr><th>Hold a step and</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td>KNOB 1–4</td><td>Lock the page's parameters to it.</td></tr>
+      <tr><td>OCT− and a knob</td><td>Take that knob's lock away.</td></tr>
+      <tr><td>REC / PLAY</td><td>Copy it (several held: all of them) / paste onto it.</td></tr>
+      <tr><td>SEQ</td><td>Clear its locks; the trig stays.</td></tr>
+      <tr><td>Black 1–5</td><td>Its trig type: ALL, AMP, FILTER, LFO, NONE.</td></tr>
+      <tr><td>Black 6–11</td><td>Its condition: 100%, 50%, 1:2, 1:4, FILL, !FIL.</td></tr>
+    </tbody>
+  </table>
+  <p>The encoders too: <a href="#steps">Patterns and steps</a>.</p>
+  <h2>Double-tap: a layer latched</h2>
+  <div class="figs">
+    <figure class="fig"><canvas data-scr="29i_seq_latched"></canvas><figcaption>SEQ double-tapped: its tools and knobs stay; its button blinks.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="29j_play_card"></canvas><figcaption>PLAY held a second alone: its card.</figcaption></figure>
+  </div>
+  <p>Tap GLO, SEQ, HOME or FX twice, quickly: the second tap undoes the first (the page, GRID) and the layer stays as if you held it. Its button blinks and its map says LATCHED. The keys and the knobs are the layer's; the button combinations (copy, paste, clear) still want the button held, so PLAY, REC, SAVE and the octaves do their own job meanwhile. Tap the button again to let go; any other page button lets go too. Tapping a page button slowly steps through its pages as before.</p>
+  <ul>
+    <li>GLO latched: mutes, solos, the fill and the tap tempo under one hand.</li>
+    <li>HOME latched: patterns picked and queued as you play.</li>
+    <li>FX latched: PERFORM with both hands on the keys.</li>
+    <li>SEQ latched: the tools and the sequencer's knobs.</li>
+  </ul>
+  <h2>Cards and lights</h2>
+  <p>Hold SEL, ENV, ARP, PLAY, OCT− or OCT+ a second, touching nothing else, and the screen shows what it does alone and with the others; letting go then does nothing more.</p>
+  <p>The keys light for the layer held: with GLO, white 1–6 for the tracks heard and 9–14 for those soloed; with HOME, the bank's patterns (lit used, the open one winking, the queued one blinking) and the bank on the black keys; with FX, the effects on; with SEQ, the eight tools. In GRID, steps with a trig are lit, the playhead too.</p>
   <h2>The keys</h2>
   <table>
     <thead><tr><th>Mode</th><th>White keys</th><th>Black keys</th></tr></thead>
     <tbody>
-      <tr><td>KEYS</td><td colspan="2">Play the track in view (REC: record it).</td></tr>
+      <tr><td>KEYS</td><td colspan="2">Play the track in view (REC: record it; stopped, step entry: EDIT a rest, PRESETS the cursor).</td></tr>
       <tr><td>GRID (SEQ)</td><td>The 16 steps of the page; hold one to edit it</td><td>T1–T6 the track, P1–P4 the page (held: the length), F#5 mute</td></tr>
       <tr><td>PADS (GLO + ARP)</td><td>1–6 and 9–14 hit tracks 1–6, each at its note (REC: written to the nearest step)</td><td>T1–T6 the track, F#5 mute</td></tr>
     </tbody>
@@ -223,10 +294,10 @@
   <table>
     <thead><tr><th>Where</th><th>Knob</th><th>Does</th></tr></thead>
     <tbody>
-      <tr><td>SYN &gt; SND</td><td>SLOT LOAD SAVE CAT</td><td>The sound library (<a href="#projects">Saving and projects</a>).</td></tr>
-      <tr><td>GLO &gt; SET</td><td>WIPE</td><td>Turned twice: every pattern INIT; the sound library kept.</td></tr>
-      <tr><td>GLO &gt; SET (FM-1)</td><td>DEMO</td><td>Turned twice: bank A's demos back in A01–A16; banks B–D kept.</td></tr>
-      <tr><td>GLO &gt; SET (browser)</td><td>PROJ LOAD</td><td>Pick a project and load it (turned twice).</td></tr>
+      <tr><td>SYN &gt; SND</td><td>SLOT LOAD SAVE CAT</td><td>The sound library (<a href="#projects">Saving and projects</a>). SAVE over a sound asks.</td></tr>
+      <tr><td>GLO &gt; SET</td><td>WIPE</td><td>Asks, then every pattern INIT; the sound library kept.</td></tr>
+      <tr><td>GLO &gt; SET (FM-1)</td><td>DEMO</td><td>Asks, then bank A's demos back in A01–A16; banks B–D kept.</td></tr>
+      <tr><td>GLO &gt; SET (browser)</td><td>PROJ LOAD</td><td>Pick a project with PROJ; LOAD asks, then loads it.</td></tr>
     </tbody>
   </table>
 </article>
@@ -236,7 +307,7 @@
   <p class="sub">The common jobs, step by step.</p>
   <h2>A new pattern from nothing</h2>
   <ol class="steps">
-    <li>Hold HOME, press OCT+ for bank B, and tap a white key: an INIT pattern opens.</li>
+    <li>Hold HOME, press black 2 (G#3) for bank B, and tap a white key: an INIT pattern opens.</li>
     <li>Press EDIT and turn ALGORITHM to choose each track's machine, or load sounds from the library (GLO + EDIT).</li>
     <li>Press SEQ, place trigs with the white keys, PLAY. SAVE keeps it.</li>
   </ol>
@@ -247,9 +318,15 @@
   </ol>
   <h2>Empty one pattern, several, or all</h2>
   <ol class="steps">
-    <li>One: hold HOME and press SEQ (the steps), SEQ again (INIT, the sounds too).</li>
-    <li>Several: hold HOME, tap their keys (OCT−/+ for the other banks), press SEQ, and SEQ again for INIT.</li>
-    <li>All: GLO &gt; SET, turn WIPE twice. On the FM-1 DEMO brings bank A's demos back.</li>
+    <li>One: hold GLO and press SEQ: the steps go, the sounds stay. Keep SEQ down a second for INIT. SEQ again puts it back.</li>
+    <li>One track: hold REC and tap SEQ: the track in view's steps go, the others stay.</li>
+    <li>Several: hold HOME, tap their keys (black 1–4 for the other banks), press SEQ; keep it down for INIT.</li>
+    <li>All: GLO &gt; SET, turn WIPE, OCT+ for YES. On the FM-1, DEMO brings bank A's demos back.</li>
+  </ol>
+  <h2>Undo a slip</h2>
+  <ol class="steps">
+    <li>GLO + OCT− undoes the last copy-paste, clear, INIT, reload or SEQ tool; GLO + OCT+ does it again.</li>
+    <li>A paste or a clear repeated undoes itself too.</li>
   </ol>
   <h2>Keep a sound, find it again</h2>
   <ol class="steps">
@@ -257,6 +334,18 @@
     <li>To file it under a category yourself: GLO + EDIT, turn CAT to one, pick an INIT slot with SLOT, turn SAVE.</li>
     <li>To load: GLO + EDIT, CAT to the kind you want, SLOT through them, turn LOAD.</li>
     <li>To start a track afresh: hold EDIT, press SEQ.</li>
+  </ol>
+  <h2>Put a knob back</h2>
+  <ol class="steps">
+    <li>Hold OCT− and turn the knob: it goes back to its machine's default.</li>
+    <li>In GRID with a step held, the same takes that knob's lock away from the step.</li>
+  </ol>
+  <h2>Play live with one hand</h2>
+  <ol class="steps">
+    <li>Double-tap GLO. White 1–6 mute, 9–14 solo while held, 7 fills the next loop, 8 taps the tempo; the keys light for the tracks heard.</li>
+    <li>Hold FX for PERFORM: a black key repeats, reverses, stops or kills the bus while held. Double-tap FX to keep it under both hands.</li>
+    <li>Hold LFO and sweep a knob: it comes back when you let go.</li>
+    <li>Tap the latched button again to let go.</li>
   </ol>
   <h2>Play the tracks as drum pads</h2>
   <ol class="steps">
@@ -271,8 +360,14 @@
   </ol>
   <h2>Move a track's beat around</h2>
   <ol class="steps">
-    <li>Hold SEQ: white 3 and 4 shift the track's steps a step earlier or later, white 2 plays them backwards, white 5 throws in a random quarter of the steps.</li>
-    <li>To give another track the same steps: hold SEQ, white 7 (COPY); turn SELECT to the other track; hold SEQ, white 8 (PASTE).</li>
+    <li>Hold SEQ: white 3 and 4 shift the track's steps a step earlier or later, white 2 plays them backwards, white 5 throws in a random quarter of the steps, white 7 moves a few notes.</li>
+    <li>To give another track the same steps: hold SEQ, press REC (copy); turn SELECT to the other track; hold SEQ, press PLAY (paste).</li>
+    <li>To run one track slower or faster than the rest: hold SEQ and turn KNOB 2 (3/4× against 1× for a lilt, 1/2× for a long line).</li>
+  </ol>
+  <h2>Vary the steps quickly</h2>
+  <ol class="steps">
+    <li>In GRID, hold a step (or several) and press a black key: 1–5 its trig type, 6–11 its condition (50%, 1:2, 1:4, FILL, !FIL).</li>
+    <li>Hold REC while it plays for FILL, or GLO + white 7 for a fill on the next loop.</li>
   </ol>
   <h2>Send your patterns to MONO2K</h2>
   <ol class="steps">
@@ -293,16 +388,16 @@
       <tr><td>EDIT</td><td>SYN</td><td>The track's machine: its knobs A–H.</td></tr>
       <tr><td>ENV</td><td>AMP</td><td>The amp envelope, distortion, volume, pan, portamento.</td></tr>
       <tr><td>SEL</td><td>FILT</td><td>The filters: base and width, resonance, the filter's envelope.</td></tr>
-      <tr><td>FX</td><td>FX</td><td>EQ and rate reduction, the delay, the destroy effects, the modulation effect.</td></tr>
-      <tr><td>LFO</td><td>LFO</td><td>Three LFOs, two pages each.</td></tr>
+      <tr><td>FX</td><td>FX</td><td>EQ and rate reduction, the delay, the destroy effects, the modulation effect. Held: PERFORM.</td></tr>
+      <tr><td>LFO</td><td>LFO</td><td>Three LFOs, two pages each. Held: the knobs come back when let go.</td></tr>
       <tr><td>ARP</td><td>ARP</td><td>The track's arpeggiator.</td></tr>
       <tr><td>GLO</td><td>GLO</td><td>Tempo, the lofi bus, the reverb, settings. Held: the editing functions (copy, paste, clear, reload, mute).</td></tr>
-      <tr><td>HOME</td><td>HOME</td><td>The pattern in six lanes; level, pitch, tempo and swing.</td></tr>
-      <tr><td>SEQ</td><td>GRID</td><td>The keys play notes, or set the steps, sixteen at a time.</td></tr>
+      <tr><td>HOME</td><td>HOME</td><td>The pattern in six lanes; level, pitch, tempo and swing. Held: pick patterns and banks.</td></tr>
+      <tr><td>SEQ</td><td>GRID</td><td>The keys play notes, or set the steps, sixteen at a time. Held: the step tools and the sequencer's knobs.</td></tr>
       <tr><td>PLAY</td><td></td><td>Starts and stops the sequencer.</td></tr>
       <tr><td>REC</td><td></td><td>A tap arms recording (live while playing, step entry while stopped). Held: FILL.</td></tr>
       <tr><td>SAVE</td><td></td><td>Keeps the pattern; held, the whole project.</td></tr>
-      <tr><td>OCT− OCT+</td><td></td><td>The keyboard's octave; in GRID, the page of steps.</td></tr>
+      <tr><td>OCT− OCT+</td><td></td><td>The keyboard's octave; in GRID, the page of steps. In a question, NO and YES.</td></tr>
     </tbody>
   </table>
   <h2>Knobs</h2>
@@ -408,7 +503,11 @@
       <tr><td>PRESETS</td><td>Pick its condition (<a href="#conditions">Conditions and ratchets</a>).</td></tr>
       <tr><td>OCT− OCT+</td><td>Set its ratchet, one to four hits.</td></tr>
       <tr><td>KNOB 1–4</td><td>Lock the page's parameters to it (<a href="#locks">Parameter locks</a>).</td></tr>
+      <tr><td>OCT− held and a knob</td><td>Take that knob's lock away.</td></tr>
       <tr><td>MASTER</td><td>Choose its trig type (<a href="#trig-types">Trig types</a>).</td></tr>
+      <tr><td>Black 1–5</td><td>Its trig type at once: ALL, AMP, FILTER, LFO, NONE.</td></tr>
+      <tr><td>Black 6–11</td><td>Its condition at once: 100%, 50%, 1:2, 1:4, FILL, !FIL.</td></tr>
+      <tr><td>REC / PLAY / SEQ</td><td>Copy it / paste onto it / clear its locks.</td></tr>
     </tbody>
   </table>
   <p>Hold several steps at once and the edit goes to all of them.</p>
@@ -499,9 +598,9 @@
   <h1>Recording</h1>
   <p class="sub">Live while the pattern plays, or step by step while it is stopped.</p>
   <h2>Live</h2>
-  <p>With the keys playing notes (not GRID), press PLAY and tap REC. Notes you play land on the nearest step; a hard key records an accent. Knobs turned while recording lock their value to the step just played. Tap REC again to stop recording.</p>
+  <p>With the keys playing notes (not GRID), press PLAY and tap REC. Notes you play land on the nearest step; a hard key records an accent. Knobs turned while recording lock their value to the step just played. Tap REC again to stop recording. A take you don't want: hold REC and tap SEQ, and the track's steps are gone (SEQ again brings them back).</p>
   <h2>Step entry</h2>
-  <p>With the keys playing notes and the sequencer stopped, tap REC: STEP ENTRY. Each note you play is written to the next step and the cursor moves on. GLO + OCT+ leaves a rest, GLO + OCT− goes back a step. Tap REC to leave.</p>
+  <p>With the keys playing notes and the sequencer stopped, tap REC: STEP ENTRY. Each note you play is written to the next step and the cursor moves on. EDIT leaves a rest; PRESETS moves the cursor back and on. Tap REC to leave.</p>
   <h2>FILL</h2>
   <p>Hold REC while playing for FILL: steps with the FILL condition play, steps with !FIL rest.</p>
 </article>
@@ -539,7 +638,7 @@
       <tr><td>TIME</td><td>BPM the tempo, SWNG the swing, LEN the pattern's length, ACNT how hard an accent plays.</td></tr>
       <tr><td>GLITCH</td><td>TAPE wow and flutter, ADPC a 4-bit ADPCM crunch, GLCH the chance of a beat repeat each step, SIZE the slice it repeats.</td></tr>
       <tr><td>VERB</td><td>DCAY and DAMP the SPU-style reverb at 22 kHz; HISS adds hiss and dust; DRIV drives the bus into its soft clip.</td></tr>
-      <tr><td>SET</td><td>SCRN the screen light or dark; PROJ and LOAD pick a project and load it (turn LOAD twice).</td></tr>
+      <tr><td>SET</td><td>SCRN the screen light or dark. In the browser PROJ and LOAD pick a project and load it, WIPE makes every pattern INIT; on the FM-1 WIPE and DEMO (bank A's demos back). Each asks first: OCT+ YES, OCT− NO.</td></tr>
     </tbody>
   </table>
   <p>The bus's settings belong to the pattern, so each part of a song can be worn differently.</p>
@@ -552,19 +651,19 @@
   <h2>Patterns</h2>
   <p>SAVE keeps the pattern as it is; GLO + SAVE goes back to the last saved version. What you play is your working copy: you can change it freely and keep it or not.</p>
   <h2>Projects</h2>
-  <p>Hold SAVE to keep the whole project. GLO &gt; SET picks a project (PROJ) and loads it (LOAD, turned twice). The first project, DEMO, holds the factory's bank A.</p>
+  <p>Hold SAVE to keep the whole project. GLO &gt; SET picks a project (PROJ) and loads it (LOAD, then OCT+ for YES). The first project, DEMO, holds the factory's bank A.</p>
   <h2>Copy, paste, clear</h2>
   <table>
-    <thead><tr><th>Hold GLO and press</th><th>On HOME</th><th>On a track's page</th></tr></thead>
+    <thead><tr><th>Press</th><th>Holding GLO</th><th>GLO, in GRID</th><th>Holding EDIT</th></tr></thead>
     <tbody>
-      <tr><td>REC</td><td>Copy the pattern</td><td>Copy the track's sound</td></tr>
-      <tr><td>PLAY</td><td>Paste the pattern</td><td>Paste the sound</td></tr>
-      <tr><td>SEQ</td><td>Clear the pattern's trigs and locks; its sounds stay</td><td>Clear the track's; its sound stays</td></tr>
-      <tr><td>SAVE</td><td colspan="2">Reload the saved pattern</td></tr>
+      <tr><td>REC</td><td>Copy the pattern</td><td>Copy the track's steps</td><td>Copy the track's sound</td></tr>
+      <tr><td>PLAY</td><td>Paste the pattern</td><td>Paste the steps</td><td>Paste the sound</td></tr>
+      <tr><td>SEQ</td><td>Clear the pattern's trigs and locks; its sounds stay. Held a second: INIT</td><td>Clear the track's; held, its sound INIT too</td><td>INIT the sound</td></tr>
+      <tr><td>SAVE</td><td colspan="2">Reload the saved pattern</td><td>Keep the sound in the library</td></tr>
     </tbody>
   </table>
   <h2>A new pattern on the same sounds</h2>
-  <p>Clearing takes the steps away and leaves every sound: the machines, the knobs, the chain, the LFOs; clearing again soon after makes the pattern INIT. Holding HOME does the same to several patterns at once (<a href="#workflows">Workflows</a>).</p>
+  <p>Clearing takes the steps away and leaves every sound: the machines, the knobs, the chain, the LFOs; holding the clear a second makes the pattern INIT, and clearing again puts it back. GLO + OCT− undoes any of them. Holding HOME does the same to several patterns at once (<a href="#workflows">Workflows</a>).</p>
   <h2>The sound library</h2>
   <div class="figs">
     <figure class="fig"><canvas data-scr="25_syn_snd"></canvas><figcaption>SYN &gt; SND: the library's slots, each with its machine; SLOT picks one.</figcaption></figure>
@@ -576,7 +675,7 @@
     <tbody>
       <tr><td>SLOT</td><td>Picks a slot among those shown; the list shows its neighbours.</td></tr>
       <tr><td>LOAD</td><td>Turned: the slot's sound onto the track in view. An INIT slot starts the track's machine afresh.</td></tr>
-      <tr><td>SAVE</td><td>Turned: the track's sound into the slot, named after the pattern and the track. Into an INIT slot at once; over a sound, turn it again within two seconds.</td></tr>
+      <tr><td>SAVE</td><td>Turned: the track's sound into the slot, named after the pattern and the track. Into an INIT slot at once; over a sound it asks first: OCT+ YES, OCT− NO.</td></tr>
       <tr><td>CAT</td><td>Shows one category (and the INIT slots, to save into); ALL shows every slot. A sound saved while a category is shown takes it; under ALL, MONO2K guesses one from the machine and its notes.</td></tr>
     </tbody>
   </table>
@@ -657,7 +756,7 @@
 </footer>
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=11"></script>
-<script src="manual.js?v=17"></script>
+<script src="changelog.js?v=12"></script>
+<script src="manual.js?v=18"></script>
 </body>
 </html>

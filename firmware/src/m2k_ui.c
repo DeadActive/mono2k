@@ -426,7 +426,13 @@ static struct {
     uint32_t tap_t[4];                 /* tap tempo's last taps (GLO + white 8) */
     uint8_t ntap;
     uint8_t octd, octd_used;           /* OCT- held: a knob turned meanwhile takes its lock away (or its value home) */
+    uint8_t latch;                     /* a layer double-tapped open (its button + 1): GLO, SEQ, HOME, FX */
+    uint8_t dt_b, dt_page, dt_sub, dt_grid, dt_pads;   /* the last clean tap (+ 1) and what it changed */
+    uint32_t dt_t;
+    uint8_t card, card_used;           /* a button held alone (+ 1) for its help card; something else touched */
+    uint32_t card_t0;
     uint32_t rec_t0, save_t0;
+    uint8_t rec_used;                  /* REC held and SEQ pressed: its release neither arms nor fills */
     uint8_t save_fired, proj_sel, snd_sel, snd_cat;   /* SYN > SND's slot, the category shown (0 all) */
     uint8_t pkey, pfired, cursor;      /* a page key held in GRID (+1), its hold done; step entry's step */
     uint32_t pkey_t0;
@@ -567,9 +573,10 @@ static void sound_load(m2k_pattern_t *p)
 
 /* the value a knob shows: a held step's lock, or the kit */
 /* the knob k turns: the page's, or while SEQ is held the sequencer's (LEN, SWING, ACCENT, TEMPO) */
-static int seq_layer(void) { return ui.btn[B_SEQ] && !ui.btn[B_GLO] && !ui.btn[B_HOME] && !ui.btn[B_EDIT]; }
-static int perf_layer(void) { return ui.btn[B_FX] && !ui.btn[B_GLO] && !ui.btn[B_HOME] && !ui.btn[B_EDIT]; }
-static int mom_layer(void) { return ui.btn[B_LFO] && !ui.btn[B_GLO] && !ui.btn[B_HOME] && !ui.btn[B_EDIT]; }
+static int held(int b) { return ui.btn[b] || ui.latch == b + 1; }    /* (a latched layer is held) */
+static int seq_layer(void) { return held(B_SEQ) && !held(B_GLO) && !held(B_HOME) && !ui.btn[B_EDIT]; }
+static int perf_layer(void) { return held(B_FX) && !held(B_GLO) && !held(B_HOME) && !ui.btn[B_EDIT]; }
+static int mom_layer(void) { return ui.btn[B_LFO] && !held(B_GLO) && !held(B_HOME) && !ui.btn[B_EDIT]; }
 static int knob_at(int k)
 {
     const uint8_t SEQ_K[4] = {GL(G_LEN), (uint8_t)GL(G_SPD1 + ui.trk), GL(G_SWNG), GL(G_TMPO)};   /* (the track's speed) */
@@ -883,9 +890,10 @@ void m2k_key(int k, int down)
 {
     if (k < 0 || k >= M2K_KEYS) return;
     ui.keys[k] = (uint8_t)down;
+    ui.card_used = 1;
     m2k_pattern_t *p = PAT(cur_pat);
     int w = ui.kw[k], b = ui.kb[k];
-    if (ui.btn[B_GLO] && w >= 0) {     /* GLO + white: 1-6 mute, 7 fill next loop, 8 tap tempo, 9-14 solo, 15 unmute */
+    if (held(B_GLO) && w >= 0) {       /* GLO + white: 1-6 mute, 7 fill next loop, 8 tap tempo, 9-14 solo, 15 unmute */
         ui.glo_used = 1;
         if (w >= 8 && w < 8 + M2K_TRACKS) {         /* solo while held, several together */
             if (down) sq.solo |= (uint8_t)(1u << (w - 8)); else sq.solo &= (uint8_t)~(1u << (w - 8));
@@ -920,7 +928,7 @@ void m2k_key(int k, int down)
         ui.seq_used = 1;
         return;
     }
-    if (ui.btn[B_HOME] && !ui.btn[B_GLO]) {   /* HOME held: the white keys the bank's 16 patterns, the black 1-4 the bank */
+    if (held(B_HOME) && !held(B_GLO)) {       /* HOME held: the white keys the bank's 16 patterns, the black 1-4 the bank */
         if (!down) return;
         ui.hold_used = 1;
         if (b >= 0 && b < M2K_BANKS) {
@@ -1278,7 +1286,7 @@ static void verb(int noun, int v)
 static void ring_tick(void)
 {
     if (!ring.t0 || ring.done) return;
-    int still = ui.btn[B_SEQ] && (ring.noun == N_PICK ? ui.btn[B_HOME] : ui.btn[B_GLO]);
+    int still = ui.btn[B_SEQ] && (ring.noun == N_PICK ? ui.btn[B_HOME] : ui.btn[B_GLO] || ui.btn[B_REC]);
     if (!still) { ring.t0 = 0; return; }
     if (ui.now - (ring.t0 & ~1u) < 1000) return;
     ring.done = 1;
@@ -1361,12 +1369,83 @@ static void sound_keep(void)
     dirty = 1;
 }
 
-static int held(int b) { return ui.btn[b]; }
+static const char *const BTN_N[B_COUNT] = {"FX", "SEL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE", "ARP", "SEQ",
+                                            "PLAY", "REC", "OCT-", "OCT+"};
+
+/* double-tap GLO, SEQ, HOME or FX: its keys and knobs stay as if it were held, over the page the first tap left (the
+ * button combos still want it held: PLAY, REC, SAVE and the octaves are themselves meanwhile); its button again lets
+ * it go, and so does any other page button */
+static void latch_off(void)
+{
+    if (!ui.latch) return;
+    int b = ui.latch - 1;
+    ui.latch = 0;
+    if (b == B_FX) for (int k = 0; k < PF_COUNT; k++) if (perf.on[k]) bus_perform(k, 0);
+    char a[12];
+    s_cpy(s_cpy(a, BTN_N[b]), " LET GO");
+    toast(a, 0);
+}
+/* a press of the four: 1 when the latch took it (opened, or let go), and it does nothing else */
+static int latch_press(int b)
+{
+    if (ui.latch == b + 1) { latch_off(); return 1; }
+    if (ui.dt_b == b + 1 && ui.now - ui.dt_t < 250) {   /* the second tap: the first undone, the layer kept */
+        ui.dt_b = 0;
+        ui.page = ui.dt_page;
+        ui.sub = ui.dt_sub;
+        ui.grid = ui.dt_grid;
+        ui.pads = ui.dt_pads;
+        ui.nheld = 0;
+        latch_off();
+        ui.latch = (uint8_t)(b + 1);
+        char a[16], o[20];
+        s_cpy(s_cpy(a, BTN_N[b]), " LATCHED");
+        s_cpy(s_cpy(s_cpy(o, "TAP "), BTN_N[b]), ": LET GO");
+        toast(a, o);
+        start_trans(150);
+        return 1;
+    }
+    ui.dt_b = 0;
+    ui.dt_page = ui.page;
+    ui.dt_sub = ui.sub;
+    ui.dt_grid = ui.grid;
+    ui.dt_pads = ui.pads;
+    return 0;
+}
+static void latch_tapped(int b, uint32_t hd) { if (hd < 250) { ui.dt_b = (uint8_t)(b + 1); ui.dt_t = ui.now; } }
+static int latch_frees(int b)
+{
+    int l = ui.latch - 1;
+    return ui.latch && b != l && b != B_SAVE && b != B_PLAY && b != B_REC && b != B_OCTD && b != B_OCTU;
+}
+
+/* SEL ENV ARP PLAY OCT- OCT+ held a second with nothing else touched: a card of what they do; the release then
+ * does nothing */
+static int card_of(int b) { return b == B_SEL || b == B_ENV || b == B_ARP || b == B_PLAY || b == B_OCTD || b == B_OCTU; }
+static int card_up(void)
+{
+    return ui.card && !ui.card_used && ui.btn[ui.card - 1] && ui.now - ui.card_t0 >= 1000;
+}
+static void card_track(int b, int down)
+{
+    if (!down) return;
+    int other = 0;
+    for (int i = 0; i < B_COUNT; i++) if (i != b && ui.btn[i]) other = 1;
+    for (int k = 0; k < M2K_KEYS; k++) if (ui.keys[k]) other = 1;
+    ui.card_used = 1;
+    if (!other && !ui.latch && !ask.kind && card_of(b)) { ui.card = (uint8_t)(b + 1); ui.card_t0 = ui.now; ui.card_used = 0; }
+}
 
 void m2k_button(int b, int down)
 {
     if (b < 0 || b >= B_COUNT) return;
     int was = ui.btn[b];
+    if (!down && ui.card == b + 1) {               /* its card was read: nothing more */
+        int shown = card_up();
+        ui.card = 0;
+        if (shown) { ui.btn[b] = 0; if (b == B_OCTD) ui.octd = 0; return; }
+    }
+    card_track(b, down);
     ui.btn[b] = (uint8_t)down;
     if (ask.kind && down) {                        /* a question open: OCT+ YES, OCT- NO, anything else NO */
         ask_answer(b == B_OCTU);
@@ -1374,9 +1453,10 @@ void m2k_button(int b, int down)
         if (b == B_OCTU || b == B_OCTD) return;
         ui.btn[b] = 1;
     }
+    if (down && latch_frees(b)) latch_off();
     /* GLO held (FUNC): the verbs on the pattern (the track's steps in GRID); OCT- UNDO, OCT+ REDO; SAVE reload; EDIT
      * the sound library; ARP pads */
-    if (b != B_GLO && held(B_GLO) &&
+    if (b != B_GLO && ui.btn[B_GLO] &&          /* (the combos want GLO itself held, latched or not) */
         (b == B_REC || b == B_PLAY || b == B_SEQ || b == B_SAVE || b == B_EDIT || b == B_ARP || b == B_OCTD || b == B_OCTU)) {
         if (!down) return;
         ui.glo_used = 1;
@@ -1399,17 +1479,17 @@ void m2k_button(int b, int down)
     }
     /* HOME held: the verbs on the patterns picked (the white keys pick them, the black 1-4 the bank); EDIT held: on the
      * track's sound, SAVE keeps it in the library */
-    if (!held(B_GLO) && (held(B_HOME) || held(B_EDIT)) && b != B_HOME && b != B_EDIT &&
+    if (!ui.btn[B_GLO] && (ui.btn[B_HOME] || ui.btn[B_EDIT]) && b != B_HOME && b != B_EDIT &&
         (b == B_SEQ || b == B_REC || b == B_PLAY || b == B_SAVE)) {
         if (!down) return;
         ui.hold_used = 1;
-        int noun = held(B_HOME) ? N_PICK : N_SND;
+        int noun = ui.btn[B_HOME] ? N_PICK : N_SND;
         if (b == B_SAVE) { if (noun == N_SND) sound_keep(); return; }
         verb(noun, b == B_REC ? V_COPY : b == B_PLAY ? V_PASTE : V_CLEAR);
         return;
     }
     /* SEQ held: REC / PLAY copy and paste the track's steps */
-    if (seq_layer() && b != B_SEQ && (b == B_REC || b == B_PLAY)) {
+    if (ui.btn[B_SEQ] && seq_layer() && b != B_SEQ && (b == B_REC || b == B_PLAY)) {
         if (!down) return;
         ui.seq_used = 1;
         verb(N_TRK, b == B_REC ? V_COPY : V_PASTE);
@@ -1419,6 +1499,17 @@ void m2k_button(int b, int down)
     if (ui.grid && ui.nheld && (b == B_REC || b == B_PLAY || b == B_SEQ)) {
         if (!down) return;
         verb(N_STEP, b == B_REC ? V_COPY : b == B_PLAY ? V_PASTE : V_CLEAR);
+        return;
+    }
+    /* REC held: SEQ clears the track in view's steps, in KEYS as in GRID (held a second, its sound INIT too; again,
+     * undone): what was just recorded, gone to record again */
+    if (b == B_SEQ && ui.btn[B_REC] && !ui.btn[B_GLO] && !ui.btn[B_HOME] && !ui.btn[B_EDIT]) {
+        if (!down) return;
+        ui.rec_used = 1;
+        sq.fill = 0;
+        ui.seq_t0 = 0;
+        ui.seq_used = 1;
+        verb(N_TRK, V_CLEAR);
         return;
     }
     if (b == B_OCTU && down && mom_layer()) { mom.keep = 1; ui.lay_used[1] = 1; toast("KEEP", "LET GO OF LFO"); return; }
@@ -1432,18 +1523,27 @@ void m2k_button(int b, int down)
     if (b != B_GLO && !down && !was) return;
     if (b == B_FX || b == B_LFO) {    /* a tap: the page; held: PERFORM (FX), the momentary knobs (LFO) */
         int i = b == B_LFO;
-        if (down) { ui.lay_t0[i] = ui.now | 1u; ui.lay_used[i] = 0; return; }
+        if (down) {
+            if (!i && latch_press(b)) { ui.lay_t0[0] = 0; ui.lay_used[0] = 1; return; }
+            ui.lay_t0[i] = ui.now | 1u; ui.lay_used[i] = 0;
+            return;
+        }
         uint32_t hd = ui.lay_t0[i] ? ui.now - (ui.lay_t0[i] & ~1u) : 0;
         int used = ui.lay_used[i] || !ui.lay_t0[i];
         ui.lay_t0[i] = 0;
-        if (b == B_FX) { for (int k = 0; k < PF_COUNT; k++) if (perf.on[k]) bus_perform(k, 0); }
+        if (b == B_FX) { if (ui.latch != B_FX + 1) for (int k = 0; k < PF_COUNT; k++) if (perf.on[k]) bus_perform(k, 0); }
         else mom_release();
         if (used || hd >= 400) return;
         go(b == B_FX ? PG_FX : PG_LFO);
+        if (!i) latch_tapped(b, hd);
         return;
     }
     if (b == B_SEQ) {                  /* a tap: GRID (or out of it); held: the SEQ layer (its keys and knobs) */
-        if (down) { ui.seq_t0 = ui.now | 1u; ui.seq_used = 0; return; }
+        if (down) {
+            if (latch_press(b)) { ui.seq_t0 = 0; ui.seq_used = 1; return; }
+            ui.seq_t0 = ui.now | 1u; ui.seq_used = 0;
+            return;
+        }
         uint32_t hd = ui.seq_t0 ? ui.now - (ui.seq_t0 & ~1u) : 0;
         int was_used = ui.seq_used || !ui.seq_t0;
         ui.seq_t0 = 0;
@@ -1454,6 +1554,7 @@ void m2k_button(int b, int down)
         if (ui.spage * 16 >= seq_len()) ui.spage = 0;
         toast(ui.grid ? "GRID: OCT-/+ PAGES" : "KEYS", ui.grid ? "HOLD G#4-D#5: LENGTH" : "PLAY THE TRACK");
         start_trans(250);
+        latch_tapped(b, hd);
         return;
     }
     if (b == B_SAVE) {
@@ -1467,8 +1568,8 @@ void m2k_button(int b, int down)
         return;
     }
     if (b == B_REC) {                  /* a tap arms recording; held, it is FILL */
-        if (down) { ui.rec_t0 = ui.now | 1u; return; }
-        if (ui.now - ui.rec_t0 < 300) {
+        if (down) { ui.rec_t0 = ui.now | 1u; ui.rec_used = 0; return; }
+        if (!ui.rec_used && ui.now - ui.rec_t0 < 300) {
             sq.rec ^= 1;
             if (sq.rec && !sq.playing) {   /* stopped: step entry from the page in view */
                 ui.cursor = (uint8_t)(ui.spage * 16 < seq_len() ? ui.spage * 16 : 0);
@@ -1481,8 +1582,17 @@ void m2k_button(int b, int down)
         return;
     }
     if (b == B_GLO) {
-        if (down) { ui.glo_used = 0; ui.glo_t0 = ui.now | 1u; }
-        else if (!ui.glo_used) go(PG_GLO);
+        if (down) {
+            if (latch_press(b)) { ui.glo_used = 1; ui.glo_t0 = 0; return; }
+            ui.glo_used = 0; ui.glo_t0 = ui.now | 1u;
+        } else if (!ui.glo_used) {
+            go(PG_GLO);
+            if (ui.glo_t0) latch_tapped(b, ui.now - (ui.glo_t0 & ~1u));
+        }
+        return;
+    }
+    if (b == B_HOME && !down) {
+        if (!ui.hold_used && ui.hold_t0) latch_tapped(b, ui.now - (ui.hold_t0 & ~1u));
         return;
     }
     if (!down) return;
@@ -1500,6 +1610,7 @@ void m2k_button(int b, int down)
         go(PG_SYN); ui.hold_t0 = ui.now | 1u; ui.hold_used = 0;
         break;
     case B_HOME:
+        if (latch_press(b)) { ui.hold_t0 = ui.now | 1u; ui.hold_used = 1; break; }
         go(PG_HOME);
         ui.hold_t0 = ui.now | 1u; ui.hold_used = 0;
         ui.pbank = (uint8_t)(cur_pat / 16);
@@ -1574,11 +1685,12 @@ void m2k_tempo(int d)
 void m2k_encoder(int e, int d)
 {
     if (!d) return;
+    if (e != E_MASTER) ui.card_used = 1;          /* (the master is a pot: it can drift) */
     m2k_pattern_t *p = PAT(cur_pat);
     switch (e) {
     case E_SELECT:
         if (ui.grid && ui.nheld) { held_note(d); break; }
-        if (ui.btn[B_GLO]) {                           /* GLO + SELECT: the tempo */
+        if (held(B_GLO)) {                             /* GLO + SELECT: the tempo */
             ui.glo_used = 1;
             p->glob[G_TMPO] = (uint8_t)CLAMP(p->glob[G_TMPO] + d, 0, 255);
             char o[12], *e = s_int(o, (int)seq_bpm());
@@ -2624,10 +2736,17 @@ static void boot(uint32_t t)
     }
 }
 
+/* a latched layer's map says so, at its top right */
+static void latch_mark(int x, int y, int w, int b)
+{
+    if (ui.latch != b + 1) return;
+    tag(x + w - 4 - (text_w(&F_S, "LATCHED", 1) + 6), y, "LATCHED", 0);
+}
+
 /* GLO held a moment alone: what it does with each, in a window over the page (its shadow two dots deep) */
 static void glo_help(void)
 {
-    if (!ui.btn[B_GLO] || !ui.glo_t0 || (!ui.glo_used && ui.now - (ui.glo_t0 & ~1u) < 350)) return;
+    if (ui.latch != B_GLO + 1 && (!ui.btn[B_GLO] || !ui.glo_t0 || (!ui.glo_used && ui.now - (ui.glo_t0 & ~1u) < 350))) return;
     if (ring.t0 && !ring.done) return;                 /* the ring has the stage */
     const int x = 3, y = STAGE_Y + 2, w = 232, h = 122;
     rect(x, y, w, h, 0);
@@ -2635,7 +2754,20 @@ static void glo_help(void)
     rect(x + w, y + 2, 2, h, 1);
     rect(x + 2, y + h, w, 2, 1);
     int tw = tag(x + 4, y + 4, "GLO", 1);
-    text(&F_S, x + 4 + tw + 6, y + 6, "HELD, AND", 1, 1);
+    text(&F_S, x + 4 + tw + 6, y + 6, ui.latch == B_GLO + 1 ? "THE KEYS:" : "HELD, AND", 1, 1);
+    if (ui.latch == B_GLO + 1) {                      /* latched: its keys (the combos want it held) */
+        tag(x + w - 4 - (text_w(&F_S, "LATCHED", 1) + 6), y + 4, "LATCHED", 0);
+        static const char *const K[12] = {"1-6", "MUTE", "9-14", "SOLO", "7", "FILL", "8", "TAP", "15", "ALL ON",
+                                          "SELECT", "BPM"};
+        for (int i = 0; i < 6; i++) {
+            int cx = x + 4 + (i & 1) * 110, cy = y + 22 + (i >> 1) * 16;
+            int kw = tag(cx, cy, K[2 * i], 0);
+            text(&F_S, cx + kw + 3, cy + 2, K[2 * i + 1], 1, 0);
+        }
+        text(&F_S, x + 4, y + 86, "HOLD GLO FOR ITS COMBOS,", 1, 0);
+        text(&F_S, x + 4, y + 97, "TAP IT TO LET GO", 1, 0);
+        return;
+    }
     static const char *const L[16] = {"REC", "COPY", "PLAY", "PASTE", "SEQ", "CLEAR", "SAVE", "RELOAD",
                                       "OCT-", "UNDO", "OCT+", "REDO", "EDIT", "SOUNDS", "ARP", "PADS"};
     for (int i = 0; i < 8; i++) {                      /* two columns of key, what it does */
@@ -2648,37 +2780,41 @@ static void glo_help(void)
     text(&F_S, x + 4, y + 108, "8 TAP 15 ALL ON SELECT BPM", 1, 0);
 }
 
-/* HOME held a moment: the bank, its 16 patterns as the white keys pick them (the open one inverted, those picked framed
- * heavy, INIT ones dotted); EDIT held: what it does */
+/* HOME held a moment: the bank's 16 patterns as the white keys pick them, a cell each (the open one inverted, those
+ * picked framed heavy, INIT ones dotted), the one picked last (or the open one) named over them; EDIT held: what it
+ * does */
 static void hold_help(void)
 {
-    if (ui.btn[B_GLO] || !ui.hold_t0 || ui.now - (ui.hold_t0 & ~1u) < 350) return;
+    int lat = ui.latch == B_HOME + 1;
+    if (held(B_GLO) || (!lat && (!ui.hold_t0 || ui.now - (ui.hold_t0 & ~1u) < 350))) return;
     const int x = 3, y = STAGE_Y + 4, w = 232;
-    if (ui.btn[B_HOME]) {
-        const int h = 104;
+    if (held(B_HOME)) {
+        const int h = 116;
         rect(x, y, w, h, 0);
         frame(x, y, w, h, 1);
         rect(x + w, y + 2, 2, h, 1);
         rect(x + 2, y + h, w, 2, 1);
-        char a[8] = {'B', 'A', 'N', 'K', ' ', (char)('A' + ui.pbank), 0};
+        int f = sq.playing ? sq.queued : cur_pat;      /* (a pick opens or queues its pattern) */
+        char a[8];
+        s_pat(a, f);
         int tw = tag(x + 4, y + 3, a, 1);
-        text(&F_S, x + 4 + tw + 6, y + 5, "BLACK 1-4: A-D", 1, 0);
-        for (int i = 0; i < 16; i++) {                 /* a cell a key: the name; an INIT one its number, dotted */
+        text_fit(x + 4 + tw + 6, y + 5, pat_name(f), 0, lat ? 80 : w - tw - 14, 1);
+        latch_mark(x, y + 3, w, B_HOME);
+        for (int i = 0; i < 16; i++) {                 /* a cell a key: its slot, an INIT one dotted */
             int n = ui.pbank * 16 + i, cx = x + 3 + (i & 3) * 57, cy = y + 18 + (i >> 2) * 16, cw = 55, ch = 15;
             if (n >= M2K_PATTERNS) continue;
-            const char *nm = pat_name(n);
-            int on = n == cur_pat, picked = ui.pick[n >> 3] >> (n & 7) & 1, blank = name_is(nm, "INIT");
+            int on = n == cur_pat, picked = ui.pick[n >> 3] >> (n & 7) & 1, blank = name_is(pat_name(n), "INIT");
             if (on) rect(cx, cy, cw, ch, 1);
             else if (blank && !picked) for (int k = 0; k < cw; k += 2) { px(cx + k, cy, 1); px(cx + k, cy + ch - 1, 1); }
             else frame(cx, cy, cw, ch, 1);
             if (picked) frame(cx + 1, cy + 1, cw - 2, ch - 2, !on);
-            char num[3] = {(char)('0' + (i + 1) / 10), (char)('0' + (i + 1) % 10), 0};
-            clip(cx + 2, cy, cw - 4, ch);
-            text(&F_S, cx + 4, cy + 2, blank ? num : nm, !on, 0);
-            noclip();
+            char num[8];
+            s_pat(num, n);
+            text(&F_S, cx + 4, cy + 2, num, !on, 0);
         }
-        text(&F_S, x + 4, y + h - 23, "SEQ CLEAR, HELD: INIT", 1, 0);
-        text(&F_S, x + 4, y + h - 12, "REC COPY, PLAY PASTE", 1, 0);
+        text(&F_S, x + 4, y + h - 34, "BLACK 1-4: BANKS A-D", 1, 0);
+        text(&F_S, x + 4, y + h - 23, lat ? "AGAIN BEFORE THE BAR: NOW" : "SEQ CLEAR, HELD: INIT", 1, 0);
+        text(&F_S, x + 4, y + h - 12, lat ? "TAP HOME TO LET GO" : "REC COPY, PLAY PASTE", 1, 0);
         return;
     }
     if (ui.btn[B_EDIT] && !ui.hold_used) {
@@ -2702,7 +2838,7 @@ static void hold_help(void)
 /* SEQ held a moment: its tools on the white keys (the knobs above show LEN, SWING, ACCENT, TEMPO meanwhile) */
 static void seq_help(void)
 {
-    if (!seq_layer() || !ui.seq_t0 || ui.now - (ui.seq_t0 & ~1u) < 350) return;
+    if (!seq_layer() || (ui.latch != B_SEQ + 1 && (!ui.seq_t0 || ui.now - (ui.seq_t0 & ~1u) < 350))) return;
     const int x = 3, y = STAGE_Y + 4, w = 232, h = 104;
     rect(x, y, w, h, 0);
     frame(x, y, w, h, 1);
@@ -2710,22 +2846,23 @@ static void seq_help(void)
     rect(x + 2, y + h, w, 2, 1);
     int tw = tag(x + 4, y + 4, "SEQ", 1);
     char o[24] = {'T', (char)('1' + ui.trk), ' ', 0};
-    s_cpy(o + 3, "STEPS, KEY:");
+    s_cpy(o + 3, ui.latch == B_SEQ + 1 ? "STEPS:" : "STEPS, KEY:");   /* (room for LATCHED) */
     text(&F_S, x + 4 + tw + 6, y + 6, o, 1, 1);
+    latch_mark(x, y + 4, w, B_SEQ);
     for (int i = 0; i < 8; i++) {
         int cx = x + 4 + (i >> 2) * 112, cy = y + 22 + (i & 3) * 17;
         char n[2] = {(char)('1' + i), 0};
         int kw = tag(cx, cy, n, 0);
         text(&F_S, cx + kw + 4, cy + 2, SEQ_TOOL[i], 1, 0);
     }
-    text(&F_S, x + 4, y + h - 13, "REC COPY, PLAY PASTE", 1, 0);
+    text(&F_S, x + 4, y + h - 13, ui.latch == B_SEQ + 1 ? "TAP SEQ TO LET GO" : "REC COPY, PLAY PASTE", 1, 0);
 }
 
 /* FX held a moment: PERFORM's effects on the black keys, the bus's knobs; LFO held: the knobs snap back */
 static void lay_help(void)
 {
     int i = perf_layer() ? 0 : mom_layer() ? 1 : -1;
-    if (i < 0 || !ui.lay_t0[i] || (!ui.lay_used[i] && ui.now - (ui.lay_t0[i] & ~1u) < 350)) return;
+    if (i < 0 || ((i || ui.latch != B_FX + 1) && (!ui.lay_t0[i] || (!ui.lay_used[i] && ui.now - (ui.lay_t0[i] & ~1u) < 350)))) return;
     const int x = 3, y = STAGE_Y + 4, w = 232, h = i ? 60 : 118;
     rect(x, y, w, h, 0);
     frame(x, y, w, h, 1);
@@ -2738,7 +2875,8 @@ static void lay_help(void)
         text(&F_S, x + 4, y + 38, "OCT+ KEEPS THEM.", 1, 0);
         return;
     }
-    text(&F_S, x + 4 + tw + 6, y + 6, "BLACK KEYS:", 1, 1);
+    if (ui.latch != B_FX + 1) text(&F_S, x + 4 + tw + 6, y + 6, "BLACK KEYS:", 1, 1);   /* (else LATCHED) */
+    latch_mark(x, y + 4, w, B_FX);
     static const char *const PF_N[PF_COUNT] = {"RPT 1/4", "RPT 1/8", "RPT 1/16", "RPT 1/32", "REVERSE", "STOP",
                                                "STUTTER", "CRUSH", "WOW", "DRIVE", "KILL"};
     for (int k = 0; k < PF_COUNT; k++) {
@@ -2749,6 +2887,40 @@ static void lay_help(void)
         text(&F_S, cx + 22, cy + 1, PF_N[k], !perf.on[k], 0);
     }
     text(&F_S, x + 116, y + 22 + 5 * 14 + 1, "KNOBS: BUS", 1, 0);
+}
+
+/* a button's card (card_up): its tap, then what it does with the others, a row each */
+static void card_draw(void)
+{
+    if (!card_up()) return;
+    static const char *const C_SEL[] = {"THE FILTER", "TAP", "ITS PAGES IN TURN", "STEP +", "A KNOB LOCKS IT",
+                                        "OCT- +", "A KNOB TO DEFAULT", 0};
+    static const char *const C_ENV[] = {"THE AMP", "TAP", "ITS PAGES IN TURN", "STEP +", "A KNOB LOCKS IT",
+                                        "OCT- +", "A KNOB TO DEFAULT", 0};
+    static const char *const C_ARP[] = {"THE ARP", "TAP", "THE ARP PAGE", "GLO +", "PADS: KEYS HIT T1-T6", 0};
+    static const char *const C_PLAY[] = {"AND PASTE", "TAP", "PLAY, STOP", "GLO +", "THE PATTERN (STEPS)",
+                                         "HOME +", "ON THE PICKED", "EDIT +", "THE SOUND", "SEQ +", "THE STEPS",
+                                         "STEP +", "ONTO IT", 0};
+    static const char *const C_OCTD[] = {"AND NO", "TAP", "OCTAVE, GRID PAGE", "+ KNOB", "ITS DEFAULT",
+                                         "STEP +", "+ KNOB: ITS LOCK OFF", "GLO +", "UNDO", "ASKED", "NO", 0};
+    static const char *const C_OCTU[] = {"AND YES", "TAP", "OCTAVE, GRID PAGE", "GLO +", "REDO", "LFO +",
+                                         "KEEP THE KNOBS", "ASKED", "YES", 0};
+    int b = ui.card - 1;
+    const char *const *c = b == B_SEL ? C_SEL : b == B_ENV ? C_ENV : b == B_ARP ? C_ARP : b == B_PLAY ? C_PLAY
+                         : b == B_OCTD ? C_OCTD : C_OCTU;
+    int rows = 0;
+    while (c[1 + 2 * rows]) rows++;
+    const int x = 3, y = STAGE_Y + 2, w = 232, h = 122;   /* the stage covered, whatever the page has there */
+    rect(x, y, w, h, 0);
+    frame(x, y, w, h, 1);
+    rect(x + w, y + 2, 2, h, 1);
+    rect(x + 2, y + h, w, 2, 1);
+    int tw = tag(x + 4, y + 4, BTN_N[b], 1);
+    text(&F_S, x + 4 + tw + 6, y + 6, c[0], 1, 1);
+    for (int i = 0; i < rows; i++) {
+        int cy = y + 22 + i * 16, kw = tag(x + 4, cy, c[1 + 2 * i], 0);
+        text_fit(x + 4 + kw + 4, cy + 2, c[2 + 2 * i], 0, w - kw - 14, 1);
+    }
 }
 
 /* a clear held on: a ring of twelve fills in a second, then INIT */
@@ -2862,7 +3034,7 @@ const uint8_t *m2k_frame(uint32_t ms)
     ui.lfo_hist[ui.lfo_w] = (int16_t)mon.lfo[ui.trk][ui.page == PG_LFO ? ui.sub >> 1 : 0];
     ui.lfo_w = (uint8_t)((ui.lfo_w + 1) % PIC_W);
     if (sq.playing && ui.follow && !ui.nheld) ui.spage = (uint8_t)(play_step() / 16);
-    if (ui.rec_t0 && ui.btn[B_REC] && ms - ui.rec_t0 >= 300) sq.fill = 1;
+    if (ui.rec_t0 && ui.btn[B_REC] && !ui.rec_used && ms - ui.rec_t0 >= 300) sq.fill = 1;
     if (ui.pkey && !ui.pfired && ms - ui.pkey_t0 >= 600) { ui.pfired = 1; page_length(ui.pkey - 1); }
     if (ui.save_t0 && ui.btn[B_SAVE] && !ui.save_fired && ms - ui.save_t0 >= 700) {
         int slot = ui.page == PG_GLO && ui.sub == 3 ? ui.proj_sel : cur_proj;
@@ -2885,9 +3057,10 @@ const uint8_t *m2k_frame(uint32_t ms)
     if (ui.page == PG_HOME) { header(); home(); }
     else { header(); param_page(); }
     glo_help();
-    if (ui.btn[B_HOME] || ui.btn[B_EDIT]) hold_help();
+    if (held(B_HOME) || ui.btn[B_EDIT]) hold_help();
     seq_help();
     lay_help();
+    card_draw();
     ring_tick();
     ring_draw();
     ask_draw();
@@ -2910,12 +3083,44 @@ const uint8_t *m2k_leds(void)
     uint8_t *L = ui.leds;
     m_set(L, 0, sizeof ui.leds);
     int ps = sq.playing ? play_step() : -1;
-    for (int k = 0; k < M2K_KEYS; k++) {
+    int blink = (ui.now >> 8) & 1, fast = (ui.now >> 7) & 1;
+    /* a layer's keys answer (on the FM-1 a key is lit from 64): GLO the mutes (lit heard), fill, the beat, the solos;
+     * PERFORM the effects on; SEQ its eight tools; HOME the bank's patterns (lit used, the open one winking, the
+     * queued blinking) and the banks */
+    int lay = held(B_GLO) ? 1 : perf_layer() ? 2 : seq_layer() ? 3 : held(B_HOME) ? 4 : 0;
+    for (int k = 0; lay && k < M2K_KEYS; k++) {
+        int w = ui.kw[k], b = ui.kb[k], v = 0;
+        if (lay == 1 && w >= 0) {
+            if (w < M2K_TRACKS) {
+                int on = !((p->mute >> w) & 1), heard = on && (!sq.solo || ((sq.solo >> w) & 1));
+                v = !on ? 0 : !heard ? 40 : ui.now - ui.flash_t[w] < 80 ? 255 : 200;
+            } else if (w == 6) v = sq.fill_next ? (fast ? 255 : 40) : 16;
+            else if (w == 7) v = ps >= 0 ? ((ps & 3) == 0 ? 255 : 16) : 16;
+            else if (w >= 8 && w < 8 + M2K_TRACKS) v = (sq.solo >> (w - 8)) & 1 ? 255 : 16;
+            else if (w == 14) v = p->mute || sq.solo ? 90 : 16;
+        } else if (lay == 2) {
+            if (b >= 0 && b < PF_COUNT) v = perf.on[b] ? 255 : 24;
+            else if (w >= 0) { int note = 53 + k + 12 * ui.oct; v = ui.keys[k] ? 255 : trk[ui.trk].sounding && trk[ui.trk].note == note ? 120 : 0; }
+        } else if (lay == 3) {
+            if (w >= 0 && w < 8) v = 200;
+        } else if (lay == 4) {
+            if (w >= 0 && ui.pbank * 16 + w < M2K_PATTERNS) {
+                int n = ui.pbank * 16 + w;
+                if (n == cur_pat) v = (ui.now & 1023) < 900 ? 255 : 0;
+                else if (sq.playing && sq.queued == n) v = blink ? 255 : 0;
+                else if (ui.pick[n >> 3] >> (n & 7) & 1) v = 200;
+                else v = name_is(pat_name(n), "INIT") ? 0 : 90;
+            } else if (b >= 0 && b < M2K_BANKS) v = b == ui.pbank ? 255 : b == cur_pat / 16 ? 90 : 16;
+        }
+        L[k] = (uint8_t)v;
+    }
+    for (int k = 0; !lay && k < M2K_KEYS; k++) {
         int w = ui.kw[k], b = ui.kb[k], v = 0;
         if (ui.grid) {
             if (w >= 0) {
                 int s = ui.spage * 16 + w;
                 if (s < seq_len()) {
+                    if (!(w & 3)) v = 14;      /* the beats' landmarks, faint (off on the FM-1) */
                     if (p->step[ui.trk][s].flags & ST_TRIG) v = 110;
                     if (s == ps) v = 255;
                     for (int i = 0; i < ui.nheld; i++) if (ui.held[i] == s) v = ((ui.now >> 7) & 1) ? 255 : 40;
@@ -2949,5 +3154,6 @@ const uint8_t *m2k_leds(void)
     B[B_REC] = sq.rec ? 255 : 0;
     B[B_OCTD] = ui.oct < 0 ? 200 : 0;
     B[B_OCTU] = ui.oct > 0 ? 200 : 0;
+    if (ui.latch) B[ui.latch - 1] = blink ? 255 : 0;   /* a latched layer's button blinks */
     return L;
 }
