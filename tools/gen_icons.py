@@ -217,10 +217,35 @@ def mark(name, ph=None, tooth=None, level=0, halo=False):
         bot = [(1.2 + 9.6 * k / n, 6.25 + op + 3.2 * math.sin(math.pi * k / n) ** 0.9) for k in range(n + 1)]
         P(top + mid[::-1])                            # the upper lip
         P([(x, y + SL + 2 * op * math.sin(math.pi * (x - 1.2) / 9.6)) for x, y in mid] + bot[::-1])  # the lower lip
+    elif name == "DKIK":        # the drum voice: a head struck, its ring around it; the slit across
+        k = ph % 1.0 if a else 0.35
+        r = 2.3 + 1.3 * (1 - k) ** 2                  # moving: each loop a hit, the head thumping down (its pitch drop)
+        ARC(6, 6, 5.0, 4.0, 0, 360)
+        DISC(6, 6, r)
+        SLIT(6, 6, 0, 2 * r + 0.2)
+    elif name == "DSNR":        # the snare: a head over its wires
+        ARC(6, 6.6, 5.0, 0, 180, 360)
+        for j in range(4):
+            x0 = 1.0 + j * 2.6
+            up = 0.6 if a and (fr + j * 3) % 4 == 0 else 0.0     # moving: the wires buzz, one lifted in turn
+            R(x0, 8.0 - up, x0 + 2.0, 10.0 - up)
+    elif name == "DHAT":        # the hats: two plates, opening and closing
+        op = 1.3 * abs(math.sin(w2)) if a else 0.6
+        P([(1.0, 5.2 - op), (11.0, 5.2 - op), (9.0, 3.4 - op), (3.0, 3.4 - op)])     # the top plate, lifted
+        P([(1.0, 6.8), (11.0, 6.8), (9.0, 8.6), (3.0, 8.6)])                          # the bottom one
+        R(5.0, 9.1, 7.0, 11.0)                                                         # the stand
+    elif name == "DCYM":        # the cymbal: one plate and its bell, the shimmer over it
+        P([(1.0, 8.6), (11.0, 8.6), (7.4, 6.4), (4.6, 6.4)])
+        DISC(6, 6.3, 1.4)
+        for k, x in enumerate((2.0, 5.3, 8.6)):
+            top = 1.0 + (1.8 * (1 - abs(math.sin(w2 + k * math.pi / 3))) if a else 0.6 * k % 1.2)   # moving: in turn
+            R(x, top, x + 1.4, 4.0)
+        R(5.0, 9.1, 7.0, 11.0)
     return im                   # G * SS square, 8 bit
 
 
-NAMES = ["GSIN", "GPRC", "SID", "FMS", "FMD", "SAW", "ENS", "WAV", "VOX", "FMP", "PUL", "FXC", "FXR", "FXD", "GNOI"]
+NAMES = ["GSIN", "GPRC", "SID", "FMS", "FMD", "SAW", "ENS", "WAV", "VOX", "FMP", "PUL", "FXC", "FXR", "FXD", "GNOI",
+         "DKIK", "DSNR", "DHAT", "DCYM"]
 
 
 GS = 256        # the distance field's grid: finer than the mark, for clean normals

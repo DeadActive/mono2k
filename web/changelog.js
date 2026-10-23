@@ -7,8 +7,10 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-23", title: "Undo, PERFORM, a speed per track, four banks on the FM-1, a sound library, a new screen",
+    date: "2026-10-23", title: "Four drums, undo, PERFORM, a speed per track, four banks on the FM-1, a sound library, a new screen",
     items: [
+      ["machines", "DRM-KICK, after the LXR's drum voice: a sine, triangle, saw or square swept down from up to 33 times its pitch (PDEP, PDEC, PCRV), on the LXR's laws and its 1.45 ms steps, FM riding the sweep, a snap and a click. Measured against a model of the LXR's voice: the same, sample for sample."],
+      ["machines", "DRM-SNAR, after the LXR's snare: a swept tone and a held noise at a rate of its own, the noise alone filtered, CLAP repeating the hit up to 15 times. DRM-HATS: a carrier phase-modulated by a sine and a noise, each in semitones from the note, its own closed and open decays (lock OPEN on the open steps). DRM-CYMB: the same at full level with a swell and long falls."],
       ["workflow", "One rule for editing everywhere: REC copies, PLAY pastes, SEQ clears, and the button held says what: GLO the pattern (in GRID the track's steps), HOME the patterns picked, EDIT the track's sound, a step held in GRID that step."],
       ["workflow", "Hold REC and tap SEQ: the track in view's steps cleared, in KEYS as in GRID, to record it again (held a second, its sound INIT too; again, undone)."],
       ["workflow", "Undo and redo: GLO + OCT- and GLO + OCT+, for a paste, a clear, an INIT, a reload or a SEQ tool; the same paste or clear again undoes it too."],

@@ -255,6 +255,34 @@ static uint32_t iexp2_q16(int32_t y)
  * eight of them a value later, at 6, 22, 38 .. 118 */
 static inline int fr24(int v) { return (v * 24 + 8) >> 7; }
 
+/* the DRM- drums: voice design after the Erica Synths LXR drum voices (GPL-3.0-only), MONO2K's own fixed point. Their
+ * ramps fall a block at the LXR's time laws (T_DRM_RA, T_DRM_RD: its 64-sample steps as four of ours), shaped by its
+ * curve: out(1/2) = c / 127, c x / ((127 - c) + (2c - 127) x), x and out Q15, one division a block */
+static inline int32_t drm_curve(int32_t x, int32_t c)
+{
+    if (x <= 0) return 0;
+    if (x >= 32768) return 32768;
+    uint32_t num = (uint32_t)(c * x) << 8;                                   /* c x < 2^22 */
+    uint32_t den = (uint32_t)((127 - c) * 32768 + (2 * c - 127) * x) >> 7;    /* 256 at least */
+    return (int32_t)(num / den);
+}
+static inline int32_t drm_c(int v) { return 1 + ((v * 252 + 127) >> 8); }      /* a knob to c 1..126 */
+static inline uint32_t drm_fall(uint32_t r, uint32_t d) { return r > d ? r - d : 0; }
+#define DRM_K 18454938u                /* the snare's noise filter: Q 0.91 (k Q24) */
+/* a carrier: SIN TRI SAW SQR, or NOIS (a new value each cycle of its pitch, held) */
+static inline int32_t drm_wave(int w, uint32_t ph, uint32_t inc, uint32_t inv, trk_t *t, uint32_t prev)
+{
+    switch (w) {
+    case 0: return sinp(ph);
+    case 1: { int32_t s = (int32_t)(ph >> 15) - 65536; return (s < 0 ? -s : s) - 32768; }
+    case 2: return -blep_saw(ph, inc, inv);                                  /* falling, as the LXR's */
+    case 3: return (blep_saw(ph, inc, inv) - blep_saw(ph + 0x80000000u, inc, inv)) >> 1;
+    default:
+        if (ph < prev) t->ms[2] = (int32_t)noise_step(&t->lfsr) >> 16;
+        return t->ms[2];
+    }
+}
+
 static void mach_trig(trk_t *t, int m)
 {
     t->menv[0] = t->menv[1] = t->menv[2] = 1u << 30;
@@ -284,6 +312,22 @@ static void mach_trig(trk_t *t, int m)
         break;
     case M_VOX:                        /* the compressor's gain from near silence at each trig: the fade-in */
         t->vo_g = VO_G0;
+        break;
+    case M_DKIK:                       /* the phases from the sine's rising zero crossing; the snap and the click */
+        t->ph[0] = t->ph[1] = 0;
+        t->ms[2] = 0;
+        t->ms[0] = 32767;
+        t->ms[1] = P7(t, P_SYN + 7) * 258;
+        break;
+    case M_DSNR:                       /* the tone from its start; the clap's repeats */
+        t->ph[0] = 0;
+        t->ms[5] = 0;
+        t->ms[3] = PN(t, P_SYN + 6, 16);
+        break;
+    case M_DHAT: case M_DCYM:          /* the three from their start; the amp from where it is (a hit chokes the last) */
+        t->ph[0] = t->ph[1] = t->ph[2] = 0;
+        t->ms[5] = m == M_DCYM && P7(t, P_SYN + 6);
+        if (t->ms[5]) t->menv[1] = 0;
         break;
     default:
         break;
@@ -855,6 +899,117 @@ static void mach_block(int ti, int m, int32_t pitch)
             t->ph[1] += inc2;
             if (bits < 16) s = (s >> (16 - bits)) * (1 << (16 - bits));     /* a multiply: no left shift of a negative */
             o[i] = (int16_t)sat16(s);
+        }
+        break;
+    }
+    case M_DKIK: {                     /* WAVE PDEP PDEC PCRV FM FMFR SNAP CLIK */
+        /* the drum voice: a carrier swept f0 (1 + A P) in hertz (A = 32 (PDEP / 127)^2, x33 at most), P a ramp falling
+         * at PDEC's time on PCRV's curve; FM by a sine at FMFR semitones from the note, its depth riding P (a clang in
+         * the attack, pure in the tail); the snap a blip of pitch, s^2 x 24 x SNAP over 7 ms; a 1 ms click on top */
+        int w = PN(t, P_SYN + 0, 4);
+        if (!(t->ms[2]++ & 3)) {       /* the sweep and the snap a step every 64 samples, as the LXR's (its attack) */
+            int32_t pc = drm_curve((int32_t)(t->menv[0] >> 15), drm_c(P7(t, P_SYN + 3)));
+            t->menv[0] = drm_fall(t->menv[0], 4 * T_DRM_RA[P7(t, P_SYN + 2)]);
+            int32_t sn = t->ms[0];
+            t->menv[2] = 65536u + (uint32_t)((T_DRM_PAMT[P7(t, P_SYN + 1)] * pc) >> 7)
+                         + (uint32_t)((((sn * sn) >> 15) * 48 * P7(t, P_SYN + 6)) >> 7);
+            t->ms[0] = sn > 6552 ? sn - 6552 : 0;
+            t->ms[3] = pc;
+        }
+        int32_t pc = t->ms[3];
+        uint32_t mul = t->menv[2];
+        uint64_t ic = ((uint64_t)inc_of(pitch) * mul) >> 16;
+        uint32_t inc = ic > 0x7FFF0000u ? 0x7FFF0000u : (uint32_t)ic, inv = 0xFFFFFFFFu / (inc | 1u);
+        uint32_t minc = inc_of(pitch + (P7(t, P_SYN + 5) - 64) * 64);
+        int32_t amt = P7(t, P_SYN + 4) * 258;
+        int32_t fmd = (int32_t)(((int64_t)amt * pc) >> 15);
+        int sh = w ? 4 : 2;                                /* a cycle of phase at full on the sine, four on the others */
+        int32_t clk = t->ms[1];
+        for (int i = 0; i < M2K_SUB; i++) {
+            uint32_t off = 0;
+            if (fmd) off = (uint32_t)(((sinp(t->ph[1]) * amt) >> 15) * fmd) << sh;
+            int32_t y = (drm_wave(w, t->ph[0] + off, inc, inv, t, 0) * 29491) >> 15;   /* -0.9 dB: room for the click */
+            if (clk) { y += clk; clk -= (clk * 734 + 32767) >> 15; }
+            t->ph[0] += inc;
+            t->ph[1] += minc;
+            o[i] = (int16_t)sat16(y);
+        }
+        t->ms[1] = clk;
+        break;
+    }
+    case M_DSNR: {                     /* TONE PDEP PDEC NOIS MIX NFLT CLAP CSPC */
+        /* the snare: a tone swept as the drum's (its curve fixed, fast with a long tail) and a sample-and-hold noise at
+         * NOIS (22 kHz at 127, not on the note), crossfaded by MIX; NFLT filters the noise alone (below 64 a lowpass down
+         * from 18 kHz, above a highpass up from 100 Hz); CLAP repeats the hit: so many quick falls at CSPC's spacing,
+         * then the track's AMP from the top */
+        int w = PN(t, P_SYN + 0, 4);
+        if (!(t->ms[5]++ & 3)) {       /* the sweep a step every 64 samples, as the drum's */
+            int32_t pc = drm_curve((int32_t)(t->menv[0] >> 15), 15);
+            t->menv[0] = drm_fall(t->menv[0], 4 * T_DRM_RA[P7(t, P_SYN + 2)]);
+            t->menv[2] = 65536u + (uint32_t)((T_DRM_PAMT[P7(t, P_SYN + 1)] * pc) >> 7);
+        }
+        uint64_t ic = ((uint64_t)inc_of(pitch) * t->menv[2]) >> 16;
+        uint32_t inc = ic > 0x7FFF0000u ? 0x7FFF0000u : (uint32_t)ic, inv = 0xFFFFFFFFu / (inc | 1u);
+        uint32_t ninc = (uint32_t)(P7(t, P_SYN + 3) | 1) * 16870877u;     /* 22050 v / 127 Hz */
+        int32_t mix = P7(t, P_SYN + 4) * 258;
+        int nf = P7(t, P_SYN + 5) - 64;
+        if (nf) zsvf_set(&t->vo[0], fg_at(T_FG, nf < 0 ? DRM_LP0 + nf * 9 * 256 : DRM_HP0 + nf * 10 * 256), DRM_K);
+        int32_t g0 = t->ms[4], g1 = 32768;
+        if (t->ms[3] > 0) {
+            t->menv[1] = drm_fall(t->menv[1], T_DRM_RA[P7(t, P_SYN + 7)]);
+            g1 = drm_curve((int32_t)(t->menv[1] >> 15), 20);
+            if (!t->menv[1] && --t->ms[3] > 0) t->menv[1] = 1u << 30;
+        }
+        t->ms[4] = g1;
+        for (int i = 0; i < M2K_SUB; i++) {
+            uint32_t p = t->ph[1];
+            t->ph[1] += ninc;
+            if (t->ph[1] < p) t->ms[2] = (((int32_t)noise_step(&t->lfsr) >> 16) * 29491) >> 15;
+            int32_t n = t->ms[2];
+            if (nf) { int32_t lp, hp; zsvf_tick(&t->vo[0], n * 256, &lp, 0, &hp); n = (nf < 0 ? lp : hp) / 256; }
+            int32_t y = drm_wave(w, t->ph[0], inc, inv, t, 0);
+            t->ph[0] += inc;
+            y = (int32_t)(((int64_t)y * (32768 - mix) + (int64_t)n * mix) >> 15);
+            int32_t g = g0 + (((g1 - g0) * i) >> 4);
+            o[i] = (int16_t)sat16((y * g) >> 15);
+        }
+        break;
+    }
+    case M_DHAT: case M_DCYM: {        /* CARR M1FR M1 M2FR M2 WAVE CDEC OPEN / CARR M1FR M1 M2FR M2 WAVE ATK DEC */
+        /* the hats and the cymbal: three oscillators on the note, each a semitone offset, as the LXR's: the carrier
+         * phase-modulated by a sine (M1) and a sample-and-hold noise (M2) at their pitches, their sum saturated; their own
+         * amp on its decay law (the track's AMP left open), a hit taking it from where it is. The hats: CDEC, or OPEN's
+         * when not 0 (lock it on the open steps), the carrier at half; the cymbal: a rise at ATK's, then DEC's */
+        int cym = m == M_DCYM, w = PN(t, P_SYN + 5, 5), slp = cym ? 2 : 6;   /* their curves: the LXR's inits' */
+        uint32_t inc = inc_of(pitch + (P7(t, P_SYN + 0) - 64) * 64), inv = 0xFFFFFFFFu / (inc | 1u);
+        uint32_t i1 = inc_of(pitch + (P7(t, P_SYN + 1) - 64) * 64), i2 = inc_of(pitch + (P7(t, P_SYN + 3) - 64) * 64);
+        int32_t g1 = P7(t, P_SYN + 2) * 258, g2 = P7(t, P_SYN + 4) * 258;
+        int32_t a0 = t->ms[4], a1;
+        if (t->ms[5]) {
+            uint32_t r = t->menv[1] + T_DRM_RA[P7(t, P_SYN + 6)];
+            t->menv[1] = r >= 1u << 30 ? 1u << 30 : r;
+            if (t->menv[1] >= 1u << 30) t->ms[5] = 0;
+            a1 = 32768 - drm_curve(32768 - (int32_t)(t->menv[1] >> 15), 127 - slp);       /* the decay's mirror */
+        } else {
+            int dv = cym ? P7(t, P_SYN + 7) : P7(t, P_SYN + 7) ? P7(t, P_SYN + 7) : P7(t, P_SYN + 6);
+            t->menv[1] = drm_fall(t->menv[1], T_DRM_RD[dv]);
+            a1 = drm_curve((int32_t)(t->menv[1] >> 15), slp);
+        }
+        t->ms[4] = a1;
+        int32_t lvl = cym ? 32767 : 16384;
+        for (int i = 0; i < M2K_SUB; i++) {
+            int32_t m1 = (sinp(t->ph[1]) * g1) >> 15;
+            uint32_t p2 = t->ph[2];
+            t->ph[2] += i2;
+            if (t->ph[2] < p2) t->ms[3] = (int32_t)noise_step(&t->lfsr2) >> 16;
+            int32_t mm = sat16(m1 + ((t->ms[3] * g2) >> 15));
+            uint32_t pp = t->ph[0];
+            int32_t y = w < 4 ? drm_wave(w, pp + ((uint32_t)mm << (w ? 19 : 17)), inc, inv, t, 0)
+                              : drm_wave(4, pp, inc, inv, t, pp - inc);
+            t->ph[0] += inc;
+            t->ph[1] += i1;
+            int32_t a = a0 + (((a1 - a0) * i) >> 4);
+            o[i] = (int16_t)sat16((int32_t)((((int64_t)y * lvl) >> 15) * a >> 15));
         }
         break;
     }

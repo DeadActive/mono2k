@@ -146,8 +146,24 @@ out.append(arr("T_DIST_C", "int32_t", [round(32767 * 10 ** (dist_c(d) / 20)) for
 # ceiling of its own, whatever the level going in (a saw alone, with its subs or its unison all clip to the same level;
 # a chord of one voice or four; a sine full or cut 15 dB). Against GND-SIN's, dB; Q12. In the machines' order
 DIST_M = {"GSIN": 0.0, "GPRC": 0.0, "SID": 0.0, "FMS": -1.4, "FMD": 0.0, "SAW": -10.5, "ENS": 1.7, "WAV": -7.0, "VOX": -1.4,
-          "FMP": 0.3, "PUL": -2.75, "FXC": 0.0, "FXR": 0.0, "FXD": 0.0, "GNOI": 0.0}
+          "FMP": 0.3, "PUL": -2.75, "FXC": 0.0, "FXR": 0.0, "FXD": 0.0, "GNOI": 0.0,
+          "DKIK": 0.0, "DSNR": 0.0, "DHAT": 0.0, "DCYM": 0.0}
 out.append(arr("T_DIST_M", "uint16_t", [round(4096 * 10 ** (v / 20)) for v in DIST_M.values()], 14))
+# the DRM- machines (voice design after the Erica Synths LXR drum voices, GPL-3.0-only): its time law, (127 + K v) /
+# (2 (127 - v)) of its 64-sample blocks (at least one), as a ramp's fall per 16-sample block, Q30: K 198 for the
+# sweeps, the attacks and the clap's spacing, K 1998 for the amp's decays; 127 as 126 (the LXR's 127 never moves) but
+# the decay's, which holds (INF). The times in 0.1 ms for the screen. The sweep's depth A = 32 (v / 127)^2, Q8. The
+# snare's noise filter: from 18 kHz (its lowpass) and 100 Hz (its highpass), in the filters' positions, Q8
+def lxr_blk(v, K):
+    v = min(v, 126)
+    return max(1.0, (127 + K * v) / (2.0 * (127 - v)))
+out.append(arr("T_DRM_RA", "uint32_t", [round((1 << 30) / (4 * lxr_blk(v, 198))) for v in range(128)], 8))
+out.append(arr("T_DRM_RD", "uint32_t", [0 if v == 127 else round((1 << 30) / (4 * lxr_blk(v, 1998))) for v in range(128)], 8))
+out.append(arr("T_DRM_RA_MS10", "uint32_t", [round(lxr_blk(v, 198) * 64 / SR * 10000) for v in range(128)], 8))
+out.append(arr("T_DRM_RD_MS10", "uint32_t", [round(lxr_blk(v, 1998) * 64 / SR * 10000) for v in range(128)], 8))
+out.append(arr("T_DRM_PAMT", "uint16_t", [round(256 * 32 * (v / 127) ** 2) for v in range(128)], 12))
+out.append("#define DRM_LP0 %d\n#define DRM_HP0 %d\n" % (round(96 * math.log2(18000 / 8.1758)) * 256,
+                                                       round(96 * math.log2(100 / 8.1758)) * 256))
 # GND-NOIS on the Monomachine's page (tools/ref/chain_gnoi42.spec): RED colours white noise towards pink (64) and red
 # (127). White, pink (the economy pink filter: one-poles at 16.5, 264 and 3946 Hz and the white through it) and brown
 # (the pink's 16.5 Hz one-pole, then one at 14 kHz over the top), each scaled to white's level at 1 kHz, mixed by weights

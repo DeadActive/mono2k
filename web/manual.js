@@ -131,10 +131,14 @@
     "FX-CHORS": "An FX machine: a chorus on the track before, its delay, depth and speed, its feedback (all the way up, a comb that rings), width and lowpass. The heart of the metal sounds.",
     "FX-RING": "An FX machine: the track before (after its VOL and LEV) ring-modulated by a carrier on the note, a sine through a triangle to a square by WAVE; INP drives it into a clip of its own; EXT takes the carrier from the track before that instead. As the Monomachine's RINGMOD, measured.",
     "FX-DYNMX": "An FX machine: dynamics on the track before, attack, release, threshold, ratio, make-up gain, RMS or peak.",
+    "DRM-KICK": "A drum voice after the LXR's: a carrier (sine, triangle, saw, square) swept down from up to 33 times its pitch on the LXR's laws (PDEP the depth, PDEC the time, PCRV the curve, a step every 1.45 ms as its), FM from a sine whose depth rides the sweep, a snap of pitch, a click. Kicks and toms.",
+    "DRM-SNAR": "The LXR's snare: a swept tone and a sample-and-hold noise at a rate of its own, crossfaded by MIX, the noise alone through a lowpass or a highpass (NFLT); CLAP repeats the hit up to 15 times at CSPC's spacing. Snares and claps.",
+    "DRM-HATS": "The LXR's hats: a carrier phase-modulated by a sine and a held noise, each tuned in semitones from the note, at half level; a decay of its own, closed (CDEC) or open (OPEN: lock it on the open steps), each hit choking the last. Hats and metal ticks.",
+    "DRM-CYMB": "The hats' engine at full level for cymbals: a swell (ATK) and a long fall (DEC) on the LXR's laws. Crashes, rides, reverse swells.",
   };
   const cstr = (x, p) => { const m = new Uint8Array(x.memory.buffer); let s = ""; while (m[p]) s += String.fromCharCode(m[p++]); return s; };
   async function firmware() {
-    const r = await fetch("m2k.wasm?v=73");
+    const r = await fetch("m2k.wasm?v=74");
     const x = new WebAssembly.Instance(new WebAssembly.Module(await r.arrayBuffer()), {}).exports;
     if (x._initialize) x._initialize();
     x.w_init(2000);

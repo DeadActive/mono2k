@@ -34,7 +34,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 
 | | |
 |---|---|
-| Machines | GND-SIN, GND-NOIS, GND-PERC, SID-6581, FM+STAT, FM+PAR, FM+DYN, SWAV-SAW, SWAV-PUL, SWAV-ENS, DIGI-WAV, VOX-6, FX-CHORUS, FX-RINGMOD, FX-DYNAMIX (on the track before): clean-room designs after the Monomachine's families, integer only |
+| Machines | GND-SIN, GND-NOIS, GND-PERC, SID-6581, FM+STAT, FM+PAR, FM+DYN, SWAV-SAW, SWAV-PUL, SWAV-ENS, DIGI-WAV, VOX-6, FX-CHORUS, FX-RINGMOD, FX-DYNAMIX (on the track before): clean-room designs after the Monomachine's families, integer only. DRM-KICK, DRM-SNAR, DRM-HATS, DRM-CYMB: drums after the LXR's voices, on its laws |
 | Per track | the Monomachine's chain and pages: SYN A–H · AMP (ATK HOLD DEC REL DIST VOL PAN PORT) · FILT (HP / LP as base and width following the note, resonance, envelope) · FX (EQ, SRR, a delay of its own in 8-bit mu-law, ping-pong on positive sends) · DSTR (bits, fold, xor, SPU send) · 3 LFOs (any track's parameter) · ARP |
 | Projects | the modern Elektron way: 4 projects × 4 banks (A–D) × 16 patterns, each pattern with its own sounds. SAVE keeps the pattern (its reload point), GLO + SAVE reloads it, SAVE held keeps the project; GLO + REC / PLAY / SEQ copy, paste, clear (the pattern on HOME, the track's sound on its pages); GLO > SET picks and loads a project. On the web: a project picker, export / import as `.m2kp` files. Stored packed (a typical pattern 0.5–1 KB; the DEMO project 32 KB) |
 | Factory | project DEMO, bank A: sixteen parts after the late-90s and 2000s digital era, written in batches of four, each heard and approved (`docs/bank-a.md`: reference, genre, key and idea of each). So far HAZE (after Boards of Canada), SPLICE (Autechre), RIBBON (Aphex Twin), FACETS (Aleksi Perälä), SMOKE (dub techno), TORQUE (hardgroove), TUNNEL (Overmono), MOTEL (Anthony Naples); A09–A16 hold the bank before until theirs. Banks B–D blank. A store saved with earlier demos takes the new ones where the old still stand |
@@ -302,6 +302,11 @@ and the others. Orbitron by The League of Moveable Type: SIL OFL 1.1 (`assets/fo
 carries 1-bit renderings of it. The FM-1's panel geometry as measured for
 CoralFlower's emulator. MONO2K is not affiliated with Elektron or M-VAVE; Monomachine and Machinedrum are Elektron's,
 FM-1 is M-VAVE's.
+
+The DRM- drums' voice design is after the Erica Synths LXR drum voices (lxr-desktop-app, GPL-3.0-only; originally
+Julian Schmidt's Sonic Potions LXR): their laws (the sweep, its curve and time, the PM hats, the clap's repeats),
+written anew in fixed point and measured against a float model of them; none of its code or transient samples is
+here. LXR is Erica Synths' mark.
 
 The 64-wave bank (`assets/waves/mono2k64/`) is the project owner's own waveforms, licensed with the project
 (GPL-3.0-only) unless the owner says otherwise.

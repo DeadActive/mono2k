@@ -14,7 +14,8 @@ enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOF1, K_VOF2, K_CONS, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
     K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD, K_MCH, K_SSEL, K_SLOAD, K_SSAVE, K_SCAT, K_WIPE, K_DEMO, K_SPD,
-    K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ, K_ONOFF, K_MSRC, K_MFRQ
+    K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ, K_ONOFF, K_MSRC, K_MFRQ,
+    K_DWV4, K_DWV5, K_DRA, K_DRD, K_DOPN, K_DMUL, K_DNHZ, K_DCNT          /* the DRM- drums' */
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -69,8 +70,8 @@ typedef struct {
 } mi_t;
 
 /* the machines as the selector steps through them: the Monomachine's order (its FM+ STAT, PAR, DYN together) */
-static const uint8_t M_ORDER[M_COUNT] = {M_GSIN, M_GNOI, M_GPRC, M_SID, M_FMS, M_FMP, M_FMD, M_SAW, M_PUL, M_ENS, M_WAV, M_VOX, M_FXC,
-                                          M_FXD, M_FXR};
+static const uint8_t M_ORDER[M_COUNT] = {M_GSIN, M_GNOI, M_GPRC, M_DKIK, M_DSNR, M_DHAT, M_DCYM, M_SID, M_FMS, M_FMP, M_FMD, M_SAW,
+                                          M_PUL, M_ENS, M_WAV, M_VOX, M_FXC, M_FXD, M_FXR};
 static int m_place(int m) { for (int i = 0; i < M_COUNT; i++) if (M_ORDER[i] == m) return i; return 0; }
 
 static const mi_t MI[M_COUNT] = {
@@ -119,7 +120,21 @@ static const mi_t MI[M_COUNT] = {
     {"GND-NOIS", "GND", "NOISE", "PERC", {2, 1, 1},
      {{"ST", "STEREO", K_NUM}, {"RED", "REDNESS", K_NUM}, {"STON", "STEREO ON", K_ONOFF}, {"-", "-", K_NUM},
       {"-", "-", K_NUM}, {"-", "-", K_NUM}, {"-", "-", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
+    /* the DRM- drums: voice design after the Erica Synths LXR drum voices (GPL-3.0-only) */
+    {"DRM-KICK", "DRM", "KICK", "PERC", {5, 2, 3},
+     {{"WAVE", "CARRIER WAVE", K_DWV4}, {"PDEP", "PITCH SWEEP", K_DMUL}, {"PDEC", "SWEEP TIME", K_DRA}, {"PCRV", "SWEEP CURVE", K_NUM},
+      {"FM", "FM DEPTH", K_NUM}, {"FMFR", "FM PITCH", K_SEMI}, {"SNAP", "SNAP", K_NUM}, {"CLIK", "CLICK", K_NUM}}},
+    {"DRM-SNAR", "DRM", "SNARE", "PERC", {4, 2, 4},
+     {{"TONE", "TONE WAVE", K_DWV4}, {"PDEP", "PITCH SWEEP", K_DMUL}, {"PDEC", "SWEEP TIME", K_DRA}, {"NOIS", "NOISE RATE", K_DNHZ},
+      {"MIX", "TONE TO NOISE", K_NUM}, {"NFLT", "NOISE FILTER", K_BI}, {"CLAP", "CLAP HITS", K_DCNT}, {"CSPC", "CLAP SPACING", K_DRA}}},
+    {"DRM-HATS", "DRM", "HATS", "PERC", {3, 5, 2},
+     {{"CARR", "CARRIER PITCH", K_SEMI}, {"M1FR", "MOD 1 PITCH", K_SEMI}, {"M1", "MOD 1 DEPTH", K_NUM}, {"M2FR", "NOISE PITCH", K_SEMI},
+      {"M2", "NOISE DEPTH", K_NUM}, {"WAVE", "CARRIER WAVE", K_DWV5}, {"CDEC", "CLOSED DECAY", K_DRD}, {"OPEN", "OPEN DECAY", K_DOPN}}},
+    {"DRM-CYMB", "DRM", "CYMBAL", "PERC", {2, 5, 2},
+     {{"CARR", "CARRIER PITCH", K_SEMI}, {"M1FR", "MOD 1 PITCH", K_SEMI}, {"M1", "MOD 1 DEPTH", K_NUM}, {"M2FR", "NOISE PITCH", K_SEMI},
+      {"M2", "NOISE DEPTH", K_NUM}, {"WAVE", "CARRIER WAVE", K_DWV5}, {"ATK", "ATTACK", K_DRA}, {"DEC", "DECAY", K_DRD}}},
 };
+static const char *const DWAV_N[5] = {"SIN", "TRI", "SAW", "SQR", "NOIS"};
 
 static const char *const SIDW_N[5] = {"TRI", "SAW", "PULS", "MIX", "NOIS"};
 static const char *const SIDM_N[4] = {"OFF", "RING", "SYNC", "R+S"};
@@ -181,6 +196,9 @@ static int kind_choices(int k)
     case K_TRK: case K_AMOD: return 6;
     case K_LTRG: case K_GSIZ: return 5;
     case K_MULT: return 8;
+    case K_DWV4: return 4;
+    case K_DWV5: return 5;
+    case K_DCNT: return 16;
     case K_INT25: return 25;
     case K_CONS: return 21;
     default: return 0;
@@ -274,6 +292,20 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
         else { s_int(out, (int)(ms10 / 10000)); *unit = "S"; }
         break;
     }
+    case K_DRA: case K_DRD: case K_DOPN: {          /* the DRM- drums' ramps, on the LXR's laws */
+        if (pi->kind == K_DOPN && v == 0) { s_cpy(out, "OFF"); break; }
+        if (pi->kind != K_DRA && v == 127) { s_cpy(out, "INF"); break; }
+        uint32_t ms10 = pi->kind == K_DRA ? T_DRM_RA_MS10[v] : T_DRM_RD_MS10[v];
+        if (ms10 < 100) { s_dec1(out, (int)ms10); *unit = "MS"; }
+        else if (ms10 < 10000) { s_int(out, (int)(ms10 / 10)); *unit = "MS"; }
+        else if (ms10 < 1000000) { s_dec1(out, (int)(ms10 / 1000)); *unit = "S"; }
+        else { s_int(out, (int)(ms10 / 10000)); *unit = "S"; }
+        break;
+    }
+    case K_DWV4: case K_DWV5: s_cpy(out, DWAV_N[c]); break;
+    case K_DMUL: s_dec1(out, (256 + T_DRM_PAMT[v]) * 10 / 256); *unit = "X PITCH"; break;   /* at the start: 1 + A */
+    case K_DNHZ: s_hz(out, unit, (22050 * (v | 1)) / 127); break;
+    case K_DCNT: if (!c) s_cpy(out, "OFF"); else { s_int(out, c); *unit = "HITS"; } break;
     case K_MODT: { static const char *const N[3] = {"CHOR", "FLNG", "PHAS"}; s_cpy(out, N[c < 3 ? c : 2]); break; }
     case K_MHZ: s_dec1(out, T_MOD_HZ10[v]); *unit = "HZ"; break;
     case K_HZ: s_hz(out, unit, T_HZ[v]); break;

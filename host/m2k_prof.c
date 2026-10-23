@@ -15,7 +15,8 @@ int main(int argc, char **argv)
     int sec = argc > 1 ? atoi(argv[1]) : 8, frames = M2K_SR * sec / 128 * 128;
     static const char *const PART[5] = {"seq+lfo", "machines", "chain", "delays", "bus"};
     static const char *const MN[M_COUNT] = {"GND-SIN", "GND-PERC", "SID", "FM+STAT", "FM+DYN", "SWAV-SAW", "SWAV-ENS",
-                                            "DIGI-WAV", "VOX-6", "FM+PAR", "SWAV-PUL", "FX-CHORS", "FX-RING", "FX-DYNMX", "GND-NOIS"};
+                                            "DIGI-WAV", "VOX-6", "FM+PAR", "SWAV-PUL", "FX-CHORS", "FX-RING", "FX-DYNMX", "GND-NOIS",
+                                            "DRM-KICK", "DRM-SNAR", "DRM-HATS", "DRM-CYMB"};
     static int16_t buf[256];
     uint64_t tot[5] = {0}, mt[M_COUNT] = {0}, real = 0;
     int mn[M_COUNT] = {0};

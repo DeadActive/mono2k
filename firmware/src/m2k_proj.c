@@ -336,6 +336,9 @@ static int sound_guess(int m, const uint8_t *k, int lo, int hi)
     switch (m) {
     case M_FXC: case M_FXR: case M_FXD: return CAT_FX;
     case M_GNOI: return k[P_DEC] < 48 ? CAT_HATS : CAT_SNARE;
+    case M_DKIK: return mid >= 60 ? CAT_PERC : CAT_KICK;      /* a high drum voice: a tom, a perc */
+    case M_DSNR: return CAT_SNARE;
+    case M_DHAT: case M_DCYM: return CAT_HATS;
     case M_GPRC:                                     /* bright and filtered high: hats; metal and short: perc */
         return k[P_SYN + 2] < 40 && k[P_BASE] >= 32 ? CAT_HATS : k[P_SYN + 2] >= 40 && k[P_DEC] <= 12 ? CAT_PERC : CAT_SNARE;
     case M_GSIN:                                     /* held or a line: a bass (or perc up high); one note: a kick */

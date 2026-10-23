@@ -539,6 +539,11 @@ static const uint8_t MACH_DEF[M_COUNT][8] = {
     /* FX-RING  */ {0, 0, 0, 127, 0, 0, 0, 64},      /* a sine carrier, INP 64 (the Monomachine's init, but all wet: its MIX 0 is dry) */
     /* FX-DYNMX */ {20, 60, 64, 127, 64, 64, 0, 100}, /* a quick attack, 4:1-ish over -30 dB */
     /* GND-NOIS */ {0, 0, 0, 0, 0, 0, 0, 64},     /* the Monomachine's init: white, in the middle */
+    /* DRM-KICK */ {0, 44, 26, 21, 0, 64, 0, 16},  /* the LXR's init kick: a sine swept x4.8 over 38 ms; a little click */
+    /* DRM-SNAR */ {40, 81, 14, 127, 61, 64, 0, 6},  /* its snare: a triangle swept x14, noise at 22 kHz, half and half;
+                                                   * a clap's hits 8 ms apart */
+    /* DRM-HATS */ {54, 60, 127, 127, 127, 0, 5, 0},  /* its hats: a sine under a sine and the noise, 60 ms closed */
+    /* DRM-CYMB */ {127, 64, 0, 64, 0, 110, 0, 107}, /* its cymbal: noise held at the top, a long fall */
 };
 
 static void kit_default(m2k_pattern_t *p, int t, int m)

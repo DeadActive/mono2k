@@ -1164,7 +1164,8 @@ static int selftest(void)
                    gc[0], gc[1], gc[2], gc[3], top[1] - top[0]);
             CHECK(gc[0] < 0.1 && gc[1] > 0.45 && gc[1] < 0.75 && gc[2] > 0.999 && gc[3] > 0.999 && top[1] < top[0] - 15,
                   "GND-NOIS: ST with STON across the stereo, without it in the middle; RED darkens");
-            CHECK(M_GPRC == 1 && M_GNOI == M_COUNT - 1, "GND-PERC keeps the old GND-NOIS's number, GND-NOIS is the newest");
+            CHECK(M_GPRC == 1 && M_GNOI == 14 && M_DKIK == 15 && M_DCYM == M_COUNT - 1,
+                  "GND-PERC keeps the old GND-NOIS's number, GND-NOIS 14, the DRM- drums after it");
             #undef FXPAT
         }
         /* the bank on the screen: a DIGI-WAV track's SYN has a third page, BANK; the wave knob names the bank's waves */
@@ -2019,6 +2020,85 @@ static int selftest(void)
         int init = !memcmp(q->kit[1], fr.kit[1], 8) && !(q->step[1][3].flags & ST_TRIG) && !sq.rec;
         CHECK(gone && nofill && norec && back && init,
               "REC held and SEQ: the track's steps cleared (REC then neither arms nor fills), again undone, held a second its sound INIT too");
+    }
+    /* the DRM- drums (after the LXR's voices), held to the laws they were measured on against a float model of the LXR's
+     * (correlation 1.0000): the kick's sweep a step every 64 samples (its init drum at C2: 211.6 Hz in the first step,
+     * 168.9 at 10 ms, 109.4 at 20, the note by 100); the clap's hits, as many as CLAP says; the hats' open decay longer
+     * than the closed; the cymbal's swell rising; none silent, none past full scale */
+    {
+        static int16_t raw[44100];
+        int okd = 1;
+        double hz[4] = {0};
+        int hits = 0, n40[2] = {0, 0}, swell = 0;
+        for (int c = 0; c < 6; c++) {
+            static const uint8_t MC[6] = {M_DKIK, M_DSNR, M_DHAT, M_DHAT, M_DCYM, M_DCYM};
+            static const uint8_t KC[6][8] = {{0, 44, 26, 21, 0, 64, 0, 0}, {40, 81, 14, 127, 100, 90, 48, 6},
+                                             {54, 60, 127, 127, 127, 0, 5, 0}, {54, 60, 127, 127, 127, 0, 5, 17},
+                                             {127, 64, 0, 64, 0, 110, 0, 107}, {127, 64, 0, 64, 0, 110, 90, 107}};
+            m2k_init(50);
+            m2k_pattern_t *q = PAT(cur_pat);
+            kit_default(q, 0, MC[c]);
+            m_cpy(q->kit[0], KC[c], 8);
+            trk_t *t = &trk[0];
+            m_cpy(t->eff, q->kit[0], P_COUNT);
+            m_set(t->mod, 0, sizeof t->mod);
+            int note = c == 0 ? 36 : 60;
+            t->note = (uint8_t)note;
+            mach_trig(t, MC[c]);
+            int32_t pk = 0;
+            double e2 = 0;
+            for (int b = 0; b < 44100 / 16; b++) {
+                mach_block(0, MC[c], note * 64);
+                for (int i = 0; i < 16; i++) { int v = blk[0][i]; raw[b * 16 + i] = (int16_t)v; pk = v > pk ? v : -v > pk ? -v : pk; e2 += (double)v * v; }
+            }
+            okd &= pk > 4000 && pk <= 32767 && e2 > 0;
+            if (c == 0) {                                        /* the sweep: rising zero crossings, the period around a time */
+                static const int at[4] = {44, 441, 882, 4410};
+                for (int k = 0; k < 4; k++) {                    /* each period's pitch at its middle, interpolated */
+                    double z0 = -1, m0 = -1, f0 = 0;
+                    for (int i = 1; i < 44100 && !hz[k]; i++)
+                        if (raw[i - 1] < 0 && raw[i] >= 0) {
+                            double z = i - 1 + (double)-raw[i - 1] / (raw[i] - raw[i - 1]);
+                            if (z0 >= 0) {
+                                double mid = (z0 + z) / 2, f = 44100.0 / (z - z0);
+                                if (mid >= at[k]) hz[k] = m0 < 0 ? f : f0 + (f - f0) * (at[k] - m0) / (mid - m0);
+                                m0 = mid; f0 = f;
+                            }
+                            z0 = z;
+                        }
+                }
+            }
+            if (c == 1) {                                        /* the clap: its falls in the first 100 ms (2 ms rms dips) */
+                double last = 1e9;
+                int down = 0;
+                for (int w = 0; w < 50; w++) {
+                    double r = 0;
+                    for (int i = 0; i < 88; i++) r += (double)raw[w * 88 + i] * raw[w * 88 + i];
+                    if (r > last * 8 && down) { hits++; down = 0; }
+                    if (r < last) down = 1;
+                    last = r;
+                }
+            }
+            if (c == 2 || c == 3) {                              /* the hats: the 10 ms window 40 dB under the first */
+                double r0 = 0;
+                for (int i = 0; i < 441; i++) r0 += (double)raw[i] * raw[i];
+                for (int w = 1; w < 100; w++) {
+                    double r = 0;
+                    for (int i = 0; i < 441; i++) r += (double)raw[w * 441 + i] * raw[w * 441 + i];
+                    if (r < r0 * 1e-4) { n40[c - 2] = w * 10; break; }
+                }
+            }
+            if (c == 5) {                                        /* the swell: 300 ms louder than its first 10 */
+                double r0 = 0, r1 = 0;
+                for (int i = 0; i < 441; i++) { r0 += (double)raw[i] * raw[i]; r1 += (double)raw[13230 + i] * raw[13230 + i]; }
+                swell = r1 > r0 * 100;
+            }
+        }
+        printf("     DRM-KICK at C2: %.1f %.1f %.1f %.1f Hz; the clap %d falls; the hats -40 dB at %d ms closed, %d open\n",
+               hz[0], hz[1], hz[2], hz[3], hits + 1, n40[0], n40[1]);
+        int sweep = fabs(hz[0] - 211.6) < 1.5 && fabs(hz[1] - 168.9) < 1.5 && fabs(hz[2] - 109.4) < 1.0 && fabs(hz[3] - 65.4) < 0.3;
+        CHECK(okd && sweep && hits + 1 >= 6 && n40[0] > 0 && n40[1] > 2 * n40[0] && swell,
+              "DRM- drums: the kick's sweep on the LXR's law and its steps, the clap's hits, open hats longer than closed, the swell; none silent or past full scale");
     }
     /* speeds: a track at 2x plays its steps twice as often as one at 1x, at 1/2x half as often, at 3/4x three quarters;
      * a new pattern sets them going from its first step; SEQ held, KNOB 2 is the track's speed */
