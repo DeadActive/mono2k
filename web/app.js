@@ -638,12 +638,15 @@
       const card = document.createElement("article");
       card.className = "mcard";
       card.style.setProperty("--i", String(m % 3 + (m / 3 | 0)));   /* dealt out in diagonals when scrolled to */
-      const st = ["PNCH", "MTL", "PLST"].map((s, i) => { const v = x.w_stat(m, i); return `${s} <i>${"◆".repeat(v)}${"◇".repeat(5 - v)}</i>`; }).join("<br>");
+      const st = ["PUNCH", "METAL", "PLASTIC"].map((s, i) => {          /* five segments, as the screen's card */
+        const v = x.w_stat(m, i);
+        return `<span class="stat"><b>${s}</b><i>${Array.from({ length: 5 }, (_, k) => `<u class="${k < v ? "on" : ""}"></u>`).join("")}</i></span>`;
+      }).join("");
       const params = Array.from({ length: 8 }, (_, i) => {
         const s4 = cstr(x, x.w_syn(m, i, 0)), ln = cstr(x, x.w_syn(m, i, 1));
         return `<li><b>${"ABCDEFGH"[i]} ${s4}</b>${ln === "-" ? "" : ln}</li>`;
       }).join("");
-      card.innerHTML = `<div><h4>${name}</h4><div class="meta">CLASS: ${cls}<br>STYLE: ${style}<br>${st}</div></div><canvas width="72" height="72"></canvas><ol>${params}</ol>`;
+      card.innerHTML = `<div><h4>${name}</h4><div class="meta"><span class="tags"><em class="inv">${cls}</em><em>${style}</em></span>${st}</div></div><canvas width="72" height="72"></canvas><ol>${params}</ol>`;
       grid.appendChild(card);
       const cv = card.querySelector("canvas"), g = cv.getContext("2d");
       const draw = (bits) => {

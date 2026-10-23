@@ -67,7 +67,9 @@ static const ev_t TOUR[] = {
     {16400, 'e', E_K1, 1, 0}, {16900, 's', 0, 0, "22_set_dark"},
     {17000, 'b', B_HOME, 1, 0}, {17020, 'b', B_HOME, 0, 0}, {17600, 's', 0, 0, "23_home_dark"},
     {17700, 'b', B_EDIT, 1, 0}, {17720, 'b', B_EDIT, 0, 0}, {18400, 's', 0, 0, "24_syn_dark"},
-    {18500, 'x', 0, 0, 0},
+    {18500, 'b', B_EDIT, 1, 0}, {18520, 'b', B_EDIT, 0, 0}, {18600, 'b', B_EDIT, 1, 0}, {18620, 'b', B_EDIT, 0, 0},
+    {19300, 's', 0, 0, "25_syn_snd"}, {20300, 's', 0, 0, "25b_syn_snd"},
+    {20400, 'x', 0, 0, 0},
 };
 
 /* measure()'s render on the store as it stands (no init): a pattern built in place */
@@ -1006,11 +1008,11 @@ static int selftest(void)
             pat[16].kit[ui.trk][P_WBNK] = 127;
             fmt(pinfo(ui.trk, P_WBNK), ui.trk, 127, v2, &u);
             fmt(pinfo(ui.trk, P_SYN), ui.trk, 10, n2, &u);
-            int three = nsub(PG_SYN) == 3 && knob_param(PG_SYN, 2, 0) == P_WBNK;
+            int three = nsub(PG_SYN) == 4 && knob_param(PG_SYN, 2, 0) == P_WBNK && knob_param(PG_SYN, 3, 0) == SETTING(18);
             ui.trk = 0;                                               /* T1: GND-SIN */
-            int two = nsub(PG_SYN) == 2;
+            int two = nsub(PG_SYN) == 3 && knob_param(PG_SYN, 2, 0) == SETTING(18) && knob_param(PG_SYN, 2, 2) == SETTING(20);
             CHECK(wt >= 0 && three && two && !strcmp(v1, "M2K") && !strcmp(v2, "M64") && !strcmp(n2, "OS06") && strcmp(n1, n2),
-                  "ui: a wave machine's SYN has a BANK page (M2K / M64), its WAVE named from the bank");
+                  "ui: a wave machine's SYN has a BANK page (M2K / M64) before SND, its WAVE named from the bank; the others SND");
             m2k_init(7);
         }
         /* the owner's 64 as DIGI-WAV plays them, C4 held a second: the machine's own output (before the chain) stays in
@@ -1325,12 +1327,17 @@ static int selftest(void)
         }
         project_save(0);
         int n = m2k_store_pack();
-        if (rev) {
-            store_buf[7] = (uint8_t)rev;                     /* the factory's revision it was saved at */
+        if (rev & 1) {                                       /* version 3, at the factory's revision it was saved at */
+            store_buf[7] = (uint8_t)rev;
+        } else if (rev) {                                    /* version 2: no counts (the build's own), no sounds */
+            store_buf[7] = (uint8_t)rev;
+            memmove(store_buf + 8, store_buf + 10, (size_t)n - 10);
+            store_buf[4] = 2;
+            n -= 2;
         } else {
-            memmove(store_buf + 7, store_buf + 8, (size_t)n - 8);  /* as a store before the factory's revision was kept */
+            memmove(store_buf + 7, store_buf + 10, (size_t)n - 10);  /* version 1: before the factory's revision was kept */
             store_buf[4] = 1;
-            n--;
+            n -= 3;
         }
         m2k_init(12);
         CHECK(m2k_store_unpack(n) == 1, rev ? "store: one saved at an earlier factory revision loads" : "store: one saved before today's demos loads");
@@ -1400,6 +1407,51 @@ static int selftest(void)
         m2k_midi(0x82, 64, 0);
         CHECK(t0, "MIDI: CHAN puts track 1 on its channel");
         m2k_setting(S_MCH, 0); m2k_setting(S_SYNI, 0);
+    }
+    /* the store, version 3: the sound library with it; a store for the FM-1 (16 patterns, one project) read here (64,
+     * four): bank A as it was, the rest blank, the sounds kept; a project file of version 1 still imported */
+    {
+        m2k_init(31);
+        CHECK(snd[0].name[0] && snd[0].machine == pat[0].machine[0] && !memcmp(snd[0].kit, pat[0].kit[0], P_COUNT),
+              "sounds: the factory's library holds bank A's tracks, A01 T1 first");
+        sound_save(63, &pat[2], 4);
+        s_cpy(snd[63].name, "MINE");
+        int n = m2k_store_pack();
+        m2k_init(32);
+        CHECK(m2k_store_unpack(n) == 1 && !strcmp(snd[63].name, "MINE") && snd[63].machine == pat[2].machine[4],
+              "sounds: the library goes out and back with the store");
+        pat[5].kit[1][P_PAN] = 21;
+        pat[20].kit[1][P_PAN] = 22;
+        n = m2k_store_pack_as(16, 1);
+        m2k_init(33);
+        int ok = m2k_store_unpack(n) == 1;
+        m2k_pattern_t blank;
+        pattern_init_blank(&blank);
+        CHECK(ok && pat[5].kit[1][P_PAN] == 21 && !strcmp(pat[20].name, blank.name) && pat[20].kit[1][P_PAN] != 22 &&
+              !strcmp(m2k_project_name(0), "DEMO") && !strcmp(m2k_project_name(2), "P3") && !strcmp(snd[63].name, "MINE"),
+              "store: the FM-1's (16 patterns, one project) read on 64 and four: bank A kept, the rest blank, the sounds kept");
+        int e = m2k_proj_export(0);
+        memmove(store_buf + 5, store_buf + 6, (size_t)e - 6);   /* version 1: no count, 64 patterns */
+        store_buf[4] = 1;
+        CHECK(m2k_proj_import(3, e - 1) == 1 && !strcmp(m2k_project_name(3), "DEMO"), "project file: version 1 still imported");
+    }
+    /* SYN > SND: SLOT picks, SAVE turned twice keeps the track's sound there, LOAD turned twice puts it on a track */
+    {
+        m2k_init(34);
+        open_b01();
+        ui.trk = 2;
+        ui.page = PG_SYN; ui.sub = (uint8_t)(nsub(PG_SYN) - 1);
+        ui.snd_sel = 40;
+        ui.now = 5000;                                            /* the screen's clock, for the second turn */
+        int mach = pat[16].machine[2] = M_SID;
+        pat[16].kit[2][P_DEC] = 77;
+        edit(2, 1); edit(2, 1);                                   /* SAVE, twice */
+        int saved = snd[40].machine == mach && snd[40].kit[P_DEC] == 77 && snd[40].name[0];
+        ui.trk = 4;
+        ui.sub = (uint8_t)(nsub(PG_SYN) - 1);
+        edit(1, 1); edit(1, 1);                                   /* LOAD, twice */
+        CHECK(saved && pat[16].machine[4] == mach && pat[16].kit[4][P_DEC] == 77 && trk[4].eff[P_DEC] == 77,
+              "sounds: SYN > SND saves a track's sound into a slot and loads it onto another");
     }
     /* the render on two cores (the FM-1's): the second core's tracks run before or after the first's (as they may,
      * at once) and every pattern of bank A sounds sample for sample as on one */

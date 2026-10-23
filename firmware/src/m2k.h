@@ -119,6 +119,7 @@ const uint8_t *m2k_leds(void);                      /* 27 key LEDs then 14 butto
 uint8_t *m2k_store_buf(int *max);                   /* the buffer the blob is packed into, or written to before unpack */
 int m2k_store_pack(void);                           /* packs it; returns its length */
 int m2k_store_unpack(int len);                      /* reads a blob written into the buffer; 0: not ours, factory kept */
+int m2k_store_pack_as(int patterns, int projects);  /* packs it for an instrument keeping fewer (the FM-1: 16, 1) */
 int m2k_proj_export(int slot);                      /* a project as a file, into the buffer; returns its length */
 int m2k_proj_import(int slot, int len);             /* a project file from the buffer into a slot */
 /* the FM-1 keeps the store in its flash, not in a buffer: the platform's stream, written and read front to back from

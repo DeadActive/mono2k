@@ -13,7 +13,7 @@
 enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOF1, K_VOF2, K_CONS, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
-    K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD, K_MCH,
+    K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD, K_MCH, K_SSEL, K_SLOAD, K_SSAVE,
     K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ, K_ONOFF, K_MSRC, K_MFRQ
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
@@ -44,7 +44,7 @@ static const pi_t PI_GLOB[G_COUNT] = {
     {"DCAY", "REVERB DECAY", K_NUM}, {"DAMP", "REVERB DAMPING", K_NUM}, {"HISS", "HISS AND DUST", K_NUM}, {"DRIV", "BUS DRIVE", K_NUM},
 };
 
-static const pi_t PI_SET[7] = {
+static const pi_t PI_SET[10] = {
     {"SCRN", "SCREEN", K_SCRN},
     {"PROJ", "PROJECT", K_PROJ},
     {"LOAD", "LOAD PROJECT", K_LOAD},
@@ -52,6 +52,9 @@ static const pi_t PI_SET[7] = {
     {"SYIN", "SYNC IN", K_ONOFF},
     {"SYOU", "SYNC OUT", K_ONOFF},
     {"NOTE", "NOTES OUT", K_ONOFF},
+    {"SLOT", "SOUND SLOT", K_SSEL},    /* SYN > SND: the sound library */
+    {"LOAD", "LOAD SOUND", K_SLOAD},
+    {"SAVE", "SAVE SOUND", K_SSAVE},
 };
 
 typedef struct {
@@ -138,7 +141,7 @@ static const char *const NOTE_N[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G"
 
 static const pi_t *pinfo(int t, int id)
 {
-    if (id >= 0xC0) { int s = id & 0x3F; return &PI_SET[s == 16 ? 1 : s == 17 ? 2 : s >= S_MCH && s <= S_NOTO ? 3 + s - S_MCH : 0]; }
+    if (id >= 0xC0) { int s = id & 0x3F; return &PI_SET[s == 16 ? 1 : s == 17 ? 2 : s >= 18 && s <= 20 ? 7 + s - 18 : s >= S_MCH && s <= S_NOTO ? 3 + s - S_MCH : 0]; }
     if (id >= 0x80) return &PI_GLOB[id & 0x7F];
     if (id < 8) return &MI[pat[cur_pat].machine[t]].syn[id];
     if (id < P_LFO) return &PI_COMMON[id - 8];
@@ -165,6 +168,7 @@ static int kind_choices(int k)
     case K_SIDM: case K_ALGO: case K_ASPD: case K_ARNG: return 4;
     case K_SCRN: return 2;
     case K_MCH: return 16;
+    case K_SSEL: return 64;
     case K_MODT: return 3;
     case K_PROJ: return M2K_PROJECTS;
     case K_VOIC: case K_LWAV: return 7;
@@ -334,6 +338,10 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_GSIZ: s_cpy(out, GSIZ_N[(v * 5) >> 7]); *unit = "NOTE"; break;
     case K_SCRN: s_cpy(out, c ? "DARK" : "LIGHT"); *unit = "DISPLAY"; break;
     case K_MCH: { char *e = s_cpy(out, "CH"); s_int(e, c + 1); *unit = "TRACK 1, THE NEXT AFTER"; break; }
+    case K_SSEL: { out[0] = 'S'; out[1] = (char)('0' + (c + 1) / 10); out[2] = (char)('0' + (c + 1) % 10); out[3] = 0;
+                   *unit = snd[c].name[0] ? snd[c].name : "EMPTY"; break; }
+    case K_SLOAD: s_cpy(out, "TURN"); *unit = "TWICE TO LOAD"; break;
+    case K_SSAVE: s_cpy(out, "TURN"); *unit = "TWICE TO SAVE"; break;
     case K_PROJ: { char *e = s_cpy(out, "P"); s_int(e, c + 1); *unit = m2k_project_name(c); break; }
     case K_LOAD: s_cpy(out, "TURN"); *unit = "TWICE TO LOAD"; break;
     default: s_int(out, v); break;
@@ -343,7 +351,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
 /* -------------------------------------------------------------------------------------------- the pages */
 
 enum { PG_HOME, PG_SYN, PG_AMP, PG_FILT, PG_FX, PG_LFO, PG_ARP, PG_GLO, PG_COUNT };
-static const uint8_t NSUB[PG_COUNT] = {1, 2, 2, 2, 4, 6, 1, 5};
+static const uint8_t NSUB[PG_COUNT] = {1, 3, 2, 2, 4, 6, 1, 5};   /* SYN: its two, then SND (BANK before it) */
 static int nsub(int page);                     /* SYN has a third page, the bank, where the machine plays waves */
 #define SETTING(i) (0xC0 | (i))
 #define GL(g) (0x80 | (g))
@@ -353,7 +361,8 @@ static int knob_param(int page, int sub, int k)
 {
     switch (page) {
     case PG_HOME: { static const uint8_t m[4] = {P_LEVL, P_PTCH, GL(G_TMPO), GL(G_SWNG)}; return m[k]; }
-    case PG_SYN: return sub < 2 ? P_SYN + sub * 4 + k : k == 0 ? P_WBNK : NONE;
+    case PG_SYN: return sub < 2 ? P_SYN + sub * 4 + k : sub == nsub(PG_SYN) - 1 ? (k < 3 ? SETTING(18 + k) : NONE)
+                        : k == 0 ? P_WBNK : NONE;
     case PG_AMP: return P_ATK + sub * 4 + k;
     case PG_FILT: return P_BASE + sub * 4 + k;
     case PG_FX: return sub < 3 ? P_EQF + sub * 4 + k : P_MODT + k;
@@ -373,7 +382,7 @@ static void page_label(int page, int sub, char *o)
     case PG_FX: s_cpy(o, sub == 0 ? "FX" : sub == 1 ? "DELAY" : sub == 2 ? "DSTR" : "MOD"); break;
     case PG_LFO: { char *e = s_cpy(o, "LFO"); e = s_int(e, (sub >> 1) + 1); s_cpy(e, (sub & 1) ? "B" : "A"); break; }
     case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "GLITCH" : sub == 2 ? "VERB" : sub == 3 ? "SET" : "MIDI"); break;
-    case PG_SYN: s_cpy(o, sub == 2 ? "BANK" : "SYN"); break;
+    case PG_SYN: s_cpy(o, sub >= 2 && sub == nsub(PG_SYN) - 1 ? "SND" : sub == 2 ? "BANK" : "SYN"); break;
     default: s_cpy(o, N[page]); break;
     }
 }
@@ -389,10 +398,11 @@ static struct {
     uint8_t held[8], nheld, held_added[8], held_edit;
     uint8_t btn[B_COUNT], glo_used, keys[M2K_KEYS];
     uint32_t rec_t0, save_t0;
-    uint8_t save_fired, proj_sel;
+    uint8_t save_fired, proj_sel, snd_sel;   /* snd_sel: SYN > SND's slot */
     uint8_t pkey, pfired, cursor;      /* a page key held in GRID (+1), its hold done; step entry's step */
     uint32_t pkey_t0;
-    uint32_t load_t;
+    uint32_t load_t, snd_t;                  /* a first turn of LOAD (a project, a sound) or SAVE (a sound) */
+    uint8_t snd_arm;                         /* which of LOAD (1) and SAVE (2) the first turn was */
     /* the focus */
     uint8_t focus;
     uint32_t focus_t;
@@ -455,7 +465,8 @@ static void start_glitch(int amt)
     ui.glitch_seed = rnd32();
 }
 
-static int nsub(int page) { return page == PG_SYN && pat[cur_pat].machine[ui.trk] == M_WAV ? 3 : NSUB[page]; }
+static int nsub(int page) { return page == PG_SYN && pat[cur_pat].machine[ui.trk] == M_WAV ? 4 : NSUB[page]; }
+static int snd_page(void) { return ui.page == PG_SYN && ui.sub >= 2 && ui.sub == nsub(PG_SYN) - 1; }
 
 static void toast(const char *a, const char *b)
 {
@@ -478,6 +489,8 @@ static int knob_value(int code)
     const m2k_pattern_t *p = &pat[cur_pat];
     if (code == SETTING(16)) return enc(ui.proj_sel, M2K_PROJECTS);
     if (code == SETTING(17)) return 0;
+    if (code == SETTING(18)) return enc(ui.snd_sel, M2K_SOUNDS);
+    if (code == SETTING(19) || code == SETTING(20)) return 0;
     if (code >= 0xC0) return store_.set[code & 0x3F];
     if (code >= 0x80) return p->glob[code & 0x7F];
     if (ui.grid && ui.nheld) {
@@ -521,6 +534,36 @@ static void edit(int k, int d)
         } else {
             ui.load_t = ui.now | 1u;
             toast("TURN AGAIN", "TO LOAD");
+        }
+    } else if (code == SETTING(18)) {
+        ui.snd_sel = (uint8_t)((nv * M2K_SOUNDS) >> 7);
+        ui.snd_t = 0;
+    } else if (code == SETTING(19) || code == SETTING(20)) {      /* LOAD / SAVE a sound: the second turn does it */
+        int save = code == SETTING(20);
+        char o[16] = {'S', (char)('0' + (ui.snd_sel + 1) / 10), (char)('0' + (ui.snd_sel + 1) % 10), ' ', 0};
+        if (ui.snd_t && ui.snd_arm == save + 1 && ui.now - (ui.snd_t & ~1u) < 2000) {
+            ui.snd_t = 0;
+            m2k_sound_t *sd = &snd[ui.snd_sel];
+            if (save) {
+                sound_save(ui.snd_sel, p, ui.trk);
+                s_cpy(o + 4, sd->name);
+                toast("SAVED", o);
+                dirty = 1;
+            } else if (!sd->name[0]) {
+                toast("EMPTY", "SAVE A SOUND THERE FIRST");
+            } else {
+                p->machine[ui.trk] = sd->machine;
+                m_cpy(p->kit[ui.trk], sd->kit, P_COUNT);
+                m_cpy(trk[ui.trk].eff, sd->kit, P_COUNT);
+                s_cpy(o + 4, sd->name);
+                toast("LOADED", o);
+                ui.card_t = ui.now | 1u;
+                start_glitch(2);
+            }
+        } else {
+            ui.snd_t = ui.now | 1u;
+            ui.snd_arm = (uint8_t)(save + 1);
+            toast("TURN AGAIN", save ? "TO SAVE THE SOUND" : "TO LOAD THE SOUND");
         }
     } else if (code >= 0xC0) {
         store_.set[code & 0x3F] = (uint8_t)nv;
@@ -766,12 +809,15 @@ static void glo_combo(int b)
             for (int t = 0; t < M2K_TRACKS; t++)
                 for (int s = 0; s < M2K_STEPS; s++) { p->step[t][s].flags = 0; p->step[t][s].cond = 0; p->step[t][s].rtrg = 0; }
             for (int i = 0; i < M2K_LOCKS; i++) p->lock[i].trk = 0xFF;
-            toast("CLEAR", a);
+            char o[24], *e = s_cpy(o, a);
+            s_cpy(e, " SOUNDS KEPT");
+            toast("STEPS CLEARED", o);
         } else {
             for (int s = 0; s < M2K_STEPS; s++) { p->step[ui.trk][s].flags = 0; p->step[ui.trk][s].cond = 0; p->step[ui.trk][s].rtrg = 0; }
             for (int i = 0; i < M2K_LOCKS; i++) if (p->lock[i].trk == ui.trk) p->lock[i].trk = 0xFF;
-            char o[8] = {'T', (char)('1' + ui.trk), 0};
-            toast("CLEAR", o);
+            char o[24] = {'T', (char)('1' + ui.trk), 0};
+            s_cpy(o + 2, " SOUND KEPT");
+            toast("STEPS CLEARED", o);
         }
         lockmap_build();
         break;
@@ -838,7 +884,7 @@ void m2k_button(int b, int down)
         ui.grid ^= 1;
         ui.nheld = 0;
         if (ui.spage * 16 >= seq_len()) ui.spage = 0;
-        toast(ui.grid ? "GRID" : "KEYS", ui.grid ? "STEPS ON THE KEYS" : "PLAY THE TRACK");
+        toast(ui.grid ? "GRID OCT-/+ PAGE" : "KEYS", ui.grid ? "HOLD G#4..D#5: LENGTH" : "PLAY THE TRACK");
         start_trans(250);
         break;
     case B_PLAY: seq_play(!sq.playing); break;
@@ -1075,29 +1121,24 @@ static void focus_left(int code)
 /* the machine card, after Model:Cycles' engine screens: its name, class, style and stats, in ink on the page */
 static void machine_card(void)
 {
+    /* its name; its class inverted and its style framed, as tags (on two rows when one is too narrow); then punch,
+     * metal and plastic, each a row of five segments, dealt in one by one as the card opens */
     const mi_t *mi = &MI[pat[cur_pat].machine[ui.trk]];
-    text(&F_M, 4, FOCUS_Y + 7, mi->name, 1, text_w(&F_M, mi->name, 1) <= GX - 8);
-    char o[24];
-    s_cpy(s_cpy(o, "CLASS:"), mi->cls);
-    text(&F_S, 4, FOCUS_Y + 27, o, 1, text_w(&F_S, o, 1) <= GX - 8);
-    s_cpy(s_cpy(o, "STYLE:"), mi->style);
-    text(&F_S, 4, FOCUS_Y + 39, o, 1, text_w(&F_S, o, 1) <= GX - 8);
-    static const char *const ST[3] = {"PNCH", "MTL", "PLST"};
+    text(&F_M, 4, FOCUS_Y + 4, mi->name, 1, text_w(&F_M, mi->name, 1) <= GX - 8);
+    int wc = text_w(&F_S, mi->cls, 1) + 6, ws = text_w(&F_S, mi->style, 1) + 6, ty = FOCUS_Y + 24;
+    tag(4, ty, mi->cls, 1);
+    if (4 + wc + 3 + ws <= GX - 4) tag(4 + wc + 3, ty, mi->style, 0);
+    else { ty += 14; tag(4, ty, mi->style, 0); }
+    static const char *const ST[3] = {"PNCH", "METL", "PLST"};
     uint32_t age = ui.card_t ? ui.now - ui.card_t : 1000;
     for (int r = 0; r < 3; r++) {
-        int y = FOCUS_Y + 53 + r * 12;
-        text(&F_S, 4, y, ST[r], 1, 1);
-        text(&F_S, 38, y, ":", 1, 0);
+        int y = ty + 20 + r * 14;
+        text(&F_S, 4, y, ST[r], 1, 0);
         for (int i = 0; i < 5; i++) {
-            int shown = age > (uint32_t)(60 + (r * 5 + i) * 25);
-            int full = i < mi->stat[r];
-            int cx = 50 + i * 10, cy = y + 5;
-            if (!shown) continue;
-            for (int j = -3; j <= 3; j++) {
-                int w = 3 - (j < 0 ? -j : j);
-                for (int q = -w; q <= w; q++)
-                    if (full || q == -w || q == w) px(cx + q, cy + j, 1);
-            }
+            if (age <= (uint32_t)(60 + (r * 5 + i) * 25)) continue;
+            int x = 49 + i * 10;
+            if (i < mi->stat[r]) rect(x, y + 1, 9, 8, 1);
+            else frame(x, y + 1, 9, 8, 1);
         }
     }
 }
@@ -1241,6 +1282,18 @@ static void picture(void)
     switch (ui.page) {
     case PG_SYN:
     case PG_HOME: {
+        if (snd_page()) {              /* the library: seven slots, the one picked inverted, its machine's badge */
+            int first = CLAMP(ui.snd_sel - 3, 0, M2K_SOUNDS - 7);
+            for (int r = 0; r < 7; r++) {
+                int i = first + r, y = Y + r * 14, on = i == ui.snd_sel;
+                char o[3] = {(char)('0' + (i + 1) / 10), (char)('0' + (i + 1) % 10), 0};
+                if (on) rect(X, y, W, 13, 1);
+                text(&F_S, X + 2, y + 1, o, !on, 0);
+                text(&F_S, X + 7 + text_w(&F_S, "00", 0), y + 1, snd[i].name[0] ? snd[i].name : "-", !on, 0);
+                if (snd[i].name[0]) { const char *b = MI[snd[i].machine].badge; text(&F_S, X + W - 2 - text_w(&F_S, b, 0), y + 1, b, !on, 0); }
+            }
+            break;
+        }
         mark_3d(X + (W - ICON_N) / 2, Y + 2, m);
         if (ui.page == PG_SYN) machine_dots(X + W / 2, Y + 80, m);
         else {

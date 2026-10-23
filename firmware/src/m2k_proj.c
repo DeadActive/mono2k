@@ -215,6 +215,37 @@ static int img_pack_all(m2k_img_t *dst, const char *name)
 
 static m2k_pattern_t pat_tmp POOL;           /* scratch: the factory's blank, an old demo read back */
 
+/* the sound library: four banks of 16 sounds (S01..S64), each a track's machine and its parameters, kept with the
+ * store; an empty slot has no name. The factory fills it from bank A's tracks */
+#define M2K_SOUNDS 64
+typedef struct { char name[8]; uint8_t machine, kit[P_COUNT]; } m2k_sound_t;
+static m2k_sound_t snd[M2K_SOUNDS] POOL;
+
+static void sound_name(char *o, const m2k_pattern_t *p, int t)   /* "MAMM T3": the pattern's name, the track */
+{
+    int i = 0;
+    for (; i < 4 && p->name[i] && p->name[i] != ' '; i++) o[i] = p->name[i];
+    o[i++] = 'T';
+    o[i++] = (char)('1' + t);
+    o[i] = 0;
+}
+
+static void sound_save(int slot, const m2k_pattern_t *p, int t)
+{
+    m2k_sound_t *d = &snd[slot % M2K_SOUNDS];
+    m_set(d, 0, sizeof *d);
+    sound_name(d->name, p, t);
+    d->machine = p->machine[t];
+    m_cpy(d->kit, p->kit[t], P_COUNT);
+}
+
+static void sounds_factory(void)              /* bank A's tracks, A01 T1 first */
+{
+    m_set(snd, 0, sizeof snd);
+    for (int i = 0; i < M2K_SOUNDS && i / M2K_TRACKS < (M2K_PATTERNS < 16 ? M2K_PATTERNS : 16); i++)
+        sound_save(i, &pat[i / M2K_TRACKS], i % M2K_TRACKS);
+}
+
 static void pattern_init_blank(m2k_pattern_t *p)
 {
     pat_init(p, "INIT");
@@ -284,6 +315,7 @@ static void project_load(int slot)
 static void projects_factory(void)
 {
     factory();
+    sounds_factory();
     for (int i = 16; i < M2K_PATTERNS; i++) pattern_init_blank(&pat[i]);
     img_pack_all(&proj[0], "DEMO");
     /* the blank projects: one blank pattern, 64 times */
@@ -301,7 +333,7 @@ static void projects_factory(void)
 /* everything the instrument keeps, as one blob for the platform to save: the settings, the working patterns,
  * the four projects. "M2K2", version, open project; then images as (name, used, len[], data). */
 
-#define STORE_MAX (16 + S_COUNT + (M2K_PROJECTS + 1) * (12 + 2 * M2K_PATTERNS + IMG_DATA))
+#define STORE_MAX (16 + S_COUNT + (M2K_PROJECTS + 1) * (12 + 2 * M2K_PATTERNS + IMG_DATA) + 2 + 80 * 64)
 #ifndef M2K_FW
 static uint8_t store_buf[STORE_MAX] POOL;
 #endif
@@ -333,29 +365,51 @@ static int st_get(void *p, uint32_t n, uint32_t len)
     return 1;
 }
 
-static void ser_img(const m2k_img_t *im)
+/* an image as the stream has it: its name, its length, the lengths of its first n patterns (n may differ from this
+ * build's: the FM-1 keeps 16 a project, the browser 64), their data */
+static void ser_img(const m2k_img_t *im, int n)
 {
-    uint8_t h[12], l[2 * M2K_PATTERNS];
+    uint8_t h[12], l[2];
+    uint32_t used = 0;
+    for (int i = 0; i < n && i < M2K_PATTERNS; i++) used += im->len[i];
     m_cpy(h, im->name, 8);
-    for (int k = 0; k < 4; k++) h[8 + k] = (uint8_t)(im->used >> (8 * k));
-    for (int i = 0; i < M2K_PATTERNS; i++) { l[2 * i] = (uint8_t)im->len[i]; l[2 * i + 1] = (uint8_t)(im->len[i] >> 8); }
+    for (int k = 0; k < 4; k++) h[8 + k] = (uint8_t)(used >> (8 * k));
     st_put(h, 12);
-    st_put(l, sizeof l);
-    st_put(im->data, im->used);
+    for (int i = 0; i < n; i++) {
+        uint16_t v = i < M2K_PATTERNS ? im->len[i] : 0;
+        l[0] = (uint8_t)v; l[1] = (uint8_t)(v >> 8);
+        st_put(l, 2);
+    }
+    st_put(im->data, used);
 }
 
-/* an image from the stream; through the scratch image (an image refused is left as it was), or straight into im */
-static int deser_img(m2k_img_t *im, uint32_t len, int direct)
+/* an image from the stream, of n patterns: the first this build keeps (those past it skipped, those short of it blank);
+ * through the scratch image (an image refused is left as it was), or straight into im. im 0: skipped whole */
+static int deser_img(m2k_img_t *im, uint32_t len, int direct, int n)
 {
-    m2k_img_t *t = direct ? im : &work_img;
-    uint8_t h[12], l[2 * M2K_PATTERNS];
-    if (!st_get(h, 12, len) || !st_get(l, sizeof l, len)) return 0;
+    m2k_img_t *t = direct && im ? im : &work_img;
+    uint8_t h[12], l[2];
+    uint32_t used, keep = 0, sum = 0;
+    if (!st_get(h, 12, len)) return 0;
+    used = (uint32_t)h[8] | ((uint32_t)h[9] << 8) | ((uint32_t)h[10] << 16) | ((uint32_t)h[11] << 24);
+    if (!im) {                                          /* not kept: past it */
+        if (st_at + 2u * (uint32_t)n + used > len) return 0;
+        st_at += 2u * (uint32_t)n + used;
+        return 1;
+    }
     m_cpy(t->name, h, 8);
     t->name[7] = 0;
-    t->used = (uint32_t)h[8] | ((uint32_t)h[9] << 8) | ((uint32_t)h[10] << 16) | ((uint32_t)h[11] << 24);
-    uint32_t sum = 0;
-    for (int i = 0; i < M2K_PATTERNS; i++) { t->len[i] = (uint16_t)(l[2 * i] | (l[2 * i + 1] << 8)); sum += t->len[i]; }
-    if (sum != t->used || t->used > IMG_DATA || !st_get(t->data, t->used, len)) return 0;
+    m_set(t->len, 0, sizeof t->len);
+    for (int i = 0; i < n; i++) {
+        if (!st_get(l, 2, len)) return 0;
+        uint16_t v = (uint16_t)(l[0] | (l[1] << 8));
+        sum += v;
+        if (i < M2K_PATTERNS) { t->len[i] = v; keep += v; }
+    }
+    if (sum != used || keep > IMG_DATA || !st_get(t->data, keep, len)) return 0;
+    if (st_at + (used - keep) > len) return 0;
+    st_at += used - keep;
+    t->used = keep;
     if (!direct) m_cpy(im, t, (uint32_t)(sizeof *im - IMG_DATA + t->used));
     return 1;
 }
@@ -420,32 +474,66 @@ static void refresh_demos(m2k_img_t *im, int rev)
     }
 }
 
-int m2k_store_pack(void)
+/* the store, version 3: "M2K2" 3, the open project and pattern, the factory's revision, how many patterns a project and
+ * how many projects it holds; the settings; the working patterns; the projects; the sound library ('S', its count,
+ * each slot). n and k as this build keeps them, or fewer (the browser writing a store for the FM-1) */
+static int store_pack_nk(int n, int k)
 {
-    uint8_t h[8] = {'M', '2', 'K', '2', 2, (uint8_t)cur_proj, (uint8_t)cur_pat, FACTORY_REV};   /* 2: the factory's
-                                                                                                * revision follows */
+    uint8_t h[10] = {'M', '2', 'K', '2', 3, (uint8_t)cur_proj, (uint8_t)cur_pat, FACTORY_REV, (uint8_t)n, (uint8_t)k};
+    if (cur_proj >= k) h[5] = 0;
+    if (cur_pat >= n) h[6] = 0;
     st_at = 0;
     st_bad = 0;
-    st_put(h, 8);
+    st_put(h, 10);
     st_put(store_.set, S_COUNT);
     if (!img_pack_work("WORK")) return 0;
-    ser_img(&work_img);
-    for (int k = 0; k < M2K_PROJECTS; k++) ser_img(&proj[k]);
+    ser_img(&work_img, n);
+    for (int i = 0; i < k; i++) ser_img(&proj[i < M2K_PROJECTS ? i : 0], n);
+    uint8_t sh[2] = {'S', M2K_SOUNDS};
+    st_put(sh, 2);
+    st_put(snd, sizeof snd);
     return st_bad ? 0 : (int)st_at;
+}
+
+int m2k_store_pack(void) { return store_pack_nk(M2K_PATTERNS, M2K_PROJECTS); }
+
+int m2k_store_pack_as(int patterns, int projects)
+{
+    if (patterns < 1 || patterns > M2K_PATTERNS || projects < 1 || projects > M2K_PROJECTS) return 0;
+    return store_pack_nk(patterns, projects);
 }
 
 int m2k_store_unpack(int len)
 {
-    uint8_t o[8], set[S_COUNT];
+    uint8_t o[10], set[S_COUNT];
     uint32_t n = (uint32_t)len;
     st_at = 0;
-    if (!st_get(o, 5, n) || o[0] != 'M' || o[1] != '2' || o[2] != 'K' || o[3] != '2' || o[4] < 1 || o[4] > 2) return 0;
-    if (!st_get(o + 5, o[4] == 2 ? 3 : 2, n)) return 0;
-    int rev = o[4] == 2 ? o[7] : 0;
+    if (!st_get(o, 5, n) || o[0] != 'M' || o[1] != '2' || o[2] != 'K' || o[3] != '2' || o[4] < 1 || o[4] > 3) return 0;
+    int ver = o[4];
+    if (!st_get(o + 5, ver == 1 ? 2 : ver == 2 ? 3 : 5, n)) return 0;
+    int rev = ver >= 2 ? o[7] : 0;
+    int np = ver >= 3 ? o[8] : M2K_PATTERNS, nk = ver >= 3 ? o[9] : M2K_PROJECTS;   /* before 3: this build's own */
+    if (np < 1 || np > 64 || nk < 1 || nk > 16) return 0;
     if (!st_get(set, S_COUNT, n)) return 0;
-    if (!deser_img(&work_img, n, 1)) return 0;           /* the working patterns, in the scratch image */
-    for (int k = 0; k < M2K_PROJECTS; k++)
-        if (!deser_img(&proj[k], n, 1)) { projects_factory(); return 0; }
+    if (!deser_img(&work_img, n, 1, np)) return 0;          /* the working patterns, in the scratch image */
+    for (int i = 0; i < nk; i++)
+        if (!deser_img(i < M2K_PROJECTS ? &proj[i] : 0, n, 1, np)) { projects_factory(); return 0; }
+    for (int i = nk; i < M2K_PROJECTS; i++) {               /* projects the store has not: blank ones */
+        char nm[8] = {'P', (char)('1' + i), 0};
+        pattern_init_blank(&pat_tmp);
+        int bn = pat_pack(&pat_tmp, blob);
+        img_clear(&proj[i], nm);
+        for (int j = 0; j < M2K_PATTERNS; j++) img_put(&proj[i], j, blob, bn);
+    }
+    uint8_t sh[2];
+    if (ver >= 3 && st_get(sh, 2, n) && sh[0] == 'S') {   /* the sound library: the slots this build keeps */
+        m_set(snd, 0, sizeof snd);
+        for (int i = 0; i < sh[1]; i++) {
+            m2k_sound_t tmp;
+            if (!st_get(&tmp, sizeof tmp, n)) break;
+            if (i < M2K_SOUNDS) { snd[i] = tmp; snd[i].name[7] = 0; if (snd[i].machine >= M_COUNT) snd[i].name[0] = 0; }
+        }
+    }
     if (rev < FACTORY_REV && name_is(proj[0].name, "DEMO")) {      /* today's demos, where the old ones still are */
         factory();
         refresh_demos(&proj[0], rev);
@@ -465,20 +553,20 @@ int m2k_store_unpack(int len)
 int m2k_proj_export(int slot)
 {
     if (slot < 0 || slot >= M2K_PROJECTS) return 0;
-    static const uint8_t h[5] = {'M', '2', 'K', 'P', 1};
+    static const uint8_t h[6] = {'M', '2', 'K', 'P', 2, M2K_PATTERNS};   /* 2: the count of patterns follows */
     st_at = 0;
     st_bad = 0;
-    st_put(h, 5);
-    ser_img(&proj[slot]);
+    st_put(h, 6);
+    ser_img(&proj[slot], M2K_PATTERNS);
     return st_bad ? 0 : (int)st_at;
 }
 
 int m2k_proj_import(int slot, int len)
 {
     const uint8_t *o = store_buf;
-    if (slot < 0 || slot >= M2K_PROJECTS || len < 5 || o[0] != 'M' || o[1] != '2' || o[2] != 'K' || o[3] != 'P' || o[4] != 1) return 0;
-    st_at = 5;
-    return deser_img(&proj[slot], (uint32_t)len, 0);
+    if (slot < 0 || slot >= M2K_PROJECTS || len < 6 || o[0] != 'M' || o[1] != '2' || o[2] != 'K' || o[3] != 'P' || o[4] < 1 || o[4] > 2) return 0;
+    st_at = o[4] == 1 ? 5 : 6;
+    return deser_img(&proj[slot], (uint32_t)len, 0, o[4] == 1 ? 64 : o[5]);   /* 1: 64 a project, as the browser's */
 }
 #endif
 

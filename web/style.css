@@ -202,7 +202,14 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 .mcard { position: relative; border: 1px solid var(--ink); padding: var(--s2); display: grid; grid-template-columns: minmax(0, 1fr) 144px; gap: var(--s2); min-width: 0; }
 .mcard canvas { width: 144px; height: 144px; image-rendering: pixelated; }
 .mcard h4 { margin: 0 0 var(--s1); font: var(--title); text-transform: uppercase; }
-.mcard .meta i { font-style: normal; letter-spacing: 0.15em; }
+.mcard .meta { display: grid; gap: 6px; }
+.mcard .meta .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.mcard .meta em { font-style: normal; padding: 1px 6px; border: 1px solid var(--ink); }
+.mcard .meta em.inv { background: var(--ink); color: var(--paper); }
+.mcard .meta .stat { display: grid; grid-template-columns: 7.5em auto; align-items: center; }
+.mcard .meta .stat i { display: flex; gap: 3px; }
+.mcard .meta .stat u { display: block; width: 14px; height: 9px; border: 1px solid var(--ink); }
+.mcard .meta .stat u.on { background: var(--ink); }
 .mcard ol { grid-column: 1 / -1; margin: 0; padding: var(--s2) 0 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s1) var(--s2); border-top: 1px dotted var(--ink); overflow-wrap: anywhere; }
 .mcard ol li { font-weight: 400; letter-spacing: 0.06em; }
 .mcard ol li b { display: block; font-weight: 700; }
