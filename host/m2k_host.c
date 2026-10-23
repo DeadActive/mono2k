@@ -94,7 +94,12 @@ static const ev_t MANUAL[] = {
     {14500, 'b', B_GLO, 1, 0}, {14520, 'b', B_GLO, 0, 0}, {14540, 'b', B_GLO, 1, 0}, {14560, 'b', B_GLO, 0, 0},
     {14580, 'b', B_GLO, 1, 0}, {14600, 'b', B_GLO, 0, 0}, {14620, 'b', B_GLO, 1, 0}, {14640, 'b', B_GLO, 0, 0},
     {15200, 'e', E_K3, 1, 0}, {15800, 's', 0, 0, "29e_ask"}, {15900, 'b', B_OCTD, 1, 0}, {15920, 'b', B_OCTD, 0, 0},
-    {16000, 'x', 0, 0, 0},
+    {16000, 'b', B_PLAY, 1, 0}, {16020, 'b', B_PLAY, 0, 0}, {16100, 'b', B_FX, 1, 0}, {16200, 'k', 5, 1, 0},
+    {16800, 's', 0, 0, "29f_perform"}, {16900, 'k', 5, 0, 0}, {16920, 'b', B_FX, 0, 0},
+    {17000, 'b', B_LFO, 1, 0}, {17600, 's', 0, 0, "29g_lfo_held"}, {17700, 'b', B_LFO, 0, 0},
+    {17800, 'b', B_GLO, 1, 0}, {18400, 's', 0, 0, "29h_glo_map"}, {18500, 'b', B_GLO, 0, 0},
+    {18600, 'b', B_PLAY, 1, 0}, {18620, 'b', B_PLAY, 0, 0},
+    {18700, 'x', 0, 0, 0},
 };
 
 static void manual_scene(void)
@@ -135,6 +140,11 @@ static void ta_check(int ms)
     for (int i = 0; i < ta_n; i++) {
         const ta_t *a = &ta[i];
         if (a->cut) ta_report("cut", a, 0, ms);
+        for (int k = ta_nwin - 1; k >= 0; k--)           /* begun in a window: it must end inside its frame */
+            if (a->x0 > ta_win[k].x0 && a->y0 > ta_win[k].y0 && a->x0 < ta_win[k].x1 && a->y0 < ta_win[k].y1) {
+                if (a->x1 > ta_win[k].x1 - 2 || a->y1 > ta_win[k].y1 - 2) ta_report("past its window", a, 0, ms);
+                break;
+            }
         for (int j = i + 1; j < ta_n; j++) {
             const ta_t *b = &ta[j];
             if (a->x1 < 0 || b->x1 < 0) continue;
@@ -1803,6 +1813,77 @@ static int selftest(void)
         int stays = (r->step[0][4].flags & ST_TRIG) && ui.grid == 1;
         CHECK(spasted && lclr && stays, "a held step: REC copies it, PLAY pastes it onto another, SEQ clears its locks");
         }
+    }
+    /* performance: FX tapped is its page, held its black keys PERFORM (a repeat while held, KILL silences); LFO held,
+     * the knobs snap back (OCT+ keeps them); GLO + white 9-14 solo while held, 7 a fill for the next loop, 8 taps the
+     * tempo, 15 unmutes all; GLO + SELECT the tempo */
+    {
+        m2k_init(43);
+        static int16_t pb[256];
+        ui.now = 1000;
+        m2k_button(B_FX, 1); m2k_button(B_FX, 0);
+        int fxpage = ui.page == PG_FX;
+        ui.page = PG_HOME;
+        seq_play(1);
+        for (int f = 0; f < 44100; f += 128) m2k_render(pb, 128);
+        m2k_button(B_FX, 1);
+        m2k_key(1, 1);                                /* F#3, black 1: a quarter's repeat */
+        for (int f = 0; f < 4410; f += 128) m2k_render(pb, 128);
+        int rep_on = bus.g_on && bus.g_left > 100000;
+        m2k_key(1, 0);
+        for (int f = 0; f < 512; f += 128) m2k_render(pb, 128);
+        int rep_off = !bus.g_on;
+        m2k_key(25, 1);                               /* F#5, black 11: KILL */
+        int32_t pk = 0;
+        for (int f = 0; f < 4410; f += 128) { m2k_render(pb, 128); if (f > 1000) for (int i = 0; i < 256; i++) pk = pb[i] > pk ? pb[i] : -pb[i] > pk ? -pb[i] : pk; }
+        m2k_key(25, 0);
+        m2k_button(B_FX, 0);
+        int killed = pk == 0 && ui.page == PG_HOME;
+        seq_play(0);
+        ui.page = PG_AMP; ui.sub = 0; ui.trk = 1;
+        int dec0 = pat[0].kit[1][P_DEC];
+        m2k_button(B_LFO, 1);
+        edit(2, 10);                                  /* KNOB 3: DEC */
+        int moved = pat[0].kit[1][P_DEC] != dec0;
+        m2k_button(B_LFO, 0);
+        int back = pat[0].kit[1][P_DEC] == dec0 && ui.page == PG_AMP;
+        m2k_button(B_LFO, 1); edit(2, 10); m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0); m2k_button(B_LFO, 0);
+        int kept = pat[0].kit[1][P_DEC] != dec0;
+        CHECK(fxpage && rep_on && rep_off && killed && moved && back && kept,
+              "PERFORM: FX tapped its page, held a repeat while a black key is held, KILL silent; LFO held: the knobs snap back, OCT+ keeps");
+        m2k_init(44);
+        m2k_button(B_GLO, 1);
+        ui.now = 5000; m2k_key(19, 1); m2k_key(19, 0);   /* G4, white 9... (white 8 is F4) */
+        m2k_button(B_GLO, 0);
+        int fkey = -1, tkey = -1, skey = -1, ukey = -1;
+        for (int k = 0; k < M2K_KEYS; k++) { if (ui.kw[k] == 6) fkey = k; if (ui.kw[k] == 7) tkey = k; if (ui.kw[k] == 8) skey = k; if (ui.kw[k] == 14) ukey = k; }
+        m2k_button(B_GLO, 1);
+        ui.now = 10000; m2k_key(tkey, 1); m2k_key(tkey, 0);
+        ui.now = 10500; m2k_key(tkey, 1); m2k_key(tkey, 0);
+        ui.now = 11000; m2k_key(tkey, 1); m2k_key(tkey, 0);
+        int tapped = (int)seq_bpm() == 120;
+        int tmp0 = pat[0].glob[G_TMPO];
+        m2k_encoder(E_SELECT, 2);
+        int sel = pat[0].glob[G_TMPO] == tmp0 + 2;
+        m2k_key(fkey, 1); m2k_key(fkey, 0);
+        int fillq = sq.fill_next == 1;
+        m2k_key(skey, 1);                             /* solo T1 while held */
+        int solo = sq.solo == 1;
+        m2k_key(skey, 0);
+        int unsolo = sq.solo == 0;
+        pat[0].mute = 0x2A;
+        m2k_key(ukey, 1); m2k_key(ukey, 0);
+        int allon = pat[0].mute == 0;
+        m2k_button(B_GLO, 0);
+        seq_play(1);
+        static int16_t pb2[256];
+        int saw_fill = 0;
+        for (int f = 0; f < 44100 * 30 && !saw_fill; f += 128) { m2k_render(pb2, 128); saw_fill |= sq.fill; }
+        int fill_ends = 0;
+        for (int f = 0; f < 44100 * 30 && !fill_ends; f += 128) { m2k_render(pb2, 128); fill_ends |= !sq.fill; }
+        seq_play(0);
+        CHECK(tapped && sel && fillq && solo && unsolo && allon && saw_fill && fill_ends,
+              "GLO: white 8 taps the tempo (120), SELECT turns it, 7 fills the next loop and only it, 9-14 solo while held, 15 unmutes all");
     }
     /* the render on two cores (the FM-1's): the second core's tracks run before or after the first's (as they may,
      * at once) and every pattern of bank A sounds sample for sample as on one */

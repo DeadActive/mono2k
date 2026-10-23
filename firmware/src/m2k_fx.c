@@ -173,6 +173,35 @@ static inline int32_t adpcm_step(int c, int32_t x)
     return bus.ad_pred[c];
 }
 
+/* PERFORM (FX held): a black key's effect while it is held. Repeats of the last 1/4 .. 1/32 note, reversed, a tape
+ * stop, a stutter (the glitch's own modes, held on); the crush, the wow and the drive at their most; a kill (the bus
+ * silent). Let go, each fades out over the glitch's own 32 samples */
+enum { PF_R4, PF_R8, PF_R16, PF_R32, PF_REV, PF_STOP, PF_STUT, PF_CRSH, PF_WOW, PF_DRIV, PF_KILL, PF_COUNT };
+static struct { uint8_t on[PF_COUNT]; int32_t kill; } perf = {{0}, 32767};
+
+static void bus_perform(int k, int down)
+{
+    if (k < 0 || k >= PF_COUNT) return;
+    perf.on[k] = (uint8_t)down;
+    if (k > PF_STUT) return;
+    if (!down) {                                         /* the repeat lets go: its fade */
+        if (bus.g_on && bus.g_left > 32) bus.g_left = 32;
+        return;
+    }
+    static const uint8_t SIXT[4] = {16, 8, 4, 2};        /* a quarter, an eighth, a sixteenth, a thirty-second, in eighths of a sixteenth */
+    uint32_t half_step = sps_q8 >> 9;                     /* a sixteenth in half-rate samples */
+    uint32_t len = k <= PF_R32 ? (half_step * SIXT[k]) >> 2 : half_step * 4;
+    len = CLAMP(len, 64u, 8192u);
+    bus.g_len = len;
+    bus.g_start = bus.gw - len;
+    bus.g_left = 0x7FFFFFFFu;                             /* until it is let go */
+    bus.g_pos = 0;
+    bus.g_rate = 4096;
+    bus.g_mode = (uint8_t)(k == PF_REV ? 1 : k == PF_STOP ? 2 : k == PF_STUT ? 3 : 0);
+    bus.g_on = 1;
+    bus.g_fade = 0;
+}
+
 /* the sequencer calls this on every sixteenth: maybe start a repeat */
 static void bus_step(void)
 {
@@ -236,9 +265,9 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
         }
     }
     /* the controls on their laws (tools/gen_tables.py, the bus's controls) */
-    int tape = g[G_TAPE], adpc = g[G_ADPC], hiss = g[G_HISS];
+    int tape = perf.on[PF_WOW] ? 127 : g[G_TAPE], adpc = perf.on[PF_CRSH] ? 127 : g[G_ADPC], hiss = g[G_HISS];
     int32_t tq = T_TAPE_Q8[tape];                   /* the depth, in the old control's units, Q8 */
-    int32_t drv = T_DRIV[g[G_DRIV]];
+    int32_t drv = T_DRIV[perf.on[PF_DRIV] ? 127 : g[G_DRIV]];
     int32_t mvol = T_MVOL[master_vol];
     int32_t ad_mix = adpc * 2 > 127 ? 127 : adpc * 2, ad_div = T_ADPC_DIV[adpc];
     uint32_t wow_inc = 54000, flut_inc = 620000;    /* 0.55 Hz, 6.3 Hz */
@@ -325,6 +354,13 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
         }
         l = lim_soft((int32_t)(((int64_t)((l * drv) >> 8) * mvol) >> 15));
         r = lim_soft((int32_t)(((int64_t)((r * drv) >> 8) * mvol) >> 15));
+        if (perf.kill != (perf.on[PF_KILL] ? 0 : 32767)) {   /* KILL: down and back over a millisecond, then exact */
+            int32_t tgt = perf.on[PF_KILL] ? 0 : 32767;
+            perf.kill += (tgt - perf.kill) >> 5;
+            if (tgt && perf.kill > 32767 - 64) perf.kill = 32767;
+            if (!tgt && perf.kill < 64) perf.kill = 0;
+        }
+        if (perf.kill < 32767) { l = (l * perf.kill) >> 15; r = (r * perf.kill) >> 15; }
         out[2 * i] = (int16_t)l;
         out[2 * i + 1] = (int16_t)r;
         if ((i & 7) == 0) mon.scope[mon.scope_w++] = (int16_t)((l + r) >> 1);

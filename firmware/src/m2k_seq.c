@@ -7,6 +7,8 @@ static struct {
     uint8_t playing, step, queued, rec;
     uint8_t full;                      /* a pattern queued could not open (the FM-1's patterns full): for the screen */
     uint8_t jump;                      /* the queued pattern now, at the next step (HOME + its key again) */
+    uint8_t solo;                      /* the tracks soloed while GLO + white 9-14 are held (0 none) */
+    uint8_t fill_next, fill_auto;      /* a fill for the next loop (GLO + white 7), and that loop's own */
     int32_t ctr;                       /* Q8 samples to the next step */
     uint32_t lockmap[M2K_TRACKS][2];   /* steps with locks, for the screen */
     /* live play */
@@ -180,7 +182,7 @@ static void fire_step(int s)
     m2k_pattern_t *p = PAT(cur_pat);
     for (int t = 0; t < M2K_TRACKS; t++) {
         m2k_step_t st = p->step[t][s];
-        if (!(st.flags & ST_TRIG) || (p->mute >> t & 1)) continue;
+        if (!(st.flags & ST_TRIG) || (p->mute >> t & 1) || (sq.solo && !(sq.solo >> t & 1))) continue;
         if (sq.rec_skip[t] == s) { sq.rec_skip[t] = -1; continue; }
         if (sq.nheld && t == sq.ktrk) continue;     /* the player has the track */
         if (!cond_pass(t, st.cond)) continue;
@@ -212,6 +214,8 @@ static void step_next(void)
         sq.jump = 0;
         sq.step = 0;
         sq.loops++;
+        if (sq.fill_next) { sq.fill = 1; sq.fill_next = 0; sq.fill_auto = 1; }   /* a loop of fill, then back */
+        else if (sq.fill_auto) { sq.fill = 0; sq.fill_auto = 0; }
         if (sq.queued != cur_pat && !pat_can_open(sq.queued)) {   /* the FM-1's patterns full: this one plays on */
             sq.queued = (uint8_t)cur_pat;
             sq.full = 1;
@@ -560,6 +564,8 @@ void m2k_init(uint32_t seed)
     rng = seed | 1u;
     m_set(trk, 0, sizeof trk);
     m_set(&bus, 0, sizeof bus);
+    m_set(&perf, 0, sizeof perf);
+    perf.kill = 32767;
     m_set(&sq, 0, sizeof sq);
     m_set(&mx, 0, sizeof mx);
     modn = modpn = 0;

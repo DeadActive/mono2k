@@ -53,8 +53,11 @@ static void noclip(void) { clip(0, 0, M2K_W, M2K_H); }
 typedef struct { int16_t x0, y0, x1, y1; uint8_t cut; char s[14]; } ta_t;
 static ta_t ta[512];
 static int ta_n;
+static struct { int16_t x0, y0, x1, y1; } ta_win[16];   /* the windows (paper fills) drawn so far this frame */
+static int ta_nwin;
 static void ta_cover(int x, int y, int w, int h)
 {
+    if (ta_nwin < 16 && w * h >= 2000) { ta_win[ta_nwin].x0 = (int16_t)x; ta_win[ta_nwin].y0 = (int16_t)y; ta_win[ta_nwin].x1 = (int16_t)(x + w - 1); ta_win[ta_nwin].y1 = (int16_t)(y + h - 1); ta_nwin++; }
     int j = 0;
     for (int i = 0; i < ta_n; i++)
         if (!(ta[i].x0 < x + w && x <= ta[i].x1 && ta[i].y0 < y + h && y <= ta[i].y1)) ta[j++] = ta[i];
@@ -67,6 +70,7 @@ static void cls(void)
     m_set(fb, 0, sizeof fb);
 #ifdef M2K_TEXT_AUDIT
     ta_n = 0;
+    ta_nwin = 0;
 #endif
 }
 
@@ -75,6 +79,7 @@ static void rect(int x, int y, int w, int h, int c)
 {
 #ifdef M2K_TEXT_AUDIT
     if (c == 0 || (c == 1 && w * h >= 600)) ta_cover(x, y, w, h);
+    if (c == 1 && w * h >= 600 && ta_nwin) ta_nwin--;   /* (an ink fill is no window) */
 #endif
     for (int j = y; j < y + h; j++)
         for (int i = x; i < x + w; i++) px(i, j, c);
