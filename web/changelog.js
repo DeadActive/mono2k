@@ -7,12 +7,14 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-23", title: "Four drums, undo, PERFORM, a speed per track, four banks on the FM-1, a sound library, a new screen",
+    date: "2026-10-23", title: "A new bank A, four drums, undo, PERFORM, a speed per track, four banks on the FM-1, a sound library",
     items: [
+      ["patterns", "A new bank A, LO-BIT CLUB: a live set in sixteen parts after the Elektron-and-handhelds club music of Berlin and Sweden (Dataline, Auvrel, Sqein, sm0hm, random_meteor) and LØSTLVLS's Monomachine sounds, the drums on the DRM- machines: LUMEN, PULSAR, LATTICE, SPUDUB (it opens), PROCESS, SQUELCH, GROWL, BREAKS (it peaks), SPRITES, OPLL, JUKE, CHIPJNG (it runs fast), VIOLET, DUSKLIT, FLUTE, EMBERS (it comes down). The bank before is gone; a saved store takes the new parts where the old still stand, and the sound library starts from the new ones."],
+      ["patterns", "Polymeter in the new parts: tracks at 3/4x and 3/2x against the bar, melodies of five notes over four trigs, conditions that change a bar a loop."],
       ["machines", "DRM-KICK, after the LXR's drum voice: a sine, triangle, saw or square swept down from up to 33 times its pitch (PDEP, PDEC, PCRV), on the LXR's laws and its 1.45 ms steps, FM riding the sweep, a snap and a click. Measured against a model of the LXR's voice: the same, sample for sample."],
       ["machines", "DRM-SNAR, after the LXR's snare: a swept tone and a held noise at a rate of its own, the noise alone filtered, CLAP repeating the hit up to 15 times. DRM-HATS: a carrier phase-modulated by a sine and a noise, each in semitones from the note, its own closed and open decays (lock OPEN on the open steps). DRM-CYMB: the same at full level with a swell and long falls."],
       ["workflow", "One rule for editing everywhere: REC copies, PLAY pastes, SEQ clears, and the button held says what: GLO the pattern (in GRID the track's steps), HOME the patterns picked, EDIT the track's sound, a step held in GRID that step."],
-      ["workflow", "Hold REC and tap SEQ: the track in view's steps cleared, in KEYS as in GRID, to record it again (held a second, its sound INIT too; again, undone)."],
+      ["workflow", "Hold REC and tap SEQ: the track in view's steps cleared, in KEYS as in GRID, to record it again; its sound always stays (again, undone)."],
       ["workflow", "Undo and redo: GLO + OCT- and GLO + OCT+, for a paste, a clear, an INIT, a reload or a SEQ tool; the same paste or clear again undoes it too."],
       ["workflow", "Hold the clear a second for INIT: a ring fills on the screen as it comes. Writing over the flash asks first (a sound over another, WIPE, DEMO, a project loaded): OCT+ YES, OCT- NO."],
       ["workflow", "PERFORM: hold FX and the black keys repeat the last 1/4 to 1/32 of a bar, reverse, tape-stop, stutter, crush, wow, drive or kill the bus while held; the knobs are the bus's meanwhile. Hold LFO and turn knobs: they come back when you let go (OCT+ keeps them)."],

@@ -7,6 +7,7 @@ import subprocess, sys, os
 W = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 F = "firmware/src/m2k_factory.c"
 P = "firmware/src/m2k_proj.c"
+H = "host/m2k_bank_rev9.c"                # the bank before: its parts turned at build
 M = [
  ("FM  STAT ratio one step off", F, "    return (best * 128 + 23) / 24;", "    return ((best < 23 ? best + 1 : best) * 128 + 23) / 24;"),
  ("FM  STAT 1FIN ignored", F, "        *fin = CLAMP(f, 0, 127);", "        *fin = 64; (void)f;"),
@@ -56,7 +57,7 @@ M = [
  ("GSIN another machine's page turned", F, "        if (p->machine[t] != M_GSIN) continue;\n        uint8_t *k = &p->kit[t][P_SYN], o[8];\n        m_cpy(o, k, 8);\n        for (int i = 0; i < 8; i++)",
                                           "        if (p->machine[t] == M_COUNT) continue;\n        uint8_t *k = &p->kit[t][P_SYN], o[8];\n        m_cpy(o, k, 8);\n        for (int i = 0; i < 8; i++)"),
  ("GSIN an LFO on another machine moved", F, "            if (p->machine[to] != M_GSIN || dest < P_SYN", "            if (dest < P_SYN"),
- ("GSIN bank A not turned at build", F, "    for (int i = 0; i < 16; i++) gsin_v11(PAT(i));", "    (void)0;"),
+ ("GSIN bank A not turned at build", H, "    for (int i = 0; i < 16; i++) gsin_v11(PAT(i));", "    (void)0;"),
  ("SID converted on a version-11 pattern", P, "    if (ver < 11) sid_v10(p);", "    if (ver < 12) sid_v10(p);"),
  ("SID converted on a version-12 pattern", P, "    if (ver < 11) sid_v10(p);", "    if (ver < 13) sid_v10(p);"),
  ("HOLD not converted", P, "    if (ver < 13) hold_v12(p);", "    if (ver < 1) hold_v12(p);"),
@@ -66,7 +67,7 @@ M = [
  ("HOLD at 120 BPM whatever the part's", F, "    int bpm = 30 + p->glob[G_TMPO];\n    for (int t = 0; t < M2K_TRACKS; t++) p->kit[t][P_HOLD]", "    int bpm = 120;\n    for (int t = 0; t < M2K_TRACKS; t++) p->kit[t][P_HOLD]"),
  ("HOLD locks left", F, "        if (p->lock[i].trk != 0xFF && p->lock[i].param == P_HOLD) p->lock[i].val = hold_to(p->lock[i].val, bpm);", "        (void)i;"),
  ("HOLD not capped at 126", F, "CLAMP((v * bpm * 146 + 9375) / 18750, 0, 126)", "CLAMP((v * bpm * 146 + 9375) / 18750, 0, 127)"),
- ("HOLD bank A not converted at build", F, "    for (int i = 0; i < 16; i++) hold_v12(PAT(i));", "    (void)0;"),
+ ("HOLD bank A not converted at build", H, "    for (int i = 0; i < 16; i++) hold_v12(PAT(i));", "    (void)0;"),
  ("VOX not converted", P, "    if (ver < 14) vox_v13(p);", "    if (ver < 1) vox_v13(p);"),
  ("VOX converted on a version-14 pattern", P, "    if (ver < 14) vox_v13(p);", "    if (ver < 15) vox_v13(p);"),
  ("VOX F2 not set", F, "k[0] = T_VOX14[o[0]][0]; k[1] = T_VOX14[o[0]][1];", "k[0] = T_VOX14[o[0]][0]; k[1] = o[1];"),
@@ -76,7 +77,7 @@ M = [
  ("VOX a BRTH lock left", F, "            else if (l->param == P_SYN + 4) { l->param = P_SYN + 3; l->val = T_VOX14_BR[l->val]; }", "            else if (l->param == P_SYN + 4) (void)0;"),
  ("VOX other locks kept", F, "            else l->trk = 0xFF;\n        }\n    }\n    for (int t = 0; t < M2K_TRACKS; t++)\n        for (int l = 0; l < 3; l++) {\n            uint8_t *b = &p->kit[t][P_LFO + 8 * l];\n            int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1;\n            if (p->machine[to] != M_VOX", "            else (void)0;\n        }\n    }\n    for (int t = 0; t < M2K_TRACKS; t++)\n        for (int l = 0; l < 3; l++) {\n            uint8_t *b = &p->kit[t][P_LFO + 8 * l];\n            int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1;\n            if (p->machine[to] != M_VOX"),
  ("VOX LFOs not followed", F, "            b[L_DEST] = (uint8_t)(dest == P_SYN ? P_SYN + 1 : dest == P_SYN + 4 ? P_SYN + 3 + 1 : 0);", "            (void)b;"),
- ("VOX bank A not converted at build", F, "    for (int i = 0; i < 16; i++) vox_v13(PAT(i));", "    (void)0;"),
+ ("VOX bank A not converted at build", H, "    for (int i = 0; i < 16; i++) vox_v13(PAT(i));", "    (void)0;"),
 ]
 def run():
     r = subprocess.run("cc -O2 -w -Ifirmware/src -Ifirmware/gen -o build/host/m2k_mut host/m2k_host.c -lm && build/host/m2k_mut --selftest",

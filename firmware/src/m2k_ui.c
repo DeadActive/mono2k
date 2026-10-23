@@ -1318,7 +1318,7 @@ static void verb(int noun, int v)
 static void ring_tick(void)
 {
     if (!ring.t0 || ring.done) return;
-    int still = ui.btn[B_SEQ] && (ring.noun == N_PICK ? ui.btn[B_HOME] : ui.btn[B_GLO] || ui.btn[B_REC]);
+    int still = ui.btn[B_SEQ] && (ring.noun == N_PICK ? ui.btn[B_HOME] : ui.btn[B_GLO]);
     if (!still) { ring.t0 = 0; return; }
     if (ui.now - (ring.t0 & ~1u) < 1000) return;
     ring.done = 1;
@@ -1533,8 +1533,8 @@ void m2k_button(int b, int down)
         verb(N_STEP, b == B_REC ? V_COPY : b == B_PLAY ? V_PASTE : V_CLEAR);
         return;
     }
-    /* REC held: SEQ clears the track in view's steps, in KEYS as in GRID (held a second, its sound INIT too; again,
-     * undone): what was just recorded, gone to record again */
+    /* REC held: SEQ clears the track in view's steps, in KEYS as in GRID, its sound always kept (no INIT however long
+     * it is held; again, undone): what was just recorded, gone to record again */
     if (b == B_SEQ && ui.btn[B_REC] && !ui.btn[B_GLO] && !ui.btn[B_HOME] && !ui.btn[B_EDIT]) {
         if (!down) return;
         ui.rec_used = 1;
@@ -1542,6 +1542,12 @@ void m2k_button(int b, int down)
         ui.seq_t0 = 0;
         ui.seq_used = 1;
         verb(N_TRK, V_CLEAR);
+        if (ring.t0) {                 /* a clear (not an undo): no ring, the sound stays */
+            ring.t0 = 0;
+            char o[24] = {'T', (char)('1' + ui.trk), 0};
+            s_cpy(o + 2, " STEPS CLEARED");
+            toast(o, "THE SOUND KEPT. AGAIN: UNDO");
+        }
         return;
     }
     if (b == B_OCTU && down && mom_layer()) { mom.keep = 1; ui.lay_used[1] = 1; toast("KEEP", "LET GO OF LFO"); return; }

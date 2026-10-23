@@ -138,7 +138,7 @@
   };
   const cstr = (x, p) => { const m = new Uint8Array(x.memory.buffer); let s = ""; while (m[p]) s += String.fromCharCode(m[p++]); return s; };
   async function firmware() {
-    const r = await fetch("m2k.wasm?v=74");
+    const r = await fetch("m2k.wasm?v=75");
     const x = new WebAssembly.Instance(new WebAssembly.Module(await r.arrayBuffer()), {}).exports;
     if (x._initialize) x._initialize();
     x.w_init(2000);
@@ -187,12 +187,33 @@
       `<tr><td>${esc(t)}</td><td>${esc(b)}</td><td>${knobs(page, subs).map((r) => esc(r.s4)).join(" · ")}</td></tr>`).join("")}</tbody></table>`;
     const params = $("[data-params]");
     if (params) params.innerHTML = BLOCKS.map(([t, b, page, subs]) => `<h3>${esc(t)} <span style="opacity:.6">· ${esc(b)}</span></h3><table><tbody>${rows(page, subs)}</tbody></table>`).join("");
-    /* bank A: its sixteen names */
+    /* bank A: its sixteen names, and what each is (docs/bank-a.md) */
+    const BANK_TEXT = {
+      LUMEN: "124 · A minor · the set's first groove: a round kick and a clap, hats opening off the beat, an off-beat bass, a dub stab moving Am7 to Fmaj7, an FM call of five notes over four trigs",
+      PULSAR: "122 · G minor · a drum synth alone (after Auvrel): a rim on 1:2, hats in triplets, a ride at half speed, an FM pluck at 3/4x playing five notes against the bar, a sub",
+      LATTICE: "120 · D phrygian · dark and polymetric under a long reverb (after Sqein): a kick in 3 3 2, FM metal at 3/4x, a growling FM bass, a drone, a half-time snare",
+      SPUDUB: "118 · C minor · dub techno under the SPU reverb: a Cm7 stab thrown into a ping-pong echo, its filter breathing, a shaker, a rim, a sparse sub",
+      PROCESS: "126 · A dorian · process techno (after 0F.digital's nanoloop): every track on its own clock, bloops in triplets, FM ticks and noise by chance, a bass jumping the octave",
+      SQUELCH: "128 · E minor · acid: a SID saw through the resonant lowpass, sliding and accented, its cutoff drifting; a 909-ish kick, open hats, a clap, a ride",
+      GROWL: "130 · F minor · techno with an FM growl thrown by a random LFO over a sine sub; driving hats, a snare rolling into the turn, a noise riser",
+      BREAKS: "132 · E minor · breaks: a kick off the grid, a snare with ghosts, a beating reese with its sub, a SID hoover diving, an Em7 pad",
+      SPRITES: "136 · F# minor · Game Boy chiptek (after sm0hm): a pulse bass pumping the octave, square arpeggios, crushed noise hats, a pulse lead's hook",
+      OPLL: "128 · B minor · the NES with an FM chip: noise hats and snare, the triangle's bass, a two-operator FM lead sliding, the 12.5 % pulse in arpeggios",
+      JUKE: "160 · F minor · footwork (after foodman and suesett): a long 808 kick in threes, rapid hats, VO-6 chopping vowels, an 808 sub, a chip stab",
+      CHIPJNG: "172 · A minor · chip jungle (after KUF): a kick and snare cut as a break, a dark SID bass sliding, a square lead in echoes, a ride",
+      VIOLET: "112 · G minor · half time in slow motion (after L-tron): two squares harmonising a bar a chord, the tape slowing them, a snare deep in the reverb",
+      DUSKLIT: "100 · C minor · lo-bit night (after random_meteor): a crushed snare, 8-bit hats, a reed-like lead on one of the owner's waves, a chorused chord, a soft SID bass",
+      FLUTE: "96 · D dorian · swung hip-hop with a breathy sine flute and strings (after LØSTLVLS's HI sounds), a sub",
+      EMBERS: "116 · E minor · the last loop: a kick thinning out by its conditions, FM bells in a long dark reverb, a drone, a near-sine motif in an echo that won't stop",
+    };
     const bank = $("[data-bank]");
     if (bank) {
       const n = [];
-      for (let i = 0; i < 16; i++) n.push(`<tr><td>A${String(i + 1).padStart(2, "0")}</td><td>${esc(cstr(x, x.w_pat_name(i)))}</td></tr>`);
-      bank.innerHTML = `<table><thead><tr><th>Slot</th><th>Pattern</th></tr></thead><tbody>${n.join("")}</tbody></table>`;
+      for (let i = 0; i < 16; i++) {
+        const nm = cstr(x, x.w_pat_name(i));
+        n.push(`<tr><td>A${String(i + 1).padStart(2, "0")}</td><td>${esc(nm)}</td><td>${esc(BANK_TEXT[nm] || "")}</td></tr>`);
+      }
+      bank.innerHTML = `<table><thead><tr><th>Slot</th><th>Pattern</th><th>What it is</th></tr></thead><tbody>${n.join("")}</tbody></table>`;
     }
   }
   firmware().catch(() => { const ml = $("[data-machines]"); if (ml) ml.innerHTML = "<p>The machines could not be read from the firmware here.</p>"; });

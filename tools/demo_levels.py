@@ -9,10 +9,10 @@
 #   each track alone over two loops (m2k_host --pitch's renders)
 #   a DIGI-WAV part wave by wave: each trig's level (its first 150 ms, VOL taken out) from the pitch renders, every
 #   other wave's VOL (wave_span's) set so its trigs stand where the kit's wave's do (the owner's waves span 16 dB)
-#   the mix, driven by the bank's master drive (BANK_DRIVE), at HAZE's rms (the bank's template, A03), by the
-#   pattern's trim; its low-end share (30-120 Hz: under 30 Hz is not heard, and a sub there only takes headroom) and
-#   crest reported beside HAZE's: a part's bass rises over its
-#   target until its low end is at least HAZE's, a low end still under it flagged
+#   the mix, driven by the bank's master drive (BANK_DRIVE), at the bank's loudness (TARGET_RMS: the bank before's,
+#   HAZE's, measured as it stood), by the pattern's trim; its low-end share (30-120 Hz: under 30 Hz is not heard, and a
+#   sub there only takes headroom) and crest reported: a part's bass rises over its target until its low end is at
+#   least TARGET_LOW, a low end still under it flagged
 # The mix's peak is over 30 s from the start (m2k_host --demo), later loops included. VOL is square law, so an error of e dB moves it by 10^(e / 40); past 127
 # the rest goes to LEVL. Edits firmware/src/m2k_factory.c in place, then prints the result.
 #   .venv/bin/python tools/demo_levels.py [ROUNDS] [--slots A01,A02,...]
@@ -27,7 +27,9 @@ from sweep import load, SR
 from demo_pitch import bank_table, events, M_WAV, P_SYN
 
 F = os.path.join(ROOT, "firmware", "src", "m2k_factory.c")
-HAZE = 3                                           # the template's slot, from the table at the start
+TARGET_RMS = -15.1                                 # dBFS over 30 s: HAZE's, the bank before's template (2026-10-23)
+TARGET_LOW = 55.0                                  # % of the energy in 30-120 Hz, at least (the bank before's 70 %: its
+                                                   # world was the sub's; this one's brighter, chip and techno)
 P_VOL = 13
 PEAK = {"kick": 0, "snare": -3, "hat": -10, "perc": -8}
 RMS = {"bass": -1, "chord": -9, "pad": -10, "lead": -10, "voice": -10}
@@ -78,10 +80,10 @@ def solo(slot, t):
 
 def analyze(slots):
     """{slot: (peak, rms, low-end share, crest)} of each part over 30 s from its start, as heard (the master drive
-    on); HAZE's too, the target"""
+    on)"""
     d = os.path.join(ROOT, "build", "levels")
     os.makedirs(d, exist_ok=True)
-    out = subprocess.run([os.path.join(ROOT, "build/host/m2k_host"), d, "--demo", "30"] + [str(x) for x in sorted(set(slots) | {HAZE})],
+    out = subprocess.run([os.path.join(ROOT, "build/host/m2k_host"), d, "--demo", "30"] + [str(x) for x in sorted(set(slots))],
                          cwd=ROOT, capture_output=True, text=True, check=True).stdout
     res = {}
     for m in re.finditer(r"A(\d\d) \S+\s+30 s: peak (-?[\d.]+) dBFS, rms (-?[\d.]+) dBFS -> (\S+)", out):
@@ -108,14 +110,14 @@ def per_wave(slot, t):
 
 
 def block(s, slot, name):
-    a = s.index(f'pat_v5({slot - 1}, "{name}"')
+    a = s.index(f'part({slot - 1}, "{name}"')
     e = s.index(");", s.index("trim(p, ", a)) + 2
     return a, e
 
 
 def balance(s, slot, name, roles, res):
-    rms_mix, target = res[slot][1], res[HAZE][1]
-    low, low_h = res[slot][2] / 100, res[HAZE][2] / 100
+    rms_mix, target = res[slot][1], TARGET_RMS
+    low, low_h = res[slot][2] / 100, TARGET_LOW / 100
     lv = [solo(slot, t) if r != "-" else (-150.0, -150.0) for t, r in enumerate(roles)]
     rms, peak = [x[0] for x in lv], [x[1] for x in lv]
     a, e = block(s, slot, name)
@@ -127,7 +129,7 @@ def balance(s, slot, name, roles, res):
             continue
         err = peak[ref] + PEAK[role] - peak[t] if role in PEAK else rms[ref] + RMS[role] - rms[t]
         base[t] = err
-        if role == "bass":                         # the low end at least HAZE's: the bass carries the deficit
+        if role == "bass":                         # the low end at least the target's: the bass carries the deficit
             if low < low_h:
                 err = max(err, min(6.0, max(0.5, 10 * math.log10((low_h / (1 - low_h)) / (low / (1 - low))))))
             elif low < low_h + 0.05:
@@ -137,7 +139,7 @@ def balance(s, slot, name, roles, res):
             base[t] = err                          # a bass whose energy is low: its level does carry the low end
     # a part already at VOL and LEV 127 short of its target (a SWAV-SAW bass: its clip's ceiling is 10.5 dB under
     # GND-SIN's, as the Monomachine's): every other track comes down by the shortfall instead, the kick too, and the
-    # trim takes the mix back to HAZE's level. Its level target, and the low end's push only for a bass whose own energy
+    # trim takes the mix back to the bank's level. Its level target, and the low end's push only for a bass whose own energy
     # is mostly in 30-120 Hz (a folded bass's sits over 120 Hz: no level reaches the low end, and chasing it ran every
     # other track down); 6 dB a round at most
     def vol_lev(t):
@@ -180,7 +182,7 @@ def balance(s, slot, name, roles, res):
                 seg = seg[:sp.start()] + rep + seg[sp.end():]
     tm = re.search(r"trim\(p, (\d+)\);", seg)
     tr = int(tm.group(1))
-    if abs(rms_mix - target) > 0.4 and slot != HAZE:  # HAZE is the template: its trim stays
+    if abs(rms_mix - target) > 0.4:
         tr = max(30, min(127, round(tr * 10 ** ((target - rms_mix) / 40))))
     seg = seg[:tm.start()] + f"trim(p, {tr});" + seg[tm.end():]
     return s[:a] + seg + s[e:]
@@ -188,9 +190,7 @@ def balance(s, slot, name, roles, res):
 
 def main():
     rounds = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 3
-    global HAZE
     table = full = bank_table()
-    HAZE = next(k for k, v in full.items() if v["name"] == "HAZE")
     if "--slots" in sys.argv:
         want = {int(x[1:]) for x in sys.argv[sys.argv.index("--slots") + 1].split(",")}
         table = {k: v for k, v in table.items() if k in want}
@@ -207,12 +207,11 @@ def main():
     subprocess.run([os.path.join(ROOT, "build/host/m2k_host"), "build/pitch", "--pitch"], cwd=ROOT, check=True,
                    stdout=subprocess.DEVNULL)
     res = analyze(sorted(table))
-    h = res[HAZE]
     print(f"{'':12s} {'rms':>6s} {'low end':>8s} {'crest':>6s} {'peak':>6s}   BPM  key            flavour")
-    for slot in sorted(set(table) | {HAZE}):
+    for slot in sorted(table):
         row = full.get(slot, {})
         pk, r, low, crest = res[slot]
-        flag = "  LOW END UNDER HAZE'S" if slot != HAZE and low < h[2] else ""
+        flag = "  LOW END UNDER THE TARGET" if low < TARGET_LOW else ""
         print(f"A{slot:02d} {row.get('name', ''):8s} {r:6.1f} {low:7.1f}% {crest:6.1f} {pk:6.1f}   {row.get('bpm', ''):>3} "
               f"{row.get('key', '') + ' ' + row.get('mode', ''):14s} {row.get('flavour', '')}{flag}")
     for slot, row in sorted(table.items()):

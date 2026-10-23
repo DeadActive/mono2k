@@ -10,7 +10,7 @@
 #   notes    each melodic track's pitch classes against the pattern's declared key; voices sounding together a
 #            semitone or a tritone apart, on different tracks
 #   basses   the demo rules (docs/bank-a.md): SWAV-SAW's subs (SUBX and SUB1 an octave under the note, SUB2 two) all
-#            within 30-80 Hz on every trig; no SID bass while SID stands 7 dB over the Monomachine's (README)
+#            within 30-80 Hz on every trig (SID-6581's level gap is closed: a SID bass is fine)
 #   .venv/bin/python tools/demo_pitch.py build/pitch [--steps] [--ea69d53]
 # SWAV-ENS's acceptance is regress.py's ens_accept: bank A's parts as they stood (tools/ref/fixtures), converted,
 # each voice against the Monomachine's (tools/ref/chain_ensacc.spec, ens_voices.py)
@@ -24,7 +24,7 @@ M_GSIN, M_GPRC, M_SID, M_FMS, M_FMD, M_SAW, M_ENS, M_WAV, M_VOX = range(9)
 M_GNOI = 14
 M_DSNR, M_DHAT, M_DCYM = 16, 17, 18                 # the DRM- drums with a noise (no pitch to check)
 MNAME = ["GND-SIN", "GND-PERC", "SID-6581", "FM+STAT", "FM+DYN", "SWAV-SAW", "SWAV-ENS", "DIGI-WAV", "VOX-6", "FM+PAR",
-         "SWAV-PUL", "FX-CHORS", "FX-RING", "FX-DYNMX", "GND-NOIS"]
+         "SWAV-PUL", "FX-CHORS", "FX-RING", "FX-DYNMX", "GND-NOIS", "DRM-KICK", "DRM-SNAR", "DRM-HATS", "DRM-CYMB"]
 P_SYN, P_DEC, P_PORT, P_BASE, P_WDTH, P_HPQ, P_LPQ, P_PTCH, P_LFO = 0, 10, 15, 16, 17, 18, 19, 36, 42
 NAMES = "C C# D D# E F F# G G# A A# B".split()
 # the keys and the tracks' roles each part declares: docs/bank-a.md's table; the old bank's (ea69d53, kept as a
@@ -250,8 +250,6 @@ def main():
                     bad = [f for f in subs if not SUB_HZ[0] <= f <= SUB_HZ[1]]
                     lines.append(f"     subs {min(subs):.1f}-{max(subs):.1f} Hz" +
                                  (f"  SUBS OUTSIDE {SUB_HZ[0]}-{SUB_HZ[1]} Hz: {len(bad)} of {len(subs)}" if bad else ""))
-            if m == M_SID and roles[t - 1] == "bass":
-                lines.append("     A SID BASS: none until SID's level gap (7 dB over the Monomachine's) is fixed")
             if show_steps:
                 for r in res:
                     lines.append(f"       f{r['step']['frame']:7d} n{r['step']['note']:3d} {r['cents']:+6.1f} c " +

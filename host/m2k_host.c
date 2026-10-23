@@ -10,6 +10,7 @@
 #include <math.h>
 #define M2K_TEXT_AUDIT 1                  /* every frame's text checked (ta_check) */
 #include "../firmware/src/m2k_core.c"
+#include "m2k_bank_rev9.c"                /* the bank before, for the tests */
 
 static void wav_write(const char *path, const int16_t *s, int frames)
 {
@@ -704,11 +705,20 @@ static int selftest(void)
     CHECK(wow_c > 25 && wow_c < 55 && flut_c < wow_c / 3,
           "tape: the wow drifts (25..55 c at TAPE 127), the flutter stays under a third of it");
     m2k_init(7);
-    CHECK(!strcmp(pat[0].name, "MAMMOTH") && !strcmp(pat[2].name, "HAZE") && !strcmp(pat[16].name, "INIT"),
-          "factory: A01 MAMMOTH, A03 HAZE, B01 INIT");
+    CHECK(!strcmp(pat[0].name, "LUMEN") && !strcmp(pat[2].name, "LATTICE") && !strcmp(pat[16].name, "INIT"),
+          "factory: A01 LUMEN, A03 LATTICE, B01 INIT");
+    {                                                  /* the bank is written on today's pages: it packs and comes back */
+        static m2k_pattern_t q;
+        static uint8_t qb[BLOB_MAX];
+        int same = 1;
+        for (int i = 0; i < 16; i++) same &= pat_unpack(&q, qb, pat_pack(&pat[i], qb)) && !memcmp(&q, &pat[i], sizeof q);
+        CHECK(same, "factory: bank A on today's pages, every part packed and unpacked as it is");
+    }
     CHECK(!strcmp(m2k_project_name(0), "DEMO") && !strcmp(m2k_project_name(1), "P2"), "projects: DEMO, P2");
     printf("     DEMO packed: %u bytes for 64 patterns (A01 %d bytes, B01 %d)\n", proj[0].used, proj[0].len[0], proj[0].len[16]);
-    /* the pattern formats: older ones convert once, on their path; today's loads unchanged */
+    /* the pattern formats: older ones convert once, on their path; today's loads unchanged. Held on the bank before
+     * (factory revision 9, host/m2k_bank_rev9.c): real parts written on the old pages, turned at build */
+    factory_rev9();
     {
         /* the demos are written on today's chain: none is converted (A03 HAZE's T6 DTIM 64 would become 127) */
         CHECK(pat[2].kit[5][P_DTIM] == 64 && pat[2].kit[0][P_DSND] == 64 && pat[2].kit[0][P_DIST] == 66,
@@ -915,15 +925,17 @@ static int selftest(void)
         {
             int gs = 0, gok = 0;
             m2k_init(2000);
+            factory_rev9();
             for (int d = 0; d < 16; d++)
                 for (int t = 0; t < M2K_TRACKS; t++)
                     if (pat[d].machine[t] == M_GSIN) { gs++; gok += pat[d].kit[t][P_SYN + 7] == 64; }
-            CHECK(gs > 0 && gok == gs, "factory: bank A's GND-SIN tracks on today's page (TUNE on H)");
+            CHECK(gs > 0 && gok == gs, "factory, the bank before: its GND-SIN tracks turned onto today's page at build (TUNE on H)");
         }
         /* and its HOLDs, written in 14.6 ms steps, in beats at each part's tempo: A01 MAMMOTH (164 BPM) T4's 263 ms
          * (18) is 23 steps of 11.4 ms, its locks 24 14 30 20 26 (350 .. 438 ms) 31 18 38 26 33 */
         {
             m2k_init(2000);
+            factory_rev9();
             int ok = pat[0].glob[G_TMPO] == 164 - 30 && pat[0].kit[3][P_HOLD] == 23, nl = 0;
             for (int i = 0; i < M2K_LOCKS; i++)
                 if (pat[0].lock[i].trk == 3 && pat[0].lock[i].param == P_HOLD) {
@@ -931,7 +943,7 @@ static int selftest(void)
                     nl++;
                     ok = ok && (v == 23 || v == 31 || v == 18 || v == 38 || v == 26 || v == 33);
                 }
-            CHECK(ok && nl > 0, "factory: bank A's HOLDs in beats at each part's tempo (A01's T4: 263 ms, 23 steps at 164)");
+            CHECK(ok && nl > 0, "factory, the bank before: its HOLDs in beats at each part's tempo (A01's T4: 263 ms, 23 steps at 164)");
         }
         /* VOX-6 onto VO-6's page (14): the old vowel to the nearest VOC1 VOC2 (an E, 400 and 2100 Hz, lands within 8 %
          * of both), BRTH to VOIC; a VOWL lock to VOC1's, a BRTH lock to VOIC's, the rest gone; an LFO on BRTH moves to
@@ -970,6 +982,7 @@ static int selftest(void)
             wn2 = pat_pack_v(&w2, wb, 14);                                        /* a version-14 pattern: not again */
             ok = ok && pat_unpack(&w3, wb, wn2) && !memcmp(&w3.kit[0][P_SYN], k, 8);
             m2k_init(2000);
+            factory_rev9();
             ok = ok && pat[1].machine[3] == M_VOX && pat[1].kit[3][P_SYN + 0] == T_VOX14[0][0] && pat[1].kit[3][P_SYN + 5] == 64;
             CHECK(ok, "format: version 13 -> 14, VOX-6 onto VO-6's page (the vowel to its F1 F2, BRTH to VOIC, their locks and"
                       " LFOs with them, the rest gone; its HOLD not turned again); version 14 as it is; CUTUP's voice turned at build");
@@ -1460,7 +1473,7 @@ static int selftest(void)
     project_load(1);
     CHECK(pat[5].kit[2][P_VOL] != 1, "load project discards unsaved work");
     project_load(0);
-    CHECK(!strcmp(pat[1].name, "CUTUP"), "load DEMO again");
+    CHECK(!strcmp(pat[1].name, "PULSAR"), "load DEMO again");
     /* the store, out and back */
     pat[3].kit[1][P_PAN] = 17;
     int n = m2k_store_pack();
@@ -1484,14 +1497,15 @@ static int selftest(void)
     /* a store saved before today's demos: the slots still holding the ones its revision shipped take today's, the
      * owner's stay. Revision 0 (before the store kept one: A16 was INIT, the owner's once written in), 1 to 8 (7: the
      * bank before its reorder, every part in another slot; 8: before CUTUP and RIVETS swapped) */
-    for (int rev = 0; rev < 9; rev++) {
-        static const char *const OLDN[9] = {"SPU RM", "DAYDRM", "GLITCH", "DREXC", "FACETS", "TORQUE", "PYLONS", "HAZE", "RIVETS"};
-        int sl = rev == 2 ? 4 : rev == 3 || rev == 6 ? 8 : rev == 4 ? 3 : rev == 5 ? 5 : rev == 7 ? 0 : rev == 8 ? 1 : 2;   /* a slot the next revision replaced */
+    for (int rev = 0; rev < 10; rev++) {
+        static const char *const OLDN[10] = {"SPU RM", "DAYDRM", "GLITCH", "DREXC", "FACETS", "TORQUE", "PYLONS", "HAZE", "RIVETS",
+                                             "MAMMOTH"};
+        int sl = rev == 2 ? 4 : rev == 3 || rev == 6 ? 8 : rev == 4 ? 3 : rev == 5 ? 5 : rev == 7 || rev == 9 ? 0 : rev == 8 ? 1 : 2;   /* a slot the next revision replaced */
         m2k_init(11);
         m2k_pattern_t keep2 = pat[sl], keep15 = pat[15], keep0 = pat[0], keep6 = pat[6];
         s_cpy(pat[sl].name, OLDN[rev]);                      /* an old demo, as shipped */
         if (rev == 3) { s_cpy(pat[0].name, "HAZE"); pat[0].kit[5][P_DIST] = 74; }   /* A01 as revision 3 shipped it: HAZE's lead at DIST 74 */
-        if (rev == 7) pat[6].kit[5][P_DIST] = 74;            /* A07 VESPER, in its slot before and after the reorder */
+        if (rev == 7) { s_cpy(pat[6].name, "VESPER"); pat[6].kit[5][P_DIST] = 74; }   /* A07 VESPER, in its slot before and after the reorder */
         s_cpy(pat[7].name, "MYSONG");                        /* the owner's */
         if (rev) {
             s_cpy(pat[15].name, rev >= 8 ? "SPLICE" : rev >= 5 ? "FOUNDRY" : "SHARDS");   /* the A16 its revision shipped */
@@ -1670,18 +1684,18 @@ static int selftest(void)
         m2k_button(B_GLO, 1); m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);
         int cleared = 1;
         for (int t = 0; t < M2K_TRACKS; t++) for (int st = 0; st < M2K_STEPS; st++) cleared &= !(pat[0].step[t][st].flags & ST_TRIG);
-        int sounds = !strcmp(pat[0].name, "MAMMOTH") && pat[0].machine[2] == M_ENS;
+        int sounds = !strcmp(pat[0].name, "LUMEN") && pat[0].machine[2] == M_DHAT;
         ui.now = 2000;
         m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);                  /* again: undone */
         int undone = !memcmp(&pat[0], &orig, sizeof orig);
         m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);                /* REDO: cleared again */
-        int redone = !(pat[0].step[0][0].flags & ST_TRIG) && !strcmp(pat[0].name, "MAMMOTH");
+        int redone = !(pat[0].step[0][0].flags & ST_TRIG) && !strcmp(pat[0].name, "LUMEN");
         m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);                /* UNDO */
         int undo2 = !memcmp(&pat[0], &orig, sizeof orig);
         ui.now = 9000;
         m2k_button(B_SEQ, 1);                                        /* held: the ring, then INIT */
         ui.now = 9600; ring_tick();
-        int half = !strcmp(pat[0].name, "MAMMOTH");
+        int half = !strcmp(pat[0].name, "LUMEN");
         ui.now = 10100; ring_tick();
         m2k_button(B_SEQ, 0);
         int init = !memcmp(&pat[0], &blank, sizeof blank);
@@ -1723,7 +1737,7 @@ static int selftest(void)
         for (int k = 0; k < 4; k++) { int c = knob_param(PG_GLO, 3, k); if (c == SETTING(22)) wk = k; if (c == SETTING(23)) dk = k; }
         edit(wk, 1);
         m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);             /* NO */
-        int first = !strcmp(pat[0].name, "MAMMOTH") && !ask.kind;
+        int first = !strcmp(pat[0].name, "LUMEN") && !ask.kind;
         ui.now = 3500;
         edit(wk, 1);
         m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);             /* YES */
@@ -1733,7 +1747,7 @@ static int selftest(void)
         int demos = 1;
         if (dk >= 0) {
             ui.now = 6000; edit(dk, 1); m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
-            demos = !strcmp(pat[0].name, "MAMMOTH") && !strcmp(pat[15].name, "SPLICE") && !strcmp(pat[16].name, "INIT");
+            demos = !strcmp(pat[0].name, "LUMEN") && !strcmp(pat[15].name, "EMBERS") && !strcmp(pat[16].name, "INIT");
         }
         CHECK(wk >= 0 && first && wiped && kept && demos, "GLO > SET: WIPE asks (OCT- NO, OCT+ YES: every pattern INIT, the sounds kept); DEMO, bank A back");
         /* HOME held: the white keys pick patterns, SEQ clears them (held: INIT), REC copies, PLAY pastes, the black
@@ -1750,7 +1764,7 @@ static int selftest(void)
         for (int t = 0; t < M2K_TRACKS; t++) for (int st = 0; st < M2K_STEPS; st++) clr &= !(pat[1].step[t][st].flags & ST_TRIG) && !(pat[4].step[t][st].flags & ST_TRIG);
         int others = 0;
         for (int st = 0; st < M2K_STEPS; st++) others += pat[0].step[0][st].flags & ST_TRIG ? 1 : 0;
-        int sounds = !strcmp(pat[1].name, "CUTUP");
+        int sounds = !strcmp(pat[1].name, "PULSAR");
         ui.now = 1500;
         m2k_button(B_SEQ, 1);                         /* held a second: INIT */
         ui.now = 2600; ring_tick();
@@ -1766,7 +1780,7 @@ static int selftest(void)
         m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0);
         m2k_button(B_HOME, 0);
         int pasted = 0;
-        for (int i = 16; i < 32; i++) pasted += !strcmp(pat[i].name, "MAMMOTH");
+        for (int i = 16; i < 32; i++) pasted += !strcmp(pat[i].name, "LUMEN");
         CHECK(picked && clr && others && sounds && init && pasted == 2 && sq.playing == 0,
               "HOME held: keys pick patterns, SEQ clears them (sounds kept), held INIT; REC copies, black 2 bank B, PLAY pastes");
         m2k_init(40);
@@ -1994,7 +2008,7 @@ static int selftest(void)
         CHECK(card && quiet && oct && nocard, "a help card: OCT- held a second alone, its release then nothing; shorter the octave; a key meanwhile, none");
     }
     /* REC held and SEQ: the track in view's steps cleared, in KEYS (REC's release then neither arms nor fills); again
-     * undone; held a second, the track's sound INIT too */
+     * undone; held a second, its sound still kept (REC + SEQ never touches the sound) */
     {
         m2k_init(49);
         ui.grid = 0; ui.trk = 1;
@@ -2014,12 +2028,9 @@ static int selftest(void)
         ui.now = 4000; m2k_button(B_REC, 1); m2k_button(B_SEQ, 1);
         for (int ms = 4000; ms <= 5300; ms += 16) { ui.now = (uint32_t)ms; m2k_frame(ui.now); }
         m2k_button(B_SEQ, 0); m2k_button(B_REC, 0);
-        m2k_pattern_t fr;
-        pat_init(&fr, "X");
-        kit_default(&fr, 1, q->machine[1]);
-        int init = !memcmp(q->kit[1], fr.kit[1], 8) && !(q->step[1][3].flags & ST_TRIG) && !sq.rec;
+        int init = q->kit[1][P_SYN + 2] == (uint8_t)(keep.kit[1][P_SYN + 2] ^ 33) && !(q->step[1][3].flags & ST_TRIG) && !sq.rec;
         CHECK(gone && nofill && norec && back && init,
-              "REC held and SEQ: the track's steps cleared (REC then neither arms nor fills), again undone, held a second its sound INIT too");
+              "REC held and SEQ: the track's steps cleared (REC then neither arms nor fills), again undone, held a second the sound kept");
     }
     /* the DRM- drums (after the LXR's voices), held to the laws they were measured on against a float model of the LXR's
      * (correlation 1.0000): the kick's sweep a step every 64 samples (its init drum at C2: 211.6 Hz in the first step,
