@@ -22,12 +22,66 @@ static struct {
     uint32_t tick;                     /* control blocks since start */
 } sq;
 
+/* MIDI (GLO > MIDI): the clock in drives the sequencer (its tempo, a step every sixth pulse), the clock out and the
+ * notes go out stamped with the sample they belong to (m2k_midi_out hands them over as the sound reaches it) */
+typedef struct { uint32_t at; uint8_t m[3], n; } mxq_t;   /* a message out, and the sample it belongs to */
+
+static struct {
+    uint32_t now;                      /* samples rendered since init */
+    uint32_t last, per_q8;             /* the last pulse in, and the samples between pulses, Q8, smoothed (0: none) */
+    uint32_t pulses;                   /* pulses in since start */
+    uint8_t ext;                       /* playing to the clock in */
+    uint8_t arm;                       /* a step armed by its pulse, */
+    int32_t arm_ctr;                   /* due in this many Q8 samples (an odd step's swing) */
+    int32_t out_ctr;                   /* Q8 samples to the next pulse out */
+    uint8_t on[M2K_TRACKS];            /* the note each track holds out, 0xFF none */
+    mxq_t q[64];
+    uint8_t qr, qw;
+} mx;
+
+static inline int set_on(int i) { return store_.set[i] >= 64; }
+static inline int midi_ch(void) { return (store_.set[S_MCH] * 16) >> 7; }
+
+static void mx_out(int n, int a, int b, int c)
+{
+    if ((uint8_t)(mx.qw - mx.qr) >= 64) return;
+    mxq_t *q = &mx.q[mx.qw++ & 63];
+    q->at = mx.now; q->m[0] = (uint8_t)a; q->m[1] = (uint8_t)b; q->m[2] = (uint8_t)c; q->n = (uint8_t)n;
+}
+
+int m2k_midi_out(uint8_t msg[3], uint32_t played)
+{
+    if (mx.qr == mx.qw || (int32_t)(played - mx.q[mx.qr & 63].at) < 0) return 0;
+    const uint8_t n = mx.q[mx.qr & 63].n;
+    m_cpy(msg, mx.q[mx.qr & 63].m, 3);
+    mx.qr++;
+    return n;
+}
+
+uint32_t m2k_samples(void) { return mx.now; }
+
+static void mx_note_off(int t)
+{
+    if (mx.on[t] == 0xFF) return;
+    mx_out(3, 0x80 | ((midi_ch() + t) & 15), mx.on[t], 0);
+    mx.on[t] = 0xFF;
+}
+
+static void mx_gate_end(int ti) { mx_note_off(ti); }
+
 static inline const uint8_t *G(void) { return pat[cur_pat].glob; }
-static inline uint32_t seq_bpm(void) { return 30u + G()[G_TMPO]; }
+static inline uint32_t seq_bpm(void) { return ext_bpm ? ext_bpm : 30u + G()[G_TMPO]; }
 static inline int seq_len(void) { int l = G()[G_LEN]; return l < 1 ? 1 : l > 64 ? 64 : l; }
 
 static void seq_tempo(void)
 {
+    if (mx.ext && mx.per_q8) {         /* the clock in's: 24 pulses a beat, six a step */
+        bpm10 = 282240000u / mx.per_q8;
+        sps_q8 = mx.per_q8 * 6u;
+        ext_bpm = (bpm10 + 5u) / 10u;
+        return;
+    }
+    ext_bpm = 0;
     uint32_t b = seq_bpm();
     bpm10 = b * 10u;
     sps_q8 = 169344000u / b;
@@ -131,6 +185,11 @@ static void fire_step(int s)
         apply_locks(t, s);
         unsigned skip = st.flags & ST_TTYPE;
         voice_trig(t, st.note, (st.flags & ST_ACC) ? 127 : 100, st.flags & ST_SLD, skip);
+        if (set_on(S_NOTO) && !(skip & ST_NOAMP)) {
+            mx_note_off(t);
+            mx_out(3, 0x90 | ((midi_ch() + t) & 15), st.note, (st.flags & ST_ACC) ? 127 : 100);
+            mx.on[t] = st.note;
+        }
         if (!(skip & ST_NOAMP)) trk[t].gate_left = gate_blocks(t);      /* no AMP trig: the gate runs on as it was */
         int n = st.rtrg < 1 ? 1 : st.rtrg > 4 ? 4 : st.rtrg;
         sq.rt_left[t] = (uint8_t)(n - 1);
@@ -145,23 +204,42 @@ static void fire_step(int s)
     bus_step();
 }
 
+static void step_next(void)
+{
+    if (++sq.step >= seq_len()) {
+        sq.step = 0;
+        sq.loops++;
+        if (sq.queued != cur_pat) {
+            cur_pat = sq.queued;
+            lockmap_build();
+            for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[cur_pat].kit[t], P_COUNT);
+        }
+    }
+}
+
 static void seq_block(void)
 {
     sq.tick++;
+    mx.now += M2K_SUB;
     seq_tempo();
-    if (sq.playing) {
+    if (sq.playing && mx.ext) {        /* the clock in's pulse armed the step; an odd step waits for its swing */
+        if (mx.arm && (mx.arm_ctr -= M2K_SUB << 8) <= 0) {
+            mx.arm = 0;
+            fire_step(sq.step);
+            step_next();
+        }
+    } else if (sq.playing) {
         sq.ctr -= M2K_SUB << 8;
         while (sq.ctr <= 0) {
             fire_step(sq.step);
             sq.ctr += step_len(sq.step);
-            if (++sq.step >= seq_len()) {
-                sq.step = 0;
-                sq.loops++;
-                if (sq.queued != cur_pat) {
-                    cur_pat = sq.queued;
-                    lockmap_build();
-                    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[cur_pat].kit[t], P_COUNT);
-                }
+            step_next();
+        }
+        if (set_on(S_SYNO)) {          /* the clock out: 24 a beat, on the grid (no swing) */
+            mx.out_ctr -= M2K_SUB << 8;
+            while (mx.out_ctr <= 0) {
+                mx_out(1, 0xF8, 0, 0);
+                mx.out_ctr += (int32_t)(sps_q8 / 6u);
             }
         }
     }
@@ -222,10 +300,48 @@ static void seq_play(int on)
         sq.ctr = 0;
         sq.loops = 0;
         lockmap_build();
+        if (!mx.ext && set_on(S_SYNO)) { mx_out(1, 0xFA, 0, 0); mx.out_ctr = 0; }   /* a pulse with the first step */
     }
-    if (!on)
-        for (int t = 0; t < M2K_TRACKS; t++) voice_off(t);
+    if (!on) {
+        for (int t = 0; t < M2K_TRACKS; t++) { voice_off(t); mx_note_off(t); }
+        if (sq.playing && !mx.ext && set_on(S_SYNO)) mx_out(1, 0xFC, 0, 0);
+        mx.ext = 0;
+        mx.arm = 0;
+    }
     sq.playing = (uint8_t)on;
+}
+
+/* the clock in (SYNC IN): start or continue to it; each pulse times the tempo, every sixth arms a step */
+static void clock_start(int cont)
+{
+    if (sq.playing && !mx.ext) seq_play(0);
+    if (!cont || !sq.playing) {
+        if (!cont) { sq.step = 0; sq.loops = 0; }
+        lockmap_build();
+    }
+    mx.ext = 1;
+    mx.pulses = 0;
+    mx.arm = 0;
+    sq.playing = 1;
+    if (set_on(S_SYNO)) mx_out(1, cont ? 0xFB : 0xFA, 0, 0);    /* passed on */
+}
+
+static void clock_pulse(void)
+{
+    uint32_t dt = mx.now - mx.last;
+    mx.last = mx.now;
+    if (dt > 0 && dt < M2K_SR / 2u) {   /* above 5 BPM; the first after a long silence only starts the timing */
+        uint32_t d8 = dt << 8;
+        mx.per_q8 = mx.per_q8 ? (uint32_t)((int32_t)mx.per_q8 + (((int32_t)d8 - (int32_t)mx.per_q8) >> 3)) : d8;
+    }
+    if (set_on(S_SYNO) && mx.ext) mx_out(1, 0xF8, 0, 0);
+    if (!mx.ext || !sq.playing) return;
+    if (mx.pulses % 6u == 0) {
+        if (mx.arm) { mx.arm = 0; fire_step(sq.step); step_next(); }     /* the last one's swing ran past its pulse */
+        mx.arm = 1;
+        mx.arm_ctr = (sq.step & 1) ? step_len(0) - (int32_t)sps_q8 : 0;   /* an odd step: the even's extra length */
+    }
+    mx.pulses++;
 }
 
 /* ------------------------------------------------------------------------------------------- live play */
@@ -284,7 +400,20 @@ static int mm_cc_param(int cc)
 void m2k_midi(int status, int d1, int d2)
 {
     int ch = status & 15, cmd = status & 0xF0;
-    int t = ch < M2K_TRACKS ? ch : sq.ktrk;
+    int r = (ch - midi_ch() + 16) & 15, t = r < M2K_TRACKS ? r : sq.ktrk;
+    if (status >= 0xF0) {
+        if (!set_on(S_SYNI)) {         /* no clock in: start and stop still drive the sequencer */
+            if (status == 0xFA) seq_play(1);
+            else if (status == 0xFC) seq_play(0);
+            return;
+        }
+        if (status == 0xF8) clock_pulse();
+        else if (status == 0xFA) clock_start(0);
+        else if (status == 0xFB) clock_start(1);
+        else if (status == 0xFC) seq_play(0);
+        else if (status == 0xF2 && !sq.playing) sq.step = (uint8_t)(((d1 & 127) | (d2 & 127) << 7) % seq_len());
+        return;
+    }
     if (cmd == 0xB0) {
         if (d1 == 3) {
             pat[cur_pat].mute = (uint8_t)((pat[cur_pat].mute & ~(1u << t)) | (d2 ? 1u << t : 0));
@@ -306,10 +435,6 @@ void m2k_midi(int status, int d1, int d2)
     } else if (cmd == 0x80 || cmd == 0x90) {
         if (t == sq.ktrk) { live_off(d1); return; }
         if (trk[t].note == d1) voice_off(t);
-    } else if (status == 0xFA) {
-        seq_play(1);
-    } else if (status == 0xFC) {
-        seq_play(0);
     }
 }
 
@@ -411,6 +536,9 @@ void m2k_init(uint32_t seed)
     m_set(trk, 0, sizeof trk);
     m_set(&bus, 0, sizeof bus);
     m_set(&sq, 0, sizeof sq);
+    m_set(&mx, 0, sizeof mx);
+    m_set(mx.on, 0xFF, sizeof mx.on);
+    ext_bpm = 0;
     m_set(dl_mem, 0x7F, sizeof dl_mem);          /* mu-law silence: 0xFF and 0x7F both decode to ~0 */
     m_set(ens_mem, 0, sizeof ens_mem);
     m_set(gl_buf, 0, sizeof gl_buf);

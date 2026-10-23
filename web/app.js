@@ -354,7 +354,7 @@
   const status = (s) => console.info("MONO2K:", s);   /* the page keeps no status line: messages go to the console */
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=67");
+    const r = await fetch("m2k.wasm?v=68");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();
@@ -382,7 +382,7 @@
     try {
       try { ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }); }
       catch (e) { ctx = new AudioContext({ latencyHint: "interactive" }); }
-      await ctx.audioWorklet.addModule("worklet.js?v=32");
+      await ctx.audioWorklet.addModule("worklet.js?v=33");
       node = new AudioWorkletNode(ctx, "mono2k", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(ctx.destination);
       analyser = ctx.createAnalyser();                /* the hero listens: its letters kick on the beat */
@@ -411,6 +411,8 @@
           status(`Exported P${m.slot + 1}.`);
         } else if (m.t === "imported") {
           status(m.ok ? `Imported into P${m.slot + 1}. Load it to play it.` : "That file is not a MONO2K project.");
+        } else if (m.t === "mout") {                 /* what the core sends, as the sound plays it */
+          midiSend(m.list);
         } else if (m.t === "ready") {
           displayMode();
           if (startPattern >= 0) { send({ t: "pattern", n: startPattern }); startPattern = -1; }
@@ -428,6 +430,63 @@
     }
   }
   const send = (m) => { if (node) node.port.postMessage(m); };
+
+  // ---------------------------------------------------------------------------------------------------- MIDI
+  /* Web MIDI: a device in (notes, controls, the clock and transport, into the core as the FM-1's USB and TRS take
+   * them) and one out (what the core sends: GLO > MIDI's clock and notes), stamped ahead by the sound's latency */
+  const S_SYNI = 2, S_SYNO = 3, S_NOTO = 4, MIDI_KEY = "mono2k.midi";
+  let midiAcc = null, midiIn = null, midiOut = null;
+  const midiPrefs = () => { try { return JSON.parse(localStorage.getItem(MIDI_KEY) || "{}"); } catch (e) { return {}; } };
+  const midiKeep = (p) => { try { localStorage.setItem(MIDI_KEY, JSON.stringify({ ...midiPrefs(), ...p })); } catch (e) {} };
+  function midiSend(list) {
+    if (!midiOut) return;
+    const at = performance.now() + ((ctx && (ctx.baseLatency || 0) + (ctx.outputLatency || 0)) || 0) * 1000;
+    for (const b of list) { try { midiOut.send(b, at); } catch (e) { /* a port gone */ } }
+  }
+  function midiBind() {
+    if (midiIn) midiIn.onmidimessage = null;
+    midiIn = midiAcc ? midiAcc.inputs.get($("midi-in").value) || null : null;
+    midiOut = midiAcc ? midiAcc.outputs.get($("midi-out").value) || null : null;
+    if (midiIn) midiIn.onmidimessage = (ev) => {
+      const d = ev.data;
+      if (d.length && d[0] !== 0xF0) send({ t: "midi", s: d[0], a: d[1] || 0, b: d[2] || 0 });
+    };
+    midiKeep({ in: $("midi-in").value, out: $("midi-out").value });
+  }
+  function midiFill() {
+    const pr = midiPrefs(), opt = (p) => { const o = document.createElement("option"); o.value = p.id; o.textContent = p.name; return o; };
+    for (const [id, ports, cur] of [["midi-in", midiAcc.inputs, pr.in], ["midi-out", midiAcc.outputs, pr.out]]) {
+      const sel = $(id), none = document.createElement("option");
+      none.value = ""; none.textContent = "None";
+      sel.replaceChildren(none, ...[...ports.values()].map(opt));
+      sel.value = cur && ports.has(cur) ? cur : "";
+      sel.disabled = false;
+    }
+    midiBind();
+  }
+  function midiSync(id, i, on) {
+    $(id).setAttribute("aria-pressed", on ? "true" : "false");
+    send({ t: "set", i, v: on ? 127 : 0 });
+  }
+  $("midi-on").addEventListener("click", async () => {
+    if (!navigator.requestMIDIAccess) { $("midi-note").textContent = "This browser has no Web MIDI: Chrome, Edge or Firefox."; return; }
+    try { midiAcc = await navigator.requestMIDIAccess({ sysex: false }); }
+    catch (e) { $("midi-note").textContent = "MIDI was not allowed: allow it in the site's settings and press Connect again."; return; }
+    midiAcc.onstatechange = midiFill;
+    midiFill();
+    $("midi-on").textContent = "On";
+    $("midi-on").setAttribute("aria-pressed", "true");
+  });
+  $("midi-in").addEventListener("change", midiBind);
+  $("midi-out").addEventListener("change", midiBind);
+  for (const [id, i] of [["midi-syni", S_SYNI], ["midi-syno", S_SYNO], ["midi-noto", S_NOTO]])   /* kept with the store */
+    $(id).addEventListener("click", () => midiSync(id, i, $(id).getAttribute("aria-pressed") !== "true"));
+  /* the toggles as the core has them (GLO > MIDI on the panel moves them too) */
+  function midiShow(I) {
+    $("midi-syni").setAttribute("aria-pressed", I[24] ? "true" : "false");
+    $("midi-syno").setAttribute("aria-pressed", I[25] ? "true" : "false");
+    $("midi-noto").setAttribute("aria-pressed", I[26] ? "true" : "false");
+  }
   /* the display is set against the page: a light page, a dark screen, and the other way round */
   function displayMode() {
     const v = isDark() ? 0 : 127;
@@ -471,6 +530,7 @@
     const key = Array.prototype.join.call(I, ",");
     if (key === lastInfo) return;
     lastInfo = key;
+    midiShow(I);
     const trk = I[0], pat = I[3];
     curTrk = trk;
     /* the four knobs are named for what they turn on this page, as the screen's footer names them */

@@ -7,7 +7,7 @@
  * ring (RING blocks of M2K_SUB * 8 frames) and the audio interrupt only copies out of it, so no interrupt ever lands
  * in the middle of an edit. Between two blocks the loop takes the panel (keys, buttons, knobs), MIDI, draws a frame
  * when the last has gone out, and sends the screen one changed strip at a time (a whole screen is 77 ms of SPI: the
- * sound would starve if the loop waited for it). */
+ * sound would starve if the loop waited for it), and MIDI out as the sound it belongs to plays. */
 #define APP_NAME "MONO2K"
 #ifndef APP_VER
 #define APP_VER "0.0"
@@ -57,6 +57,16 @@ static void render_ahead(void)
         RING_PUBLISH();
         ring_w++;
     }
+}
+
+/* ---- MIDI out (GLO > MIDI's clock and notes): each message once the interrupt has taken the sound it belongs to
+ * (the ring runs ahead of the speaker; sent at render time it would run 17 ms ahead of the sound). USB only: the
+ * FM-1's TRS jack is an input */
+static void midi_drain(void)
+{
+    uint8_t m[3];
+    int n;
+    while ((n = m2k_midi_out(m, ring_r * BLK)) > 0) midi_send(m[0], n > 1 ? m[1] : 0u, n > 2 ? m[2] : 0u);
 }
 
 /* ---- the panel: the platform's ids (platform.c) to the core's (m2k.h) */
@@ -260,7 +270,9 @@ static void app_loop(void)
     if (M2K_FM1_DIAG) diag_tick();
     render_ahead();
     take_panel();
+    midi_drain();
     render_ahead();
+    midi_drain();
     if (!pending) {
         lights();
         screen_frame();

@@ -1339,6 +1339,62 @@ static int selftest(void)
         if (rev == 7)
             CHECK(!memcmp(pat[6].kit, keep6.kit, sizeof keep6.kit), "store: a demo kept by its name (VESPER) takes today's settings");
     }
+    /* GLO > MIDI: the clock out (24 a beat at the tempo, start first, stop last), the clock in (a step every sixth
+     * pulse, the tempo from them), the notes out, the channel */
+    {
+        static int16_t mb[2 * 128];
+        uint8_t m[3];
+        m2k_init(13);
+        open_b01();
+        m2k_pattern_t *p = &pat[16];
+        p->glob[G_TMPO] = 120 - 30;
+        p->glob[G_SWNG] = 0;
+        p->step[0][0] = (m2k_step_t){.note = 60, .flags = ST_TRIG};
+        p->step[0][2] = (m2k_step_t){.note = 62, .flags = ST_TRIG};
+        m2k_setting(S_SYNO, 127);
+        m2k_setting(S_NOTO, 127);
+        seq_play(1);
+        int pulses = 0, start = 0, ons = 0, offs = 0, first = -1;
+        for (int s = 0; s < M2K_SR / 2; s += 128) {         /* half a second at 120 BPM: a beat */
+            m2k_render(mb, 128);
+            int k;
+            while ((k = m2k_midi_out(m, m2k_samples())) > 0) {
+                if (first < 0) first = m[0];
+                pulses += m[0] == 0xF8; start += m[0] == 0xFA;
+                ons += k == 3 && m[0] == 0x90 && m[2]; offs += k == 3 && m[0] == 0x80;
+            }
+        }
+        seq_play(0);
+        int stop = 0, k;
+        while ((k = m2k_midi_out(m, m2k_samples())) > 0) stop += m[0] == 0xFC;
+        CHECK(first == 0xFA && start == 1 && pulses >= 23 && pulses <= 25 && stop == 1,
+              "MIDI: the clock out, 24 pulses a beat at the tempo, start first and stop at the end");
+        CHECK(ons == 2 && offs >= 1, "MIDI: the notes out, each track's trigs on its channel, and their ends");
+        /* the clock in at 100 BPM: 1102.5 samples a pulse, delivered between blocks */
+        m2k_init(14);
+        open_b01();
+        m2k_setting(S_SYNI, 127);
+        m2k_midi(0xFA, 0, 0);
+        double next = 0;
+        int sent = 0;
+        for (int s = 0; sent < 6 * 9; s += 16) {
+            while (s >= next && sent < 6 * 9) { m2k_midi(0xF8, 0, 0); sent++; next += 1102.5; }
+            m2k_render(mb, 16);
+        }
+        for (int i = 0; i < 8; i++) m2k_render(mb, 16);
+        CHECK(sq.playing && sq.step == 9 % seq_len() && seq_bpm() >= 99 && seq_bpm() <= 101,
+              "MIDI: the clock in, a step every sixth pulse, its tempo the sequencer's");
+        m2k_midi(0xFC, 0, 0);
+        CHECK(!sq.playing, "MIDI: stop from the clock in");
+        /* the channel: track 1 on channel 3, so 0x92 plays track 1 and 0x90 the track in view */
+        m2k_setting(S_MCH, 2 * 8 + 4);
+        ui.trk = 4; sq.ktrk = 4;
+        m2k_midi(0x92, 64, 100);
+        int t0 = trk[0].note == 64 && trk[0].gate;
+        m2k_midi(0x82, 64, 0);
+        CHECK(t0, "MIDI: CHAN puts track 1 on its channel");
+        m2k_setting(S_MCH, 0); m2k_setting(S_SYNI, 0);
+    }
     printf("%s (%d failed)\n", fails ? "SELFTEST FAILED" : "selftest passed", fails);
     return fails != 0;
 }

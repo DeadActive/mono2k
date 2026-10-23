@@ -48,6 +48,10 @@ the sizes: the image within the app slot (581 KB), `.data + .bss` within 96 KiB,
   `M2K_PROJECTS`, `M2K_IMG_DATA` in `tools/fm1/build.py`); 64 patterns need a pattern cache in the core.
 - The second core (`DINGHY_DUAL_CORE=0`): the sound renders on one; `--diag` shows how much of it that takes.
 - Key velocity (MONO2K plays every note alike), USB audio stays as the platform has it.
+- MASTER is the FM-1's level pot, not an encoder: a held step's trig type (GRID, a step held, MASTER on the web) is
+  set in the browser for now.
+- A save cut short by the power (the header is written last, but the sectors before it are erased as it goes) leaves
+  no store: the FM-1 starts on the factory's bank.
 
 ## Changed from the platform
 

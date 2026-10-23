@@ -10,7 +10,7 @@
 <meta name="description" content="MONO2K: six mono machines, a 64-step sequencer with parameter locks and trig conditions, and a lofi bus, for the M-VAVE FM-1. Running in your browser.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <link rel="icon" href="brand/mono2k-iso.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=50">
+<link rel="stylesheet" href="style.css?v=51">
 </head>
 <body>
 <!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
@@ -55,6 +55,17 @@
     </dl>
     <ol class="tracks" id="tracks"></ol>
     <div class="pats" id="pats" role="group" aria-label="The demo patterns, bank A"></div>
+    <div class="midi" id="midi" aria-label="MIDI">
+      <div class="midi__head"><b>MIDI</b><button id="midi-on" type="button">Connect</button></div>
+      <label>In<select id="midi-in" disabled><option value="">None</option></select></label>
+      <label>Out<select id="midi-out" disabled><option value="">None</option></select></label>
+      <div class="midi__sync" role="group" aria-label="GLO &gt; MIDI">
+        <button id="midi-syni" type="button" aria-pressed="false" title="Follow the clock, start and stop that come in">Sync in</button>
+        <button id="midi-syno" type="button" aria-pressed="false" title="Send the clock, start and stop">Sync out</button>
+        <button id="midi-noto" type="button" aria-pressed="false" title="Send each track's notes on its channel">Notes out</button>
+      </div>
+      <p class="midi__note" id="midi-note">Tracks 1–6 listen on channels 1–6 (GLO &gt; MIDI moves them); the others play the track in view.</p>
+    </div>
   </aside>
 </section>
 
@@ -168,6 +179,6 @@
 </footer>
 
 <script src="panel.js?v=2"></script>
-<script src="app.js?v=78"></script>
+<script src="app.js?v=79"></script>
 </body>
 </html>

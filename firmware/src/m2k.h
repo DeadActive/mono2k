@@ -101,7 +101,10 @@ typedef struct {
 } m2k_pattern_t;
 
 /* settings: the instrument's, not a pattern's; saved with the store. 0..127 */
-enum { S_SCREEN, S_COUNT = 16 };       /* S_SCREEN: below 64 light (ink on paper), from 64 dark (the negative) */
+/* S_SCREEN: below 64 light (ink on paper), from 64 dark (the negative). GLO > MIDI: S_MCH track 1's channel (the
+ * others on the ones after it; (v * 16) >> 7), S_SYNI the clock in, S_SYNO the clock out, S_NOTO the notes out (from
+ * 64 on) */
+enum { S_SCREEN, S_MCH, S_SYNI, S_SYNO, S_NOTO, S_COUNT = 16 };
 
 /* the API */
 void m2k_init(uint32_t seed);
@@ -126,6 +129,10 @@ void m2k_project(int slot, int save);               /* load (0) or save (1) a pr
 const char *m2k_project_name(int slot);
 int m2k_project_current(void);
 int m2k_dirty(void);                                /* 1 when SAVE asked for the store to be written */
+/* MIDI out (GLO > MIDI: the clock, start and stop; each track's notes): the next message due once the sound has
+ * been played up to sample PLAYED (m2k_samples counts the samples rendered since init): its length, 0 for none */
+int m2k_midi_out(uint8_t msg[3], uint32_t played);
+uint32_t m2k_samples(void);
 int m2k_playing(void);                              /* 1 while the sequencer plays (the FM-1 writes its flash when it stops) */
 void m2k_setting(int i, int v);                     /* e.g. the web page's theme sets S_SCREEN */
 void m2k_pattern(int n);                            /* select a pattern, as PRESETS does */

@@ -13,7 +13,7 @@
 enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOF1, K_VOF2, K_CONS, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
-    K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD,
+    K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD, K_MCH,
     K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ, K_ONOFF, K_MSRC, K_MFRQ
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
@@ -44,10 +44,14 @@ static const pi_t PI_GLOB[G_COUNT] = {
     {"DCAY", "REVERB DECAY", K_NUM}, {"DAMP", "REVERB DAMPING", K_NUM}, {"HISS", "HISS AND DUST", K_NUM}, {"DRIV", "BUS DRIVE", K_NUM},
 };
 
-static const pi_t PI_SET[3] = {
+static const pi_t PI_SET[7] = {
     {"SCRN", "SCREEN", K_SCRN},
     {"PROJ", "PROJECT", K_PROJ},
     {"LOAD", "LOAD PROJECT", K_LOAD},
+    {"CHAN", "MIDI CHANNEL", K_MCH},   /* GLO > MIDI */
+    {"SYIN", "SYNC IN", K_ONOFF},
+    {"SYOU", "SYNC OUT", K_ONOFF},
+    {"NOTE", "NOTES OUT", K_ONOFF},
 };
 
 typedef struct {
@@ -134,7 +138,7 @@ static const char *const NOTE_N[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G"
 
 static const pi_t *pinfo(int t, int id)
 {
-    if (id >= 0xC0) return &PI_SET[(id & 0x3F) == 16 ? 1 : (id & 0x3F) == 17 ? 2 : 0];
+    if (id >= 0xC0) { int s = id & 0x3F; return &PI_SET[s == 16 ? 1 : s == 17 ? 2 : s >= S_MCH && s <= S_NOTO ? 3 + s - S_MCH : 0]; }
     if (id >= 0x80) return &PI_GLOB[id & 0x7F];
     if (id < 8) return &MI[pat[cur_pat].machine[t]].syn[id];
     if (id < P_LFO) return &PI_COMMON[id - 8];
@@ -160,6 +164,7 @@ static int kind_choices(int k)
     case K_ONOFF: case K_MSRC: return 2;
     case K_SIDM: case K_ALGO: case K_ASPD: case K_ARNG: return 4;
     case K_SCRN: return 2;
+    case K_MCH: return 16;
     case K_MODT: return 3;
     case K_PROJ: return M2K_PROJECTS;
     case K_VOIC: case K_LWAV: return 7;
@@ -328,6 +333,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     }
     case K_GSIZ: s_cpy(out, GSIZ_N[(v * 5) >> 7]); *unit = "NOTE"; break;
     case K_SCRN: s_cpy(out, c ? "DARK" : "LIGHT"); *unit = "DISPLAY"; break;
+    case K_MCH: { char *e = s_cpy(out, "CH"); s_int(e, c + 1); *unit = "TRACK 1, THE NEXT AFTER"; break; }
     case K_PROJ: { char *e = s_cpy(out, "P"); s_int(e, c + 1); *unit = m2k_project_name(c); break; }
     case K_LOAD: s_cpy(out, "TURN"); *unit = "TWICE TO LOAD"; break;
     default: s_int(out, v); break;
@@ -337,7 +343,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
 /* -------------------------------------------------------------------------------------------- the pages */
 
 enum { PG_HOME, PG_SYN, PG_AMP, PG_FILT, PG_FX, PG_LFO, PG_ARP, PG_GLO, PG_COUNT };
-static const uint8_t NSUB[PG_COUNT] = {1, 2, 2, 2, 4, 6, 1, 4};
+static const uint8_t NSUB[PG_COUNT] = {1, 2, 2, 2, 4, 6, 1, 5};
 static int nsub(int page);                     /* SYN has a third page, the bank, where the machine plays waves */
 #define SETTING(i) (0xC0 | (i))
 #define GL(g) (0x80 | (g))
@@ -353,7 +359,8 @@ static int knob_param(int page, int sub, int k)
     case PG_FX: return sub < 3 ? P_EQF + sub * 4 + k : P_MODT + k;
     case PG_LFO: return P_LFO + (sub >> 1) * 8 + (sub & 1) * 4 + k;
     case PG_ARP: return P_AMOD + k;
-    case PG_GLO: return sub < 3 ? GL(sub * 4 + k) : k == 0 ? SETTING(S_SCREEN) : k == 1 ? SETTING(16) : k == 2 ? SETTING(17) : NONE;
+    case PG_GLO: return sub < 3 ? GL(sub * 4 + k) : sub == 4 ? SETTING(S_MCH + k)
+                        : k == 0 ? SETTING(S_SCREEN) : k == 1 ? SETTING(16) : k == 2 ? SETTING(17) : NONE;
     default: return NONE;
     }
 }
@@ -364,7 +371,7 @@ static void page_label(int page, int sub, char *o)
     switch (page) {
     case PG_FX: s_cpy(o, sub == 0 ? "FX" : sub == 1 ? "DELAY" : sub == 2 ? "DSTR" : "MOD"); break;
     case PG_LFO: { char *e = s_cpy(o, "LFO"); e = s_int(e, (sub >> 1) + 1); s_cpy(e, (sub & 1) ? "B" : "A"); break; }
-    case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "GLITCH" : sub == 2 ? "VERB" : "SET"); break;
+    case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "GLITCH" : sub == 2 ? "VERB" : sub == 3 ? "SET" : "MIDI"); break;
     case PG_SYN: s_cpy(o, sub == 2 ? "BANK" : "SYN"); break;
     default: s_cpy(o, N[page]); break;
     }

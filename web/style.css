@@ -309,18 +309,18 @@ a.label { color: var(--ink); text-decoration: none; }
   75% { clip-path: inset(0 0 12% 0); filter: none; }
   100% { clip-path: inset(0); filter: none; }
 }
-:is(.cta, .themebtn, .start, .bigbtn:not([disabled]), .ed__btn, .log__kinds button, .pats button, .read .ctls button,
+:is(.cta, .themebtn, .start, .bigbtn:not([disabled]), .ed__btn, .log__kinds button, .pats button, .read .ctls button, .midi button,
     .tracks .tsel, .tracks .tmute, .subnav a, .pager a, .cards a, .docs__side a, details > summary, .mcard):hover {
   animation: gl-burst 210ms steps(1, end);
 }
 :is(.links a, .kofi, .doc p a, .doc li a, .doc td a, .lede a, .small a):hover { animation: gl-text 160ms steps(1, end); }
-:is(.cta, .themebtn, .start, .bigbtn:not([disabled]), .ed__btn, .log__kinds button, .pats button, .read .ctls button,
+:is(.cta, .themebtn, .start, .bigbtn:not([disabled]), .ed__btn, .log__kinds button, .pats button, .read .ctls button, .midi button,
     .tracks .tsel, .tracks .tmute, .subnav a, .pager a, .cards a, .docs__side a, details > summary, .ed__kb .k):active {
   animation: gl-press 90ms steps(1, end);
 }
 details.gl-dealt[open] > :not(summary) { animation: gl-deal 240ms steps(1, end); }
 @media (prefers-reduced-motion: reduce) {
-  :is(.cta, .themebtn, .start, .bigbtn, .ed__btn, .log__kinds button, .pats button, .read .ctls button, .tracks .tsel,
+  :is(.cta, .themebtn, .start, .bigbtn, .ed__btn, .log__kinds button, .pats button, .read .ctls button, .midi button, .tracks .tsel,
       .tracks .tmute, .subnav a, .pager a, .cards a, .docs__side a, details > summary, .mcard, .links a, .kofi, .doc a,
       .lede a, .small a, .ed__kb .k):is(:hover, :active),
   details.gl-dealt[open] > :not(summary) { animation: none; }
@@ -434,6 +434,17 @@ details.gl-dealt[open] > :not(summary) { animation: gl-deal 240ms steps(1, end);
 .bigbtn[disabled] { cursor: not-allowed; color: var(--ink); background: var(--paper); border: 1px solid var(--ink); background-image: var(--d-sparse); image-rendering: pixelated; }
 .bigbtn[disabled]:hover { outline: 0; }
 .bigbtn.alt { font: var(--title); padding: var(--s2) var(--s3); }
+/* the emulator's MIDI: devices in and out, and GLO > MIDI's sync */
+.midi { margin-top: var(--s2); border: 1px solid var(--ink); padding: var(--s1); display: grid; gap: var(--s1); font: var(--small); }
+.midi__head { display: flex; justify-content: space-between; align-items: center; }
+.midi__head b { font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; }
+.midi label { display: grid; grid-template-columns: 3em minmax(0, 1fr); align-items: center; gap: var(--s1); font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; }
+.midi select { min-width: 0; font: var(--small); color: var(--ink); background: var(--paper); border: 1px solid var(--ink); border-radius: 0; padding: 2px 4px; }
+.midi button { height: var(--s4); padding: 0 var(--s1); font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink); background: var(--paper); border: 1px solid var(--ink); border-radius: 0; cursor: pointer; }
+.midi button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.midi button:focus-visible, .midi select:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.midi__sync { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.midi__note { margin: 0; opacity: 0.7; }
 /* the installer: what the FM-1 says, the write's progress, the files */
 .inst__log { margin-top: var(--s2); padding: var(--s1) var(--s2); max-width: 40em; font: 13px / 20px var(--mono); border: 1px solid var(--ink); border-left-width: 6px; overflow-wrap: anywhere; }
 .inst__log.ok { background-image: var(--d-sparse); image-rendering: pixelated; }

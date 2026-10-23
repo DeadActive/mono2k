@@ -12,6 +12,9 @@ window.M2K_CHANGES = [
       ["machines", "VOX-6 rebuilt on the Monomachine's VO-6 page, measured: VOC1 and VOC2 set the vowel's two formants, VOIC whispers it, its pitch and level as the Monomachine's (it fades in from each trig). CUTUP's voice keeps its vowels. The consonants come next."],
       ["web", "The Installer connects to the FM-1 over USB in Chrome or Edge and says what it runs: M-VAVE's firmware, MONO2K, another open firmware, or an update waiting to finish. It installs MONO2K once the FM-1 build is published (or a test package from a file), finishes an update cut short, and takes the FM-1 back to M-VAVE's V15 from the official file."],
       ["fixes", "VOX-6's CONS steps evenly through its 21 choices, as the Monomachine's screen does."],
+      ["workflow", "GLO > MIDI: CHAN sets the channel of track 1 (the others on the channels after it); SYNC IN follows a MIDI clock, its tempo and its start, continue and stop, a step every sixth pulse with the swing kept; SYNC OUT sends the clock, start and stop; NOTES OUT sends each track's trigs on its channel."],
+      ["web", "The emulator plays to and from your MIDI gear: pick a device in and one out under the patterns, and switch the sync and the notes out there or on GLO > MIDI."],
+      ["machines", "The FM-1 build: MONO2K runs on the open FM-1 platform and makes an installable package (one project of 16 patterns at first). It is being tried on an FM-1 before it is offered here."],
     ],
   },
   {

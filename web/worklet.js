@@ -123,6 +123,14 @@ class Mono2k extends AudioWorkletProcessor {
         R[o] = s.prevR + (s.curR - s.prevR) * s.pos;
       }
     }
+    /* MIDI out (GLO > MIDI's clock and notes): what is due by the samples rendered goes to the page, which stamps it
+     * with the sound's latency */
+    if (x.w_midi_out) {
+      const now = x.w_samples();
+      let list = null, k;
+      while ((k = x.w_midi_out(now)) > 0) (list || (list = [])).push(Array.from(new Uint8Array(x.memory.buffer, x.w_mout(), k)));
+      if (list) this.port.postMessage({ t: "mout", list });
+    }
     const ms = currentTime * 1000;
     if (ms - this.lastFrame >= 33) {
       this.lastFrame = ms;

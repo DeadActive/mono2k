@@ -911,6 +911,8 @@ static void mach_block(int ti, int m, int32_t pitch)
 /* -------------------------------------------------------------------------------------------- envelopes */
 
 static uint32_t hold_bpm = 120;       /* the pattern's tempo, for HOLD (set by each track's block) */
+static uint32_t ext_bpm;               /* the clock in's tempo (GLO > MIDI SYNC IN), 0 when the pattern's rules */
+static void mx_gate_end(int ti);       /* the sequencer's: a track's note ends (NOTES out) */
 
 static void env_block(trk_t *t)
 {
@@ -1125,8 +1127,9 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     trk_t *t = &trk[ti];
     const m2k_pattern_t *pp = &pat[cur_pat];
     int m = pp->machine[ti];
-    if (t->gate_left > 0 && --t->gate_left == 0) { t->gate = 0; t->gate_left = -1; }   /* the step's gate: hold and decay go on */
-    hold_bpm = 30u + pp->glob[G_TMPO];
+    if (t->gate_left > 0 && --t->gate_left == 0) { t->gate = 0; t->gate_left = -1; mx_gate_end(ti); }   /* the step's gate:
+                                                                                         * hold and decay go on */
+    hold_bpm = ext_bpm ? ext_bpm : 30u + pp->glob[G_TMPO];
     env_block(t);
     m_set(tout[ti], 0, sizeof tout[ti]);
     m_set(tvol[ti], 0, sizeof tvol[ti]);

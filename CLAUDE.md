@@ -42,6 +42,20 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   the wave banks (`tools/wave_check.py`); the bus's controls (`tools/bus_curves.py`: `m2k_host DIR --bus` measures
   every value of GLCH HISS ADPC DRIV TAPE, held to `tools/ref/bus_m2k.json`, and each old value through `T_V9_*` to
   the old engine's, `tools/ref/bus_v8.json`).
+- The FM-1 build (`firmware/fm1/README.md`): `.venv/bin/python tools/fm1/build.py [--diag] [--release 0.Y]` makes
+  `build/fm1/mono2k.fwsc` (identity FM-1_980, a release FM-1_98Y) with JieLi's toolchain in a linux/amd64 container
+  (`~/.jieli/toolchain`, the AC79 SDK in `~/fw-AC79_AIoT_SDK`, colima with Rosetta, `DOCKER_CONFIG` ~/.jieli/docker).
+  The platform (`firmware/fm1/{hal,loader,src}`) is CS-1's (Felucca, SLOOP, Dinghy, FM-106), GPL-3.0, its headers
+  kept; `m2k_fm1.c` is the glue (the core in the main loop, the audio ISR copying a 17 ms ring; the store a stream
+  into the flash, 0xD0000..0xE0000, when the sequencer stands). The core is its own unit there (`core.o`): reach it
+  through `m2k.h` alone. RAM: 96 KiB `.bss` + 336 KiB pool; the first build is one project of 16 patterns
+  (`M2K_PATTERNS`, `M2K_PROJECTS`, `M2K_IMG_DATA` set by build.py). Never publish a package on the site that has not
+  run on an FM-1. The installer page (`installer.html`, Felucca's `web/fm1/fm1ota.js`, `fm1pkg.js`, unchanged) installs
+  a package from a file meanwhile.
+- MIDI (GLO > MIDI, settings S_MCH S_SYNI S_SYNO S_NOTO): `m2k_midi_out(msg, played)` hands out what is due once the
+  sound has reached sample `played` (`m2k_samples`); the FM-1 sends it as the ISR takes the ring, the worklet as it
+  renders (the page stamps it with the audio latency). The self-test holds the clock out, the clock in, the notes out
+  and the channel.
 - Calibration (README, Calibration): `tools/ref/mm_ref` (gearmulator, the user's OS image at a path, never in the
   repo; it logs to stdout, so send stdout to /dev/null) against `host/m2k_ref.c`, same specs in `tools/ref/*.spec`.
   Pattern format: 2 amp ATK/HOLD/DEC/REL on the measured curve; 4 SWAV-SAW's page; 5 the track chain on the

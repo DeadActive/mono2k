@@ -5,7 +5,8 @@ a 64-step sequencer with parameter locks, trig conditions and ratchets, and a lo
 beautifully. A 1-bit screen: dithered type and machine marks, Swiss grid, PS1-era glitches.
 
 > **Status: prototype (v0.1).** The core (sound, sequencer, screen) runs in the browser and on a computer. The FM-1
-> build (Felucca's platform around this core) is the next step; nothing has been flashed yet.
+> build (`firmware/fm1/`: the open FM-1 platform around this core) builds an installable package; it has not been
+> tried on an FM-1 yet, and the first one keeps one project of 16 patterns.
 
 **Try it in your browser:** <https://inigohernandez.github.io/mono2k/> (the firmware's own core, compiled to
 WebAssembly, with sound).
@@ -39,7 +40,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 | Factory | project DEMO, bank A: sixteen parts after the late-90s and 2000s digital era, written in batches of four, each heard and approved (`docs/bank-a.md`: reference, genre, key and idea of each). So far HAZE (after Boards of Canada), SPLICE (Autechre), RIBBON (Aphex Twin), FACETS (Aleksi Perälä), SMOKE (dub techno), TORQUE (hardgroove), TUNNEL (Overmono), MOTEL (Anthony Naples); A09–A16 hold the bank before until theirs. Banks B–D blank. A store saved with earlier demos takes the new ones where the old still stand |
 | Sequencer | 6 × 64 steps, note / accent / slide, parameter locks, the Monomachine's trig types (each step trigs the amp, the filter's envelope and the LFOs independently: step + VOL, ALL ... NONE, a trigless lock), trig conditions (chance, A:B, 1ST, PRE, FILL), ratchets, swing, live recording and step entry (REC while stopped), pages held to set the length, patterns queued at the bar |
 | Bus | SPU-style reverb at 22 kHz, beat repeat (reverse, halving, tape stop), tape wow and flutter, 4-bit ADPCM crunch, hiss and dust, drive; each control on a law measured over its whole range (GLCH a chance per sixteenth, 0.3–50 %) |
-| MIDI | channels 1–6 are tracks 1–6, notes and the Monomachine's CC map (SYN 48–55, AMP 56–63, FILT 72–79, FX 80–87, LFO 1/2/3 on 88/104/112, level 7, mute 3), start / stop |
+| MIDI | tracks 1–6 on six channels from GLO > MIDI's CHAN (1–6 at first), the others play the track in view: notes and the Monomachine's CC map (SYN 48–55, AMP 56–63, FILT 72–79, FX 80–87, LFO 1/2/3 on 88/104/112, level 7, mute 3). SYNC IN follows a MIDI clock (its tempo, a step every sixth pulse, the swing kept; start, continue, stop), SYNC OUT sends one (24 a beat, start, stop), NOTES OUT each track's trigs on its channel. The emulator picks a MIDI device in and one out |
 | Screen | 240 × 240 at 1 bit (a 7.2 KB framebuffer): Orbitron in outline-and-dither (one size for every big value), Model:Cycles-style machine cards, machine marks as one family of cut-out stamps after Fors' isotypes (flat, and extruded with dithered sides), dissolves, glitches, live envelopes, filters, LFOs and scopes; light or dark (GLO > SET > SCRN; on the web it follows the page's theme) |
 
 ## Where things are
@@ -55,14 +56,14 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 
 ## The next steps
 
-1. **The FM-1 build**: Felucca 1.6.1's platform (HAL, loader, USB, storage, installer) around this core, the audio on
-   the second core as CS-1 does, the 1-bit framebuffer blitted in strips with the palette's two colours. The projects'
-   images move to the 1 MiB flash (`m2k_proj.c` get / put), and RAM keeps the playing bank, not all 64 patterns.
+1. **The FM-1 build** (`firmware/fm1/README.md`): the first package is built (`tools/fm1/build.py`) and is to be tried
+   on an FM-1. Next: four projects of 64 patterns (a pattern cache in the core: RAM keeps the playing patterns, not
+   all 64 unpacked), the sound on the second core if the first is short of time, then a release on the site.
 2. **Calibration against the Monomachine**, machine by machine: levels, spectra, the machines' own envelopes. The amp
    envelope, SWAV-SAW, SWAV-PUL, SWAV-ENS, the three FM+, SID-6581, GND-SIN, GND-NOIS, FX-RING, VO-6's voice and the
    whole track chain are done (below); VO-6's consonants and V-SW's switch are next. Driven hard, all of them meet its
    ceilings.
-3. More machines (DPRO-BBOX, FX-REVERB and the rest of the FX family), songs, MIDI out and clock.
+3. More machines (DPRO-BBOX, FX-REVERB and the rest of the FX family), songs, a keyboard split to play every track.
 
 ## Author
 

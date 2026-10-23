@@ -98,6 +98,12 @@ EXPORT int w_cc_of(int code)
 }
 
 /* what the page shows next to the panel */
+/* MIDI out: the next message due once the sound reached PLAYED samples (the worklet sends what it rendered) */
+static uint8_t w_mo[3];
+EXPORT int w_midi_out(uint32_t played) { return m2k_midi_out(w_mo, played); }
+EXPORT const uint8_t *w_mout(void) { return w_mo; }
+EXPORT uint32_t w_samples(void) { return m2k_samples(); }
+
 EXPORT const uint8_t *w_info(void)
 {
     w_inf[0] = ui.trk;
@@ -119,6 +125,9 @@ EXPORT const uint8_t *w_info(void)
     w_inf[16] = ui.nheld;
     for (int t = 0; t < M2K_TRACKS; t++) w_inf[17 + t] = pat[cur_pat].machine[t];
     w_inf[23] = (uint8_t)m2k_project_current();
+    w_inf[24] = store_.set[S_SYNI] >= 64;    /* GLO > MIDI */
+    w_inf[25] = store_.set[S_SYNO] >= 64;
+    w_inf[26] = store_.set[S_NOTO] >= 64;
     return w_inf;
 }
 
