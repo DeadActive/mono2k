@@ -10,7 +10,7 @@ static int16_t clip_x0 = 0, clip_y0 = 0, clip_x1 = M2K_W, clip_y1 = M2K_H;
 #define ROWB (M2K_W / 8)
 
 /* patterns: 0..64 are Bayer levels (64 solid); above are the textures of the references */
-enum { PT_SOLID = 64, PT_LINES = 65, PT_VLINES, PT_CHECK, PT_DOTS, PT_SPARSE, PT_CROSS, PT_DIAG, PT_IDOTS };
+enum { PT_SOLID = 64, PT_LINES = 65, PT_VLINES, PT_CHECK, PT_DOTS, PT_SPARSE, PT_CROSS, PT_DIAG, PT_IDOTS, PT_HATCH };
 
 static inline int pat_ink(int p, int x, int y)
 {
@@ -24,6 +24,7 @@ static inline int pat_ink(int p, int x, int y)
     case PT_CROSS: { int a = x & 3, b = y & 3; return (a == b || a == 3 - b) && a != 3 && b != 3; }
     case PT_DIAG: return ((x + y) & 3) == 0;
     case PT_IDOTS: return (x & 1) || (y & 1);
+    case PT_HATCH: return !(x & 3);              /* the screen's one light tone: a hairline every fourth column */
     default: return 1;
     }
 }
@@ -79,6 +80,15 @@ static void rect_grad(int x, int y, int w, int h, int l0, int l1, int vertical)
 }
 
 static void hline(int x, int y, int w, int c) { rect(x, y, w, 1, c); }
+
+/* rows y .. y + h - 1 of the span x .. x + w - 1 slipped dx sideways (a glitch, in place) */
+static void row_slip(int x, int y, int w, int h, int dx)
+{
+    for (int j = y; j < y + h; j++) {
+        if (dx > 0) for (int i = x + w - 1; i >= x; i--) px(i, j, i - dx >= x ? px_get(fb, i - dx, j) : 0);
+        else for (int i = x; i < x + w; i++) px(i, j, i - dx < x + w ? px_get(fb, i - dx, j) : 0);
+    }
+}
 static void vline(int x, int y, int h, int c) { rect(x, y, 1, h, c); }
 static void frame(int x, int y, int w, int h, int c)
 {

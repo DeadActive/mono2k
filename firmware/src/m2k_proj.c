@@ -220,11 +220,10 @@ static m2k_pattern_t pat_tmp POOL;           /* scratch: the factory's blank, an
 typedef struct { char name[8]; uint8_t machine, kit[P_COUNT]; } m2k_sound_t;
 static m2k_sound_t snd[M2K_SOUNDS];                /* (RAM: the FM-1's pool is full) */
 
-static void sound_name(char *o, const m2k_pattern_t *p, int t)   /* "MAMM T3": the pattern's name, the track */
+static void sound_name(char *o, const m2k_pattern_t *p, int t)   /* "MAMMO3": the pattern's name, the track */
 {
     int i = 0;
-    for (; i < 4 && p->name[i] && p->name[i] != ' '; i++) o[i] = p->name[i];
-    o[i++] = 'T';
+    for (; i < 5 && p->name[i] && p->name[i] != ' '; i++) o[i] = p->name[i];
     o[i++] = (char)('1' + t);
     o[i] = 0;
 }

@@ -64,6 +64,7 @@
   <h4>Projects and MIDI</h4>
   <ol>
     <li><a href="#projects">Saving and projects</a></li>
+    <li><a href="#fm1-link">The FM-1 and the Patch Editor</a></li>
     <li><a href="#midi">MIDI</a></li>
   </ol>
   <h4>Reference</h4>
@@ -106,10 +107,10 @@
   <h1>Status and safety</h1>
   <p class="sub">What runs where today, and what installing will mean.</p>
   <h2>Today</h2>
-  <p>MONO2K is a prototype. The firmware's C core, the same code that will run on the FM-1, runs in your browser on the <a href="./">emulator page</a>, with the sound, the sequencer and the screen as they are on the device. Nothing has been flashed to an FM-1 yet: the FM-1 build adds Felucca's platform around this core (the hardware layer, USB, storage, the update loader and the installer).</p>
-  <p>Saves are kept in your browser and can be exported as project files. The save format may still change; older saves are converted as they load.</p>
+  <p>MONO2K is a prototype. Its C core runs in your browser on the <a href="./">emulator page</a> and, in the FM-1 build, on the FM-1 itself, on the open FM-1 platform (Felucca's, through CS-1): the same sound, sequencer and screen in both. The FM-1 build runs on its author's FM-1 and is being tried there before it is offered here. On the FM-1 it keeps one project of 16 patterns (bank A) and the 64 sounds; the emulator keeps four projects of 64.</p>
+  <p>Saves are kept in your browser and can be exported as files; the FM-1 keeps its own in its flash, and the <a href="editor.html">Patch Editor</a> reads them and sends them back (<a href="#fm1-link">The FM-1 and the Patch Editor</a>). The save format may still change; older saves are converted as they load.</p>
   <h2>Installing</h2>
-  <p>When the FM-1 build is ready it will install from the <a href="installer.html">Installer</a> page, over USB, in Chrome or Edge, as Felucca does. Installing other firmware is at your own risk. M-VAVE's own updater, or the installer's return to the official firmware, takes the FM-1 back to how it shipped.</p>
+  <p>The FM-1 build installs from the <a href="installer.html">Installer</a> page, over USB, in Chrome or Edge, as Felucca does, once it is published there. Installing other firmware is at your own risk. M-VAVE's own updater, or the installer's return to the official firmware, takes the FM-1 back to how it shipped; holding OCT− while it powers on always reaches the installer.</p>
   <div class="callout"><b>Note</b><p>MONO2K is not affiliated with Elektron or M-VAVE. Monomachine is Elektron's; FM-1 is M-VAVE's. MONO2K's machines are written from scratch and measured against a Monomachine's output; none of Elektron's code or samples are in it.</p></div>
 </article>
 
@@ -177,7 +178,18 @@
   <div class="figs">
     <figure class="fig big"><canvas data-scr="01_home_stopped"></canvas><figcaption>HOME: the header names the page and the pattern; the focus shows the track's machine; the strip shows the six tracks' steps; the four knobs sit along the bottom.</figcaption></figure>
   </div>
-  <p>The screen keeps one layout on every page. The header names the page, the track and its machine, and the pattern. The focus in the middle shows what you touch last: a value in big type, a machine's card, a held step. Under it, the step strip, and along the bottom the four knobs of the page in view, each with its value and its slab. The screen can be light or dark: GLO &gt; SET, SCRN.</p>
+  <p>The screen keeps one layout on every page. The header names the page, the track and its machine, and the pattern. The focus in the middle shows what you touch last: a value in big type, a machine's card, a held step. Under it, the step strip, and along the bottom the four knobs of the page in view, each with its value and its level. The screen can be light or dark: GLO &gt; SET, SCRN.</p>
+  <table>
+    <thead><tr><th>In the steps</th><th>Means</th></tr></thead>
+    <tbody>
+      <tr><td>A solid block</td><td>A trig.</td></tr>
+      <tr><td>A framed block</td><td>A trig on a condition: a chance, A:B, PRE, FILL (the held step's card names it).</td></tr>
+      <tr><td>The top corner cut</td><td>The trig has parameter locks.</td></tr>
+      <tr><td>Thirds filled</td><td>A trig type: AMP, FILTER and LFO, left to right; a dot alone is NONE.</td></tr>
+      <tr><td>A dotted outline</td><td>An empty step; dots all over, a step past the pattern's end.</td></tr>
+    </tbody>
+  </table>
+  <p>A message takes the header for a moment, inverted; a longer one takes the line under it too.</p>
 </article>
 
 <article id="pages" data-group="The instrument">
@@ -247,8 +259,21 @@
     </tbody>
   </table>
   <p>Hold several steps at once and the edit goes to all of them.</p>
-  <h2>Length and patterns</h2>
-  <p>Hold one of the page keys P1–P4 and the pattern ends at the end of that page: 16, 32, 48 or 64 steps; GLO &gt; TIME shows the length (LEN) to the step. PRESETS picks the pattern: at once when stopped, at the end of the bar while playing, so patterns chain as you play.</p>
+  <h2>Bars: pages of 16 steps</h2>
+  <p>A pattern is one to four bars of 16 steps, the four pages. In GRID the lower keys are the steps of the page in view; on HOME the four boxes under the focus are the pages, the one in view solid, the playhead running in it while it plays.</p>
+  <table>
+    <thead><tr><th>To</th><th>In GRID</th></tr></thead>
+    <tbody>
+      <tr><td>See another bar</td><td>OCT− and OCT+ (the computer's - and =), or tap a page key P1–P4: the upper keys G#4, A#4, C#5 and D#5 (the computer's 3 4 6 7).</td></tr>
+      <tr><td>Follow the playhead</td><td>Tap the page key of the page in view again: FOLLOWS THE PLAY.</td></tr>
+      <tr><td>Add a bar</td><td>Hold the next page key for a moment (P2 on a one-bar pattern): the pattern now ends there, and the new bar starts as a copy of the bars before it, its locks too, so it goes on playing as it did. Change the copy.</td></tr>
+      <tr><td>Make it shorter</td><td>Hold P1, P2 or P3: the pattern ends with that page. The steps after it are kept, not played.</td></tr>
+      <tr><td>Set the length to the step</td><td>GLO &gt; TIME, LEN (1 to 64).</td></tr>
+    </tbody>
+  </table>
+  <p>A page past the end says so when you tap its key, and which length holding it makes.</p>
+  <h2>Choosing patterns</h2>
+  <p>PRESETS picks the pattern: at once when stopped, at the end of the bar while playing, so patterns chain as you play.</p>
   <p>An accent plays the step harder (GLO &gt; TIME's ACNT says how much); a slide glides into the next note without trigging again.</p>
 </article>
 
@@ -269,7 +294,7 @@
   <p class="sub">The Monomachine's magic: each step trigs the amp, the filter's envelope and the LFOs independently.</p>
   <div class="figs">
     <figure class="fig big"><canvas data-scr="30_grid_trig_types"></canvas><figcaption>Track 1 with the eight trig types on its odd steps, ALL to NONE: a third of the cell filled for each of AMP, FILTER and LFO the step trigs.</figcaption></figure>
-    <figure class="fig"><canvas data-scr="31_trig_filter"></canvas><figcaption>MASTER turned on a held step: TRIG FILTER, and the step's card names it.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="31_trig_filter"></canvas><figcaption>Step 5 held: its card names its trig type, FILTER (MASTER turns it).</figcaption></figure>
   </div>
   <p>A synthesizer usually restarts all its envelopes on every note. On MONO2K, as on the Monomachine, a step can restart some of them and leave the others running: change the pitch under a filter sweep that keeps going, restart only the LFO for a new wobble, or move the note with no new attack at all.</p>
   <h2>The eight states</h2>
@@ -301,7 +326,7 @@
   <h1>Conditions and ratchets</h1>
   <p class="sub">After the modern Elektron sequencers: steps that play by chance, by loop, or on FILL; steps that repeat.</p>
   <h2>Conditions</h2>
-  <p>Hold a step and turn PRESETS. The strip draws each condition as its own texture: a chance as its density of dither.</p>
+  <p>Hold a step and turn PRESETS. The strip draws a step on a condition framed, its block inset; the held step's card names the condition.</p>
   <table>
     <thead><tr><th>Condition</th><th>The step plays</th></tr></thead>
     <tbody>
@@ -370,7 +395,7 @@
 <!-- ===================================================================================== projects and MIDI -->
 <article id="projects" data-group="Projects and MIDI">
   <h1>Saving and projects</h1>
-  <p class="sub">Four projects of four banks (A–D) of sixteen patterns.</p>
+  <p class="sub">Four projects of four banks (A–D) of sixteen patterns, and a library of 64 sounds. On the FM-1: one project, bank A.</p>
   <h2>Patterns</h2>
   <p>SAVE keeps the pattern as it is; GLO + SAVE goes back to the last saved version. What you play is your working copy: you can change it freely and keep it or not.</p>
   <h2>Projects</h2>
@@ -381,13 +406,53 @@
     <tbody>
       <tr><td>REC</td><td>Copy the pattern</td><td>Copy the track's sound</td></tr>
       <tr><td>PLAY</td><td>Paste the pattern</td><td>Paste the sound</td></tr>
-      <tr><td>SEQ</td><td>Clear the pattern's trigs and locks</td><td>Clear the track's</td></tr>
+      <tr><td>SEQ</td><td>Clear the pattern's trigs and locks; its sounds stay</td><td>Clear the track's; its sound stays</td></tr>
       <tr><td>SAVE</td><td colspan="2">Reload the saved pattern</td></tr>
     </tbody>
   </table>
+  <h2>A new pattern on the same sounds</h2>
+  <p>Clearing takes the steps away and leaves every sound: the machines, the knobs, the chain, the LFOs. The screen says STEPS CLEARED, SOUNDS KEPT.</p>
+  <ol class="steps">
+    <li>On HOME, copy the pattern: GLO + REC.</li>
+    <li>Pick an empty slot with PRESETS and paste it: GLO + PLAY.</li>
+    <li>Clear its steps: GLO + SEQ. The six sounds stay, ready for new steps.</li>
+    <li>SAVE when you like it.</li>
+  </ol>
+  <h2>The sound library</h2>
+  <div class="figs">
+    <figure class="fig"><canvas data-scr="25_syn_snd"></canvas><figcaption>SYN &gt; SND: the library's slots, each with its machine; SLOT picks one.</figcaption></figure>
+  </div>
+  <p>Sixty-four sounds, S01 to S64, kept apart from the patterns: a sound saved there can go onto any track of any pattern, in any project. A sound is a track's machine and every setting (the machine's knobs, the amp, the filter, the FX, the LFOs). The library starts with bank A's sounds; it is saved with the rest.</p>
+  <p>Press EDIT until the header says SND (the page after SYN, and after BANK on DIGI-WAV).</p>
+  <table>
+    <thead><tr><th>Knob</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td>SLOT</td><td>Picks a slot; the list shows its neighbours.</td></tr>
+      <tr><td>LOAD</td><td>Turned twice: the slot's sound onto the track in view.</td></tr>
+      <tr><td>SAVE</td><td>Turned twice: the track's sound into the slot, named after the pattern and the track.</td></tr>
+    </tbody>
+  </table>
+  <p>GLO + REC and GLO + PLAY on a track's page still copy and paste one sound in a hurry; the library keeps them.</p>
   <h2>The factory's bank A</h2>
   <p>Sixteen parts, written for MONO2K and each heard and chosen by its author:</p>
   <div data-bank></div>
+</article>
+
+<article id="fm1-link" data-group="Projects and MIDI">
+  <h1>The FM-1 and the Patch Editor</h1>
+  <p class="sub">Read the FM-1's patterns and sounds over USB, edit them in the browser, send them back, keep them as a file.</p>
+  <p>The <a href="editor.html">Patch Editor</a> talks to an FM-1 running MONO2K over its USB cable, in Chrome or Edge. It edits the FM-1's patterns as their own session, apart from this browser's saves, which stay as they are.</p>
+  <ol class="steps">
+    <li>Connect the FM-1 by USB and open the <a href="editor.html">Patch Editor</a>. Press Start, then Connect, and allow MIDI with SysEx when the browser asks. Close the Installer if it is open in another tab.</li>
+    <li>Stop the FM-1 (PLAY). Press Read from FM-1: it saves what it holds and sends its 16 patterns and 64 sounds (a second or two). The pattern list shows bank A as the FM-1 has it.</li>
+    <li>Edit: every parameter of every track, heard as you move it, the FM-1's own patterns playing in the browser.</li>
+    <li>Press Send to FM-1 and confirm: the FM-1 takes them, plays them, and keeps them in its flash.</li>
+  </ol>
+  <h2>Files</h2>
+  <p>Save file keeps what is being edited as a <code>.m2ks</code> file: the FM-1's patterns and sounds (<code>mono2k-fm1-</code> and the day) or this browser's projects. Open file reads one back: an FM-1 file as the FM-1's session, ready to send. Back to this browser's saves returns to the emulator's work.</p>
+  <h2>Safety</h2>
+  <p>The parts of a transfer arrive in order, each answered, and the whole is checked against its CRC before the FM-1 uses it. A transfer that fails, stalls or is cut off leaves the FM-1 with what it had. While the FM-1 plays it neither sends nor takes. A transfer touches only the patterns and sounds, never the firmware.</p>
+  <div class="callout"><b>Sending patterns to MONO2K</b><p>Made a part you like on the FM-1? Read it into the Patch Editor, Save file, and send the <code>.m2ks</code> to the author: patterns made on the FM-1 may become the next factory demos.</p></div>
 </article>
 
 <article id="midi" data-group="Projects and MIDI">
@@ -445,6 +510,6 @@
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
 <script src="changelog.js?v=10"></script>
-<script src="manual.js?v=15"></script>
+<script src="manual.js?v=16"></script>
 </body>
 </html>

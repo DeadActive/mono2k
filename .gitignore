@@ -10,3 +10,6 @@ reference/midi/
 
 # the owner's reference audio (other artists' recordings, measured locally): never committed
 reference/audio/
+
+# other projects' sources, read locally to learn from (their own licences): never committed
+reference/lxr/

@@ -136,7 +136,6 @@ static int ttype_of(uint8_t flags)
 
 static const char *const COND_N[C_COUNT] = {"100%", "75%", "50%", "33%", "25%", "12%", "1:2", "2:2", "1:3", "2:3", "3:3",
                                            "1:4", "2:4", "3:4", "4:4", "1ST", "!1ST", "PRE", "!PRE", "FILL", "!FIL"};
-static const uint8_t COND_DENS[6] = {64, 48, 32, 21, 16, 8};
 static const char *const NOTE_N[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 
 static const pi_t *pinfo(int t, int id)
@@ -884,7 +883,7 @@ void m2k_button(int b, int down)
         ui.grid ^= 1;
         ui.nheld = 0;
         if (ui.spage * 16 >= seq_len()) ui.spage = 0;
-        toast(ui.grid ? "GRID OCT-/+ PAGE" : "KEYS", ui.grid ? "HOLD G#4..D#5: LENGTH" : "PLAY THE TRACK");
+        toast(ui.grid ? "GRID: OCT-/+ PAGES" : "KEYS", ui.grid ? "HOLD G#4-D#5: LENGTH" : "PLAY THE TRACK");
         start_trans(250);
         break;
     case B_PLAY: seq_play(!sq.playing); break;
@@ -1082,9 +1081,8 @@ static void header(void)
     hline(0, 15, 240, 1);
 }
 
-/* the big value: an outline with the value's own density inside (the poster's dithered type) */
-/* the big value: an outline with a vertical dither gradient inside, from the value's own density at the top to
- * solid at the foot (the poster's gradient type). It changes in place: text never leaves its line. */
+/* the big value: solid ink, to be read across the room; as it changes, two bands of it slip sideways for a moment
+ * (the glitch in motion, still type at rest). It changes in place: text never leaves its line. */
 static void big_value(int x, int y, int w, const char *s, int density, uint32_t roll)
 {
     /* one size for every big value, centred between the label (above) and the unit (below); the odd word
@@ -1093,9 +1091,12 @@ static void big_value(int x, int y, int w, const char *s, int density, uint32_t 
     if (text_w(f, s, 0) > w) f = &F_L;
     if (text_w(f, s, 0) > w) f = &F_M;
     int yy = y + 33 - f->h / 2;
-    (void)roll;
-    text_grad(yy, f->h, CLAMP(density, 4, 60) - 4, 64);
-    text(f, x, yy, s, TX_GRAD, 0);
+    (void)density;
+    text(f, x, yy, s, TX_INK, 0);
+    if (roll < 90) {
+        row_slip(x, yy + f->h / 3, w, 3, roll < 45 ? 4 : 2);
+        row_slip(x, yy + (2 * f->h) / 3, w, 2, roll < 45 ? -3 : -1);
+    }
 }
 
 static void focus_left(int code)
@@ -1240,7 +1241,7 @@ static int filt_row(int32_t db, int top, int yb)     /* a gain to its row; past 
     return top + CLAMP(r, 0, yb - top);
 }
 
-/* the response drawn: a dither under it, a two-dot line on it, 0 dB dotted, the decades ticked (100 Hz 1 kHz 10 kHz);
+/* the response drawn: hatched under it (dense: a pattern, PT_*), a two-dot line on it, 0 dB dotted, the decades ticked;
  * returns the rows at the two cutoffs for the handles */
 static void filt_curve(int X, int W, int top, int yb, int hp, int lp, int hq, int lq, int dense, int heavy, int *yh, int *yl)
 {
@@ -1248,7 +1249,7 @@ static void filt_curve(int X, int W, int top, int yb, int hp, int lp, int hq, in
     for (int i = 0; i < W; i++) {
         int q = i * 1016 / (W - 1);
         int y = filt_row(filt_db(q, hp, lp, hq, lq), top, yb);
-        for (int j = y + 1; j <= yb; j++) if (T_BAYER[j & 7][(X + i) & 7] < dense - (j - y) * (dense - 6) / (yb - top + 1)) px(X + i, j, 1);
+        for (int j = y + 1; j <= yb; j++) if (pat_ink(dense, X + i, j)) px(X + i, j, 1);
         if (i) { line(X + i - 1, prev, X + i, y, 1); if (heavy) line(X + i - 1, prev - 1, X + i, y - 1, 1); }
         if (!(i & 3)) px(X + i, y0, 1);
         prev = y;
@@ -1307,7 +1308,7 @@ static void picture(void)
                 int h = (ui.meter[i] * 18) >> 15;
                 int x = X + 2 + i * mw;
                 frame(x, Y + 82, mw - 2, 18, 1);
-                rect_grad(x + 1, Y + 99 - h, mw - 4, h, i == ui.trk ? 30 : 8, i == ui.trk ? 64 : 40, 1);
+                rect(x + 1, Y + 99 - h, mw - 4, h, 1);
             }
         }
         break;
@@ -1333,7 +1334,7 @@ static void picture(void)
             }
             int vx = X + bs + 10, vw = W - bs - 12, vh = (bs - 2) * vol >> 15;
             frame(vx, by, vw, bs, 1);
-            rect_grad(vx + 1, by + bs - 1 - vh, vw - 2, vh, fk == 1 ? 40 : 14, 64, 1);
+            rect_pat(vx + 1, by + bs - 1 - vh, vw - 2, vh, fk == 1 ? PT_SOLID : PT_VLINES, 0);
             hline(vx - 2, by + bs - 1 - vh, vw + 4, 1);
             tag(bx, by + bs + 3, "DS", fk == 0);
             tag(vx, by + bs + 3, "VL", fk == 1);
@@ -1354,7 +1355,7 @@ static void picture(void)
             break;
         }
         /* attack, hold, decay, release as lengths on a log scale (a long decay does not crowd the attack out), the level
-         * as the voice runs it (env_level): the segment being turned fills dense and draws heavy, the others light;
+         * as the voice runs it (env_level): the segment being turned fills solid and draws heavy, the others hatched;
          * dotted lines and handles where each ends, the 50 % level dotted, the letters under their segments, and the
          * live voice runs on it */
         int dec_inf = k[P_DEC] == 127;
@@ -1371,8 +1372,8 @@ static void picture(void)
             int len = xs[seg + 1] - xs[seg];
             int q = (x - xs[seg]) * 256 / (len ? len : 1);
             int y = yb - hgt * env_level(seg, q, dec_inf) / 256;
-            int dense = seg == fk ? 60 : fk < 0 ? 40 : 18;
-            for (int j = y + 1; j <= yb; j++) if (T_BAYER[j & 7][x & 7] < dense - (j - y) * (dense - 6) / (hgt + 1)) px(x, j, 1);
+            int tone = seg == fk ? PT_SOLID : fk < 0 ? PT_VLINES : PT_HATCH;
+            for (int j = y + 1; j <= yb; j++) if (pat_ink(tone, x, j)) px(x, j, 1);
             line(x - 1, py, x, y, 1);
             line(x - 1, py - 1, x, y - 1, 1);                   /* two dots thick */
             if (seg == fk) line(x - 1, py - 2, x, y - 2, 1);    /* three for the one being turned */
@@ -1416,7 +1417,7 @@ static void picture(void)
             int hp1 = filt_q3(ui.trk, (k[P_BASE] << 8) + ob);
             int lp1 = filt_q3(ui.trk, ((k[P_BASE] + k[P_WDTH]) << 8) + ob + ow);
             int top = Y + 8, yb2 = Y + 64, yh, yl, prev = yb2;
-            filt_curve(X, W, top, yb2, hp1, lp1, hq, lq, fk >= 2 ? 52 : 34, fk >= 2, &yh, &yl);
+            filt_curve(X, W, top, yb2, hp1, lp1, hq, lq, fk >= 2 ? PT_VLINES : PT_HATCH, fk >= 2, &yh, &yl);
             for (int i = 0; i < W; i++) {
                 int y = filt_row(filt_db(i * 1016 / (W - 1), hp0, lp0, hq, lq), top, yb2);
                 if (i && ((i >> 1) & 1)) line(X + i - 1, prev, X + i, y, 2);   /* the band at rest, dashed */
@@ -1439,7 +1440,7 @@ static void picture(void)
             for (int x = 0; x <= a + d; x++) {
                 int y = x <= a ? eb - (eb - et) * x / (a ? a : 1) : eb - (eb - et) * (a + d - x) / (d ? d : 1);
                 int seg = x <= a ? 0 : 1;
-                for (int j = y + 1; j <= eb; j++) if (T_BAYER[j & 7][(ex + x) & 7] < (seg == fk ? 56 : 22)) px(ex + x, j, 1);
+                for (int j = y + 1; j <= eb; j++) if (pat_ink(seg == fk ? PT_SOLID : PT_HATCH, ex + x, j)) px(ex + x, j, 1);
                 if (x) { line(ex + x - 1, pe, ex + x, y, 1); line(ex + x - 1, pe - 1, ex + x, y - 1, 1); }
                 pe = y;
             }
@@ -1451,7 +1452,7 @@ static void picture(void)
         int hp = hp0, lp = lp0, yh, yl;
         if (t->sounding) { hp = mon.cut_hp[ui.trk]; lp = mon.cut_lp[ui.trk]; }
         int top = Y + 8, yb = Y + 76;
-        filt_curve(X, W, top, yb, hp, lp, hq, lq, 50, fk >= 0, &yh, &yl);
+        filt_curve(X, W, top, yb, hp, lp, hq, lq, fk >= 0 ? PT_VLINES : PT_HATCH, fk >= 0, &yh, &yl);
         int xh = X + hp * (W - 1) / 1016, xl = X + lp * (W - 1) / 1016;
         dotted_v(xh, top - 6, yb - top + 6);
         dotted_v(xl, top - 6, yb - top + 6);
@@ -1482,7 +1483,7 @@ static void picture(void)
                 int h = (80 * lvl) >> 8;
                 uint32_t at = (uint32_t)dt * (uint32_t)(e + 1) * ms_step / 16u;
                 int lit = since >= at && since < at + 90;
-                rect_pat(x, Y + 88 - h, 4, h, lit ? PT_SOLID : PT_CHECK, 0);
+                if (lit) rect(x, Y + 88 - h, 4, h, 1); else { frame(x, Y + 88 - h, 4, h, 1); }
                 lvl = CLAMP((lvl * fb) >> 6, 0, 256);
                 if (lvl < 8) break;
             }
@@ -1513,7 +1514,7 @@ static void picture(void)
                 int32_t tri = (int32_t)((ph + (uint32_t)i * (0xFFFFFFFFu / W)) >> 16);
                 tri = tri < 32768 ? tri : 65535 - tri;
                 int y = mid + amp - (tri * amp * 2 >> 15);
-                for (int j = y; j <= mid + amp; j++) if (pat_ink(type == 2 ? PT_DIAG : type == 1 ? PT_LINES : PT_DOTS, X + i, j)) px(X + i, j, 1);
+                for (int j = y; j <= mid + amp; j++) if (pat_ink(PT_HATCH, X + i, j)) px(X + i, j, 1);
                 if (i) line(X + i - 1, prev, X + i, y, 1);
                 prev = y;
             }
@@ -1521,14 +1522,14 @@ static void picture(void)
             static const char *const N[3] = {"CHOR", "FLNG", "PHAS"};
             int bx = X + tag(X, Y + 74, N[type], 1) + 4, bw = X + W - bx;
             frame(bx, Y + 76, bw, 9, 1);
-            rect_grad(bx + 1, Y + 77, (bw - 2) * mix / 127, 7, 20, 64, 1);
+            rect(bx + 1, Y + 77, (bw - 2) * mix / 127, 7, 1);
         } else {                       /* EQ: the band and its gain */
             int f = k[P_EQF] * (W - 1) / 127, g = k[P_EQG] - 64, prev = 0;
             for (int i = 0; i < W; i++) {
                 int d = i - f;
                 int bw = W / 4, bump = d > -bw && d < bw ? (g * (bw - (d < 0 ? -d : d))) / bw : 0;
                 int y = Y + 46 - bump * 40 / 64;
-                for (int j = (y < Y + 46 ? y : Y + 46); j <= (y < Y + 46 ? Y + 46 : y); j++) if (pat_ink(PT_DOTS, X + i, j)) px(X + i, j, 1);
+                for (int j = (y < Y + 46 ? y : Y + 46); j <= (y < Y + 46 ? Y + 46 : y); j++) if (pat_ink(PT_HATCH, X + i, j)) px(X + i, j, 1);
                 if (i) line(X + i - 1, prev, X + i, y, 1);
                 prev = y;
             }
@@ -1631,7 +1632,7 @@ static void picture(void)
             for (int i = 0; i < 4; i++) {
                 int x = X + 2 + i * (bw + 2);
                 if (i == beat) rect(x, Y + 20, bw - 2, 40, 1);
-                else rect_pat(x, Y + 20, bw - 2, 40, PT_DOTS, 0), frame(x, Y + 20, bw - 2, 40, 1);
+                else frame(x, Y + 20, bw - 2, 40, 1);
             }
             char o[12];
             s_int(o, (int)seq_bpm());
@@ -1655,28 +1656,23 @@ static void step_cell(int x, int y, int w, int h, int t, int s)
     if (ui.grid && t == ui.trk) for (int i = 0; i < ui.nheld; i++) if (ui.held[i] == s) held = 1;
     if (s >= seq_len()) { rect_pat(x, y, w, h, PT_SPARSE, 0); return; }
     if (st.flags & ST_TRIG) {
-        /* the fill says how sure the trig is: solid always, Bayer by chance, textures for the conditions */
-        int c = st.cond, lk = has_locks(t, s);
+        /* solid, as on the Monomachine's grid; a trig on a condition (a chance, A:B, PRE, FILL ...) framed, its block
+         * inset; one with locks has its top corner cut. The step's card names the condition */
+        int c = st.cond, lk = has_locks(t, s), in = c == C_ALWAYS ? 0 : 2;
         unsigned sk = st.flags & ST_TTYPE;
+        if (in) frame(x, y, w, h, 1);
         if (sk) {
             /* a trig on some of its trig tracks: framed, a third filled for each it trigs (AMP, FILTER, LFO), as the
              * lanes read left to right; a trigless one (NONE) the frame and a dot */
             frame(x, y, w, h, 1);
-            int pt = c == C_ALWAYS ? -1 : c <= C_P12 ? COND_DENS[c] : c <= C_4_4 ? PT_DIAG : c <= C_NPRE ? PT_VLINES : PT_LINES;
             for (int k = 0; k < 3; k++) {
                 if (sk & (ST_NOAMP << k)) continue;
                 int x0 = x + 1 + k * (w - 2) / 3, x1 = x + 1 + (k + 1) * (w - 2) / 3;
-                if (pt < 0) rect(x0, y + 1, x1 - x0, h - 2, 1); else rect_pat(x0, y + 1, x1 - x0, h - 2, pt, 1);
+                rect(x0 + (in ? 1 : 0), y + 1 + in / 2, x1 - x0 - (in ? 1 : 0), h - 2 - in, 1);
             }
-            if (sk == ST_TTYPE) px(x + w / 2, y + h / 2, 1);
-            if (lk) rect(x + w - 4, y, 4, 4, 1);
-        } else if (c == C_ALWAYS && !lk) rect(x, y, w, h, 1);
-        else {
-            int pt = c == C_ALWAYS ? PT_CHECK : c <= C_P12 ? COND_DENS[c] : c <= C_4_4 ? PT_DIAG : c <= C_NPRE ? PT_VLINES : PT_LINES;
-            frame(x, y, w, h, 1);
-            rect_pat(x + 1, y + 1, w - 2, h - 2, pt, 1);
-            if (lk && c != C_ALWAYS) { rect(x + w - 4, y, 4, 4, 1); }
-        }
+            if (sk == ST_TTYPE) rect(x + w / 2 - 1, y + h / 2 - 1, 2, 2, 1);
+        } else rect(x + in, y + in, w - 2 * in, h - 2 * in, 1);
+        if (lk) for (int j = 0; j < 4; j++) hline(x + w - 4 + j, y + j, 4 - j, 0);   /* the corner cut */
         if (st.flags & ST_ACC) rect(x + 2, y + 2, 3, 3, 0);
         if (st.flags & ST_SLD) for (int j = 0; j < h; j += 2) px(x + w - 2, y + j, 0);
         for (int i = 1; i < st.rtrg && i < 4; i++) rect(x + 1 + i * 3, y + h - 3, 2, 2, 2);
@@ -1725,7 +1721,8 @@ static void footer(void)
         const m2k_font_t *f = text_w(&F_M, o, 0) > 52 ? &F_S : &F_M;
         if (knob_locked(code)) { int w = text_w(f, o, 0); rect(x + 2, FOOT_Y + 21, w + 4, f->h + 2, 1); text(f, x + 4, FOOT_Y + 22, o, 0, 0); }
         else text(f, x + 4, FOOT_Y + 22, o, 1, 0);
-        /* the slab */
+        /* the slab (none under an action: LOAD, SAVE are turned, not set) */
+        if (pi->kind == K_LOAD || pi->kind == K_SLOAD || pi->kind == K_SSAVE) continue;
         int bx = x + 4, by = FOOT_Y + 44, bw = 52, bh = 42;
         int n = kind_choices(pi->kind);
         if (n && n <= 8) {
@@ -1733,7 +1730,6 @@ static void footer(void)
             for (int i = 0; i < n; i++) {
                 int y = by + bh - (i + 1) * (sh + 1) + 1;
                 if (i == c) rect(bx, y, bw, sh, 1);
-                else if (i < c) rect_pat(bx, y, bw, sh, PT_DOTS, 0);
                 else frame(bx, y, bw, sh, 1);
             }
             continue;
@@ -1742,18 +1738,16 @@ static void footer(void)
         int target = ((v - mn) * 256 * bh) / (mx - mn ? mx - mn : 1);
         ui.ease[k] += (target - ui.ease[k]) / 3;
         int h = ui.ease[k] >> 8;
-        rect_pat(bx, by, bw, bh, PT_SPARSE, 0);
+        /* a level: a frame and its fill, solid; quarter ticks on the side. A two-sided value fills from the middle */
         frame(bx, by, bw, bh, 1);
+        for (int q = 1; q < 4; q++) hline(bx + bw, by + q * bh / 4, 2, 1);
         int bip = pi->kind == K_BI || pi->kind == K_PAN || pi->kind == K_SEMI || pi->kind == K_FINE || pi->kind == K_TUN2 || pi->kind == K_SEMI24;
         if (bip) {
             int mid = by + bh / 2;
             hline(bx - 2, mid, bw + 4, 1);
-            if (h > bh / 2) rect_grad(bx, by + bh - h, bw, h - bh / 2, 18, 64, 1);
-            else rect_grad(bx, mid, bw, bh / 2 - h, 64, 18, 1);
-        } else {
-            rect(bx, by + bh - 2 > by + bh - h ? by + bh - 2 : by + bh - h, bw, h < 2 ? h : 2, 1);
-            rect_grad(bx, by + bh - h, bw, h, 18, 64, 1);
-        }
+            if (h > bh / 2) rect(bx, by + bh - h, bw, h - bh / 2, 1);
+            else rect(bx, mid, bw, bh / 2 - h, 1);
+        } else rect(bx, by + bh - h, bw, h, 1);
     }
 }
 
@@ -1786,10 +1780,10 @@ static void home(void)
         int x = pg * 60, w = 58;
         int used = pg * 16 < seq_len();
         if (!used) { rect_pat(x, STRIP_Y + 4, w, 14, PT_SPARSE, 0); continue; }
-        frame(x, STRIP_Y + 4, w, 14, 1);
-        for (int i = 1; i < 16; i++) px(x + i * w / 16, STRIP_Y + 16, 1);
-        if (pg == ui.spage) rect_pat(x + 1, STRIP_Y + 5, w - 2, 12, PT_DOTS, 0);
-        if (sq.playing && play_step() / 16 == pg) rect(x + (play_step() % 16) * w / 16, STRIP_Y + 4, 4, 14, 1);
+        int on = pg == ui.spage;                   /* the page shown: solid, its ticks and the playhead in paper */
+        if (on) rect(x, STRIP_Y + 4, w, 14, 1); else frame(x, STRIP_Y + 4, w, 14, 1);
+        for (int i = 1; i < 16; i++) px(x + i * w / 16, STRIP_Y + 16, !on);
+        if (sq.playing && play_step() / 16 == pg) rect(x + (play_step() % 16) * w / 16, STRIP_Y + 4, 4, 14, !on);
     }
     /* the six lanes */
     rect(0, FOOT_Y, 240, 2, 1);
@@ -1820,8 +1814,8 @@ static void step_card(void)
     text(&F_S, 4, FOCUS_Y + 2, o, 1, 1);
     s_note(o, st.note);
     big_value(2, FOCUS_Y + 16, GX - 6, o, 64, 1000);
-    text(&F_S, 4, 77, "TRACK: NOTE", 1, 1);       /* the TRACK knob turns a held step's note */
-    int x = 4, y = 90;
+    text(&F_S, 4, 81, "TRACK: NOTE", 1, text_w(&F_S, "TRACK: NOTE", 1) <= GX - 8);   /* the TRACK knob turns the note */
+    int x = 4, y = 95;
     const char *tg[5] = {COND_N[st.cond], 0, (st.flags & ST_TTYPE) ? TTYPE_N[ttype_of(st.flags)] : 0,
                          (st.flags & ST_ACC) ? "ACC" : 0, (st.flags & ST_SLD) ? "SLD" : 0};
     char r[4] = {'X', (char)('0' + (st.rtrg ? st.rtrg : 1)), 0, 0};
@@ -1916,23 +1910,26 @@ static void boot(uint32_t t)
     }
 }
 
-/* a message takes the header for a moment: inverted, its text, a gradient tail; it never covers the page */
+/* a message takes the header for a moment: inverted, its text, a gradient tail (a long one the line under it too) */
 static void overlays(void)
 {
     if (!ui.toast_t) return;
     uint32_t a = ui.now - ui.toast_t;
-    if (a >= 1200) return;
+    /* on the title's line; what does not fit there goes on a second, and stays a little longer to be read */
+    int two = ui.toast2[0] && 4 + text_w(&F_S, ui.toast, 1) + 6 + text_w(&F_S, ui.toast2, 1) > 236, hgt = two ? 30 : 15;
+    if (a >= (two ? 2200u : 1200u)) return;
     int w = a < 120 ? (int)a * 240 / 120 : 240;      /* it sweeps in */
-    rect(0, 0, w, 15, 1);
-    clip(0, 0, w, 15);
+    rect(0, 0, w, hgt, 1);
+    clip(0, 0, w, hgt);
     int x = 4 + text(&F_S, 4, 2, ui.toast, 0, 1) + 6;
-    if (ui.toast2[0]) x += text(&F_S, x, 2, ui.toast2, 0, 1) + 6;
+    if (two) text(&F_S, 4, 17, ui.toast2, 0, 1);
+    else if (ui.toast2[0]) x += text(&F_S, x, 2, ui.toast2, 0, 1) + 6;
     noclip();
     if (w == 240 && x < 236) {
         rect(x, 0, 240 - x, 15, 0);
         rect_grad(x, 0, 240 - x, 15, 64, 0, 0);
     }
-    hline(0, 15, 240, 1);
+    hline(0, hgt, 240, 1);
 }
 
 static uint8_t fb_show[M2K_FB_BYTES];

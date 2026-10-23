@@ -68,9 +68,55 @@ static const ev_t TOUR[] = {
     {17000, 'b', B_HOME, 1, 0}, {17020, 'b', B_HOME, 0, 0}, {17600, 's', 0, 0, "23_home_dark"},
     {17700, 'b', B_EDIT, 1, 0}, {17720, 'b', B_EDIT, 0, 0}, {18400, 's', 0, 0, "24_syn_dark"},
     {18500, 'b', B_EDIT, 1, 0}, {18520, 'b', B_EDIT, 0, 0}, {18600, 'b', B_EDIT, 1, 0}, {18620, 'b', B_EDIT, 0, 0},
-    {19300, 's', 0, 0, "25_syn_snd"}, {20300, 's', 0, 0, "25b_syn_snd"},
+    {20300, 's', 0, 0, "26_syn_snd_dark"},
     {20400, 'x', 0, 0, 0},
 };
+
+/* the manual's scenes: B01's T1 with a trig of each of the eight types on every other step, in GRID (30); step 5's
+ * FILTER trig held (31); the sound library, SYN > SND (25) */
+static const ev_t MANUAL[] = {
+    {2600, 'b', B_SEQ, 1, 0}, {2620, 'b', B_SEQ, 0, 0},
+    {3400, 's', 0, 0, "30_grid_trig_types"},
+    {5000, 'k', 7, 1, 0}, {5400, 's', 0, 0, "31_trig_filter"}, {5500, 'k', 7, 0, 0},
+    {5600, 'b', B_SEQ, 1, 0}, {5620, 'b', B_SEQ, 0, 0},
+    {5700, 'b', B_EDIT, 1, 0}, {5720, 'b', B_EDIT, 0, 0}, {5800, 'b', B_EDIT, 1, 0}, {5820, 'b', B_EDIT, 0, 0},
+    {5900, 'b', B_EDIT, 1, 0}, {5920, 'b', B_EDIT, 0, 0}, {7200, 's', 0, 0, "25_syn_snd"},
+    {7300, 'x', 0, 0, 0},
+};
+
+static void manual_scene(void)
+{
+    m2k_init(2000);
+    cur_pat = 16;
+    sq.queued = 16;
+    lockmap_build();
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[16].kit[t], P_COUNT);
+    for (int i = 0; i < 8; i++) pat[16].step[0][2 * i].flags = (uint8_t)(ST_TRIG | TTYPE[i]);
+}
+
+/* events against the screen's clock, a screenshot where asked, the sound rendered between */
+static void run_events(const ev_t *E, const char *out)
+{
+    char path[512];
+    int16_t blkbuf[256];
+    int ms = 0, ei = 0;
+    for (int s = 0; ; s += 128) {
+        int now = (int)((int64_t)s * 1000 / M2K_SR);
+        while (E[ei].ms <= now) {
+            const ev_t *e = &E[ei++];
+            if (e->kind == 'x') return;
+            if (e->kind == 'b') m2k_button(e->a, e->b);
+            if (e->kind == 'e') m2k_encoder(e->a, e->b);
+            if (e->kind == 'k') m2k_key(e->a, e->b);
+            if (e->kind == 's') {
+                snprintf(path, sizeof path, "%s/%s.pbm", out, e->shot);
+                pbm_write(path, m2k_frame((uint32_t)now));
+            }
+        }
+        m2k_render(blkbuf, 128);
+        if (now - ms >= 16) { ms = now; m2k_frame((uint32_t)now); }
+    }
+}
 
 /* measure()'s render on the store as it stands (no init): a pattern built in place */
 static void fx_measure(int p, int mask, double sec, int16_t *keep, double *pk_db, double *rms_db)
@@ -1556,24 +1602,11 @@ int main(int argc, char **argv)
                pat[p].name, peak, 20 * log10(peak / 32767.0 + 1e-9), 20 * log10(rms / 32767.0 + 1e-9), sec, sec / 12 * 100);
         free(buf);
     }
-    /* 2: the tour, with screenshots */
+    /* 2: the tour, with screenshots; then the manual's scenes */
     m2k_init(2000);
-    int16_t blkbuf[256];
-    int ms = 0, ei = 0;
-    for (int s = 0; ; s += 128) {
-        int now = (int)((int64_t)s * 1000 / M2K_SR);
-        while (TOUR[ei].ms <= now) {
-            const ev_t *e = &TOUR[ei++];
-            if (e->kind == 'x') { printf("tour done\n"); return 0; }
-            if (e->kind == 'b') m2k_button(e->a, e->b);
-            if (e->kind == 'e') m2k_encoder(e->a, e->b);
-            if (e->kind == 'k') m2k_key(e->a, e->b);
-            if (e->kind == 's') {
-                snprintf(path, sizeof path, "%s/%s.pbm", out, e->shot);
-                pbm_write(path, m2k_frame((uint32_t)now));
-            }
-        }
-        m2k_render(blkbuf, 128);
-        if (now - ms >= 16) { ms = now; m2k_frame((uint32_t)now); }
-    }
+    run_events(TOUR, out);
+    manual_scene();
+    run_events(MANUAL, out);
+    printf("tour done\n");
+    return 0;
 }

@@ -108,7 +108,10 @@ static void take_panel(void)
 #ifndef M2K_FM1_DIAG
 #define M2K_FM1_DIAG 0
 #endif
-static uint32_t diag_short_ms, diag_last_short, diag_t0, frame_ticks;
+static uint32_t diag_short_ms, diag_last_short, frame_ticks;
+#if M2K_FM1_DIAG
+static uint32_t diag_t0;
+#endif
 static char diag_txt[40];
 
 static void diag_num(char *o, uint32_t v)

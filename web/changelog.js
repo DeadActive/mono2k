@@ -7,8 +7,16 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-23", title: "VO-6, the Monomachine's voice",
+    date: "2026-10-23", title: "VO-6, a sound library, the FM-1 link, a clearer screen",
     items: [
+      ["screen", "The screen reads like an instrument's: values in solid type, levels as solid bars, the steps solid (a step on a condition framed, one with locks its corner cut), the curves hatched, no dither under the knobs. The glitch stays where things move: the pages' changes, and a value as it turns."],
+      ["workflow", "SYN > SND: a library of 64 sounds, S01 to S64, apart from the patterns. SAVE (turned twice) keeps the track's sound in a slot, LOAD puts a slot's sound on the track in view, in any pattern. It starts with bank A's sounds and is saved with the rest."],
+      ["workflow", "Clearing (GLO + SEQ) says what it keeps: the steps and locks go, the sounds stay."],
+      ["sequencer", "GRID says how its bars work as you enter it (OCT- and OCT+ turn the page, the page keys held set the length); a page past the end says which length holding its key makes. A message too long for the header takes a second line."],
+      ["screen", "The machine card fits its column: the name, the class and the style as tags, punch, metal and plastic as rows of five."],
+      ["web", "The Patch Editor connects to an FM-1 running MONO2K over USB: it reads the FM-1's patterns and sounds, edits them as their own session apart from the browser's saves, sends them back, and keeps them as .m2ks files. A transfer is checked whole before the FM-1 uses it; one that fails leaves the FM-1 as it was."],
+      ["web", "The machine cards on the site as on the screen: tags, and stat rows of five."],
+      ["web", "The manual: bars and how to add one, a new pattern on the same sounds, the sound library, the FM-1 and the Patch Editor, what the step marks mean; its screens redrawn."],
       ["sound", "The FM-1 build renders on both of the FM-1's cores, the tracks shared out between them, and does a third less work for the same sound: silent delays rest, the LFOs that move nothing are left alone, the filters' arithmetic is leaner. It sounds sample for sample as before."],
       ["screen", "The page's picture takes the larger part of the screen, the value beside it the smaller; the amp envelope drawn as the voice runs it (a straight attack, the hold, the decay and release falling in dB), the filter as the chain's real response in dB over 20 Hz to 20 kHz, its resonances peaking where they do; GLO > MIDI shows the six tracks' channels, the clock in and out and the beat. On the FM-1, pure black and white."],
       ["workflow", "GLO > SET shows the project knobs only where there are projects to choose from."],

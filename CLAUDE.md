@@ -29,8 +29,10 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   demos go to the owner in batches of four as ~30 s WAVs with their notes rows, and are committed once approved.
 - Web: `sh web/build.sh`, serve `web/` (`.claude/launch.json`: mono2k-web on port 8742). Four pages share `style.css`
   and a sub-header: the emulator (`index.html`, `app.js`), the manual (`manual.html`, `manual.js`: one page at a time,
-  the machines and knobs read off `m2k.wasm`, the screens `web/manual/*.png` from the host's tour), the installer
-  (`installer.html`: no FM-1 build yet) and the patch editor (`editor.html`, `editor.js`: the same worklet and saves).
+  the machines and knobs read off `m2k.wasm`, the screens `web/manual/*.png` from the host's tour and its manual
+  scenes, `m2k_host DIR`, each PBM saved as a 1-bit PNG of the same name), the installer
+  (`installer.html`: no FM-1 build published yet) and the patch editor (`editor.html`, `editor.js`: the same worklet and
+  saves; the FM-1 link's client, the FM-1's patterns a session of their own under `mono2k.fm1.v1`, `.m2ks` store files).
   `panel.js` is the FM-1's layout, `site.js` the subpages' theme and textures. Every push adds what it changes for a
   player to `web/changelog.js` (the manual's Change log: an entry per day of updates, newest first, a kind on every
   line: machines sound sequencer workflow patterns screen web fixes), and bumps `changelog.js?v=` in `manual.html`. After a wasm build bump `m2k.wasm?v=` in
@@ -46,8 +48,11 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   `build/fm1/mono2k.fwsc` (identity FM-1_980, a release FM-1_98Y) with JieLi's toolchain in a linux/amd64 container
   (`~/.jieli/toolchain`, the AC79 SDK in `~/fw-AC79_AIoT_SDK`, colima with Rosetta, `DOCKER_CONFIG` ~/.jieli/docker).
   The platform (`firmware/fm1/{hal,loader,src}`) is CS-1's (Felucca, SLOOP, Dinghy, FM-106), GPL-3.0, its headers
-  kept; `m2k_fm1.c` is the glue (the core in the main loop, the audio ISR copying a 17 ms ring; the store a stream
-  into the flash, 0xD0000..0xE0000, when the sequencer stands). The core is its own unit there (`core.o`): reach it
+  kept; `m2k_fm1.c` is the glue (the core in the main loop, the audio ISR copying a 17 ms ring), `m2k_link.c` the store
+  (a stream into the flash, 0xD0000..0xE0000, when the sequencer stands) and the Patch Editor's link to it (SysEx
+  `F0 7D 'M2K' cmd pack7(body) F7` through the platform's `APP_SYSEX` hook; `host/m2k_link_test.c` runs both on a NOR
+  flash in memory, and `check.sh` with the browser's store for the FM-1, `m2k_host --web-store`, and the FM-1's read
+  in the browser, `--fm1-store`). The core is its own unit there (`core.o`): reach it
   through `m2k.h` alone. RAM: 96 KiB `.bss` + 336 KiB pool; the first build is one project of 16 patterns
   (`M2K_PATTERNS`, `M2K_PROJECTS`, `M2K_IMG_DATA` set by build.py). Never publish a package on the site that has not
   run on an FM-1. The installer page (`installer.html`, Felucca's `web/fm1/fm1ota.js`, `fm1pkg.js`, unchanged) installs
