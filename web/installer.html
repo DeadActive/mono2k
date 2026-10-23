@@ -59,7 +59,7 @@
   <div class="main doc">
     <h2 style="margin-top:0">1 · Connect</h2>
     <p>Plug the FM-1 into the computer with a USB cable that carries data, switch it on, and press Connect. The browser asks to allow MIDI with system exclusive messages: allow it, that is how the FM-1 answers. Close anything else using the FM-1's MIDI port first: a DAW, or the <a href="./">emulator</a> with the FM-1 selected.</p>
-    <button class="bigbtn" id="connect" type="button">Connect<small>Ask the FM-1 what it runs</small></button>
+    <button class="bigbtn" id="connect" type="button">Connect<small id="connect-sub">Ask the FM-1 what it runs</small></button>
     <div class="inst__log" id="say" role="status" aria-live="polite">Not connected.</div>
 
     <h2>2 · Install MONO2K</h2>
@@ -71,7 +71,7 @@
       <li>The running firmware checks the package and stages the update loader, then the FM-1 restarts into its update mode.</li>
       <li>The loader writes MONO2K, about a minute, and the FM-1 starts again into it.</li>
     </ol>
-    <details class="params">
+    <details class="params" id="local">
       <summary>Install a package from this computer</summary>
       <p>A build of your own, or one the author sends you to test: a <code>.fwsc</code> made by <code>tools/fm1/build.py</code>. Only packages with the open FM-1 update loader are taken.</p>
       <p><input id="file" type="file" accept=".fwsc"></p>
@@ -120,7 +120,7 @@ function describe(id) {
   if (v >= 970 && v <= 979) return "zp12";
   if (v >= 990) return "Dinghy";
   if (v === 906) return "FM-106";
-  if (v >= 900 && v <= 929) return v === 900 ? "Felucca (a development build)" : `Felucca ${Math.floor((v - 900) / 10)}.${v % 10}`;
+  if (v >= 900 && v <= 929) return v === 900 ? "Felucca, or a firmware built on it (FM-1_900 is their shared identity)" : `Felucca ${Math.floor((v - 900) / 10)}.${v % 10}`;
   return `Another open firmware (${id.text})`;
 }
 
@@ -155,14 +155,24 @@ $("connect").addEventListener("click", async () => {
   try {
     const up = new Updater(await access(), (m) => console.log(m));
     say("Asking the FM-1…");
+    $("connect-sub").textContent = "Asking the FM-1…";
     const dev = await up.find();
-    if (!dev) { show(null); say("No FM-1 answered. Check the cable carries data, nothing else holds its MIDI port, and that it is switched on.", "err"); return; }
+    if (!dev) {
+      show(null);
+      $("connect-sub").textContent = "Not found: try again";
+      say("No FM-1 answered. Check the cable carries data, nothing else holds its MIDI port (close other installer tabs and DAWs), and that it is switched on.", "err");
+      return;
+    }
     dev.link.close();
     show(dev.id);
     const what = describe(dev.id);
+    $("connect-sub").textContent = `Connected · ${dev.id.text}`;
+    const next = pkg ? `Press Install to write ${pkg.label}.`
+                     : "No MONO2K package is published here yet: open “Install a package from this computer” below and choose the .fwsc (mono2k-test.fwsc), then press Install.";
     if (/^ota-/i.test(dev.id.model)) say(`${what}. Press Install to finish it.`);
-    else if (MONO2K.test(dev.id.text)) say(`It runs ${what}. Install writes the package again; Back to V15 returns it to M-VAVE's firmware.`, "ok");
-    else say(`It runs ${what}. Ready to install.`, "ok");
+    else if (MONO2K.test(dev.id.text)) say(`Connected. It runs ${what}. ${next}`, "ok");
+    else say(`Connected. It runs ${what}. ${next}`, "ok");
+    if (!pkg) { $("local").open = true; $("local").scrollIntoView({ behavior: "smooth", block: "center" }); }
   } catch (e) { say(e.message, "err"); }
   finally { lock(false); }
 });
@@ -175,6 +185,7 @@ function takePackage(raw, label) {
     throw new Error("this package has no update loader this page can drive (M-VAVE's own? use Back to V15 for that)");
   pkg = { product, image: logicalImage(raw), label };
   $("install-sub").textContent = `${label} · ${product}`;
+  $("pkg-note").textContent = `Ready: ${label}, identity ${product}. Press Install, then leave the cable in until it says done.`;
   $("install").disabled = busy;
 }
 
