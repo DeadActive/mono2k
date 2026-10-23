@@ -133,7 +133,11 @@ int m2k_dirty(void);                                /* 1 when SAVE asked for the
  * been played up to sample PLAYED (m2k_samples counts the samples rendered since init): its length, 0 for none */
 int m2k_midi_out(uint8_t msg[3], uint32_t played);
 uint32_t m2k_samples(void);
-int m2k_playing(void);                              /* 1 while the sequencer plays (the FM-1 writes its flash when it stops) */
+int m2k_playing(void);
+/* a second core (the FM-1's): the platform sets these and the render runs some tracks there, block by block.
+ * m2k_par_begin(job) starts job on it (0: it could not, the core does it in place), m2k_par_end waits for it */
+extern int (*m2k_par_begin)(void (*job)(void));
+extern void (*m2k_par_end)(void);                              /* 1 while the sequencer plays (the FM-1 writes its flash when it stops) */
 void m2k_setting(int i, int v);                     /* e.g. the web page's theme sets S_SCREEN */
 void m2k_pattern(int n);                            /* select a pattern, as PRESETS does */
 void m2k_track(int t);                              /* select a track, as SELECT does (the web's track cells) */

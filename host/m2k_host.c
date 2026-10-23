@@ -514,6 +514,12 @@ static void trig_probe(unsigned skip, double *amp_db, double *bright_db, int *lf
     free(b);
 }
 
+/* the second core, played in turn: its job run when started (1) or when waited for (2) */
+static int par_mode;
+static void (*par_pending)(void);
+static int par_test_begin(void (*job)(void)) { if (par_mode == 1) job(); else par_pending = job; return 1; }
+static void par_test_end(void) { if (par_mode == 2 && par_pending) par_pending(); par_pending = 0; }
+
 static int selftest(void)
 {
     int fails = 0;
@@ -1394,6 +1400,28 @@ static int selftest(void)
         m2k_midi(0x82, 64, 0);
         CHECK(t0, "MIDI: CHAN puts track 1 on its channel");
         m2k_setting(S_MCH, 0); m2k_setting(S_SYNI, 0);
+    }
+    /* the render on two cores (the FM-1's): the second core's tracks run before or after the first's (as they may,
+     * at once) and every pattern of bank A sounds sample for sample as on one */
+    {
+        static int16_t a[2 * 44100], b[2 * 44100];
+        int same = 1, split_seen = 0;
+        for (int p = 0; p < 16; p++) {
+            for (int mode = 0; mode < 3; mode++) {
+                par_mode = mode;
+                m2k_par_begin = mode ? par_test_begin : 0;
+                m2k_par_end = mode ? par_test_end : 0;
+                m2k_init(21);
+                m2k_pattern(p);
+                seq_play(1);
+                int16_t *o = mode ? b : a;
+                for (int f = 0; f < 44100; f += 128) m2k_render(o + 2 * f, 128 < 44100 - f ? 128 : (44100 - f) & ~15);
+                if (mode && memcmp(a, b, sizeof a)) { same = 0; printf("     A%02d differs with the second core's tracks %s\n", p + 1, mode == 1 ? "first" : "last"); }
+                split_seen |= par_from < M2K_TRACKS;
+            }
+        }
+        m2k_par_begin = 0; m2k_par_end = 0;
+        CHECK(same && split_seen, "two cores: bank A the same sample for sample, the second core's tracks first or last");
     }
     printf("%s (%d failed)\n", fails ? "SELFTEST FAILED" : "selftest passed", fails);
     return fails != 0;

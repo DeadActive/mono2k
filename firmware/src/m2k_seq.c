@@ -537,16 +537,19 @@ void m2k_init(uint32_t seed)
     m_set(&bus, 0, sizeof bus);
     m_set(&sq, 0, sizeof sq);
     m_set(&mx, 0, sizeof mx);
+    modn = modpn = 0;
     m_set(mx.on, 0xFF, sizeof mx.on);
     ext_bpm = 0;
     m_set(dl_mem, 0x7F, sizeof dl_mem);          /* mu-law silence: 0xFF and 0x7F both decode to ~0 */
     m_set(ens_mem, 0, sizeof ens_mem);
+    m_set(mod_mem, 0, sizeof mod_mem);           /* the MOD effect's lines too: a reset hears no old chorus */
     m_set(gl_buf, 0, sizeof gl_buf);
     m_set(tp_buf, 0, sizeof tp_buf);
     m_set(cb_buf, 0, sizeof cb_buf);
     m_set(ap_buf, 0, sizeof ap_buf);
     for (int t = 0; t < M2K_TRACKS; t++) {
         trk[t].dl = dl_mem[t];
+        trk[t].dquiet = DL_LEN;        /* the lines start silent */
         trk[t].lfsr = 0x1234567u + (uint32_t)t * 7919u;
         trk[t].lfsr2 = 0x9E3779B9u + (uint32_t)t * 104729u;
         trk[t].gate_left = -1;

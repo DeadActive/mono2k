@@ -52,6 +52,14 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   (`M2K_PATTERNS`, `M2K_PROJECTS`, `M2K_IMG_DATA` set by build.py). Never publish a package on the site that has not
   run on an FM-1. The installer page (`installer.html`, Felucca's `web/fm1/fm1ota.js`, `fm1pkg.js`, unchanged) installs
   a package from a file meanwhile.
+- The FM-1's budget: Felucca's heaviest patch is ~1570 Mac instructions a sample (its tests/cpu_baseline.txt) and
+  runs on one core; count MONO2K's the same way, built as the FM-1 builds it (`cc -O2 -fno-builtin -fno-vectorize
+  -fno-slp-vectorize`, `proc_pid_rusage` ri_instructions). The core's byte loops (m_set, m_cpy) are word-wise for it.
+  Two cores: the render hands the second tracks [split, 6) of each block through `m2k_par_begin` / `m2k_par_end` (the
+  FM-1's glue fills them with CS-1's audio worker; elsewhere they are unset and the core does it all), the split keeping
+  every FX machine with the track it hears; the self-test renders bank A with the second core's tracks first and last
+  and holds both to the one-core render, sample for sample. `--diag` packages show CPU (the first core's render, the
+  waits included), W (the second's) and F (drawing) in % over the screen's top.
 - MIDI (GLO > MIDI, settings S_MCH S_SYNI S_SYNO S_NOTO): `m2k_midi_out(msg, played)` hands out what is due once the
   sound has reached sample `played` (`m2k_samples`); the FM-1 sends it as the ISR takes the ring, the worklet as it
   renders (the page stamps it with the audio latency). The self-test holds the clock out, the clock in, the notes out
@@ -126,4 +134,4 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
 ## Style
 
 C99, 4 spaces, unity build, static everything, short comments that say why. The screen's grid: header 0..15, focus
-18..121 (148 / 92 golden split), step strip 124..146, knobs 148..239.
+18..121 (the value left of x 104, the page's picture right of it, PIC_W wide), step strip 124..146, knobs 148..239.

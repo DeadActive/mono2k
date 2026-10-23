@@ -155,6 +155,8 @@ def build_loader():
 
 # ---- the app: the platform and its glue (m2k_fm1.c), and MONO2K's core (firmware/src/m2k_core.c), two units
 
+# the second core renders some tracks of each block (the core's m2k_par_begin; DUAL=0 in the environment: one core)
+DUAL = 0 if os.environ.get("DUAL") == "0" else 1
 # the FM-1's first build: one project of 16 patterns (bank A), in its RAM (README: the FM-1 build)
 CORE = ["-DM2K_FW=1", "-DM2K_PATTERNS=16", "-DM2K_PROJECTS=1", "-DM2K_IMG_DATA=28672"]
 
@@ -162,12 +164,13 @@ CORE = ["-DM2K_FW=1", "-DM2K_PATTERNS=16", "-DM2K_PROJECTS=1", "-DM2K_IMG_DATA=2
 def build_app():
     flags = [*CORE, *CFLAGS, "-Ifirmware/fm1/hal", "-Ifirmware/fm1/src", "-Ifirmware/fm1/gen", "-Ifirmware/src",
              "-Ifirmware/gen", f'-DFELUCCA_ID="{PRODUCT}"', f'-DAPP_VER="{VERSION}"',
-             "-DDINGHY_DUAL_CORE=0"]
-    tc_all(("cc", "-DDINGHY_DUAL_CORE=0", "-c", FW / "crt0.S", "-o", OUT / "crt0.o"),
+             f"-DDINGHY_DUAL_CORE={DUAL}"]
+    tc_all(("cc", f"-DDINGHY_DUAL_CORE={DUAL}", "-c", FW / "crt0.S", "-o", OUT / "crt0.o"),
            ("cc", "-c", FW / "hal" / "fm1_vec.S", "-o", OUT / "fm1_vec.o"),
            ("cc", "-c", FW / "hal" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),
            ("cc", *flags, "-c", FW / "m2k_fm1.c", "-o", OUT / "mono2k.o"),
-           ("cc", *CFLAGS, *CORE, "-Ifirmware/src", "-Ifirmware/gen", "-c", ROOT / "firmware" / "src" / "m2k_core.c",
+           ("cc", *[f for f in CFLAGS if f != "-Os"], "-O2", *CORE, "-Ifirmware/src", "-Ifirmware/gen", "-c",   # the core
+            ROOT / "firmware" / "src" / "m2k_core.c",                                                              # for speed
             "-o", OUT / "core.o"))
     undef = tc("common/bin/objdump", "-t", OUT / "mono2k.o") + tc("common/bin/objdump", "-t", OUT / "core.o")
     bad = sorted({m.group(0) for m in BANNED.finditer(undef)})
@@ -215,8 +218,8 @@ def check(img, syms, dis, rt):
         errors.append(f"_start is not at {APP_XIP:#x}")
     if img[:4] != bytes.fromhex("04818000"):
         errors.append(f"the image starts with {img[:4].hex()}, not the entry stub")
-    rt_calls = []                   # code in RAM runs with the flash off: no calls out of RAM
-    for ln in rt.splitlines():
+    rt_calls = []                   # code in RAM runs with the flash off: no calls out of RAM (and calls between XIP
+    for ln in rt.splitlines():      # and RAM are out of a direct call's reach: through a pointer, FL_FAR)
         mc = re.search(r"\bcall\s+-?\d+\s+<([^:>]*):\s+([0-9a-f]+)\s*>", ln)
         if mc:
             if not 0x01C00000 <= int(mc.group(2), 16) < sym("_rt_end"):
@@ -233,11 +236,24 @@ def check(img, syms, dis, rt):
             val = (int(v[0]) & 0xFFFFFFFF) if v[0] else int(v[1], 16) & 0xFFFFFFFF
             if 0xFFC00000 <= val < 0xFFD00000:
                 errors.append(f"a reference to ROM address {val:#010x}")
+    if sym("fm1_core1_start"):      # two cores: CPU1's code in RAM, its own stacks, its loop calling nothing (CS-1's)
+        for name in ("fm1_core1_main", "audio_worker_loop"):
+            if not 0x01C00000 <= sym(name) < sym("_rt_end"):
+                errors.append(f"{name} must be in .ram_text so CPU1 idles with the flash off")
+        if sym("_cpu1_stacks_hi") - sym("_cpu1_stacks_lo") != 8192:
+            errors.append("CPU1 needs its 4 KiB user + 4 KiB supervisor stacks (.cpu1_stacks)")
+        body = dis.split("\naudio_worker_loop:", 1)[-1].split("\n\n", 1)[0]
+        if re.search(r"\bcall -?\d+", body):
+            errors.append("audio_worker_loop contains a direct call; its helpers must inline (it runs with XIP off)")
+        notes.append("CPU1: a polling loop in RAM, its own 8 KiB of stacks, bounded start and join")
     if len(img) > APP_SLOT:
         errors.append(f"the image, {len(img)} B, is bigger than the app slot ({APP_SLOT} B)")
     ram = sym("_bss_end") - 0x01C08000
     pool = sym("_pool_end") - 0x01C20000
-    notes.append(f"image {len(img)} B of {APP_SLOT}; RAM .data+.bss {ram} B of 98304; pool {pool} B of 344064")
+    notes.append(f"image {len(img)} B of {APP_SLOT}; RAM .data+.bss {ram} B of 98304; pool {pool} B of 344064; "
+                 f"RAM code {sym('_rt_end') - 0x01C00000} B of 24576")
+    if sym("_rt_end") > 0x01C06000:
+        errors.append(f"RAM code ends at {sym('_rt_end'):#x}, past 0x1c06000")
     if ram > 96 * 1024:
         errors.append(f"RAM .data+.bss {ram} B > 96 KiB")
     if pool > 0x54000:
@@ -254,7 +270,7 @@ def main():
     a = ap.parse_args()
     name = "mono2k.fwsc"
     if a.diag:
-        CORE.append("-DM2K_FM1_DIAG=1")
+        CORE.extend(["-DM2K_FM1_DIAG=1"])
         name = "mono2k-test.fwsc"
     if a.release:
         m = re.fullmatch(r"0\.(\d)", a.release)

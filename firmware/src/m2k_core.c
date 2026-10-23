@@ -8,8 +8,30 @@
 
 #define CLAMP(v, lo, hi) ((v) < (lo) ? (lo) : (v) > (hi) ? (hi) : (v))
 
-static void m_set(void *d, int v, uint32_t n) { uint8_t *p = d; while (n--) *p++ = (uint8_t)v; }
-static void m_cpy(void *d, const void *s, uint32_t n) { uint8_t *p = d; const uint8_t *q = s; while (n--) *p++ = *q++; }
+/* a word at a time where both ends are aligned (the FM-1 builds with -fno-builtin: no memset to fall back on, and the
+ * render clears and copies blocks of words every 16 samples) */
+static void m_set(void *d, int v, uint32_t n)
+{
+    uint8_t *p = d;
+    if (!(((uintptr_t)p | n) & 3u)) {
+        uint32_t w = (uint8_t)v * 0x01010101u, *q = (uint32_t *)(void *)p;
+        for (n >>= 2; n; n--) *q++ = w;
+        return;
+    }
+    while (n--) *p++ = (uint8_t)v;
+}
+static void m_cpy(void *d, const void *s, uint32_t n)
+{
+    uint8_t *p = d;
+    const uint8_t *q = s;
+    if (!(((uintptr_t)p | (uintptr_t)q | n) & 3u)) {
+        uint32_t *pw = (uint32_t *)(void *)p;
+        const uint32_t *qw = (const uint32_t *)(const void *)q;
+        for (n >>= 2; n; n--) *pw++ = *qw++;
+        return;
+    }
+    while (n--) *p++ = *q++;
+}
 
 static uint32_t rng = 0x2000u;
 static inline uint32_t rnd32(void) { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; return rng; }
@@ -67,7 +89,24 @@ static struct {
     uint8_t scope_w;
     uint8_t glitch;                    /* 1 while the bus repeats */
     int32_t dly[M2K_TRACKS];           /* delay return level */
+    uint8_t lfo_view;                  /* the track the screen shows: its LFOs are worked out though they move nothing */
 } mon;
+
+/* a profile (M2K_PROF, host/m2k_prof.c and the FM-1's test build): the time each part of the render takes, in the
+ * platform's own ticks: 0 the sequencer and the LFOs, 1 the machines (and by machine), 2 the track chain, 3 the
+ * delays, 4 the bus */
+#ifdef M2K_PROF
+uint32_t m2k_prof_now(void);
+uint32_t m2k_prof[8], m2k_prof_m[M_COUNT];
+static uint32_t prof_t;
+#define PROF_START() (prof_t = m2k_prof_now())
+#define PROF(k) do { uint32_t n_ = m2k_prof_now(); m2k_prof[k] += n_ - prof_t; prof_t = n_; } while (0)
+#define PROF_M(m) do { uint32_t n_ = m2k_prof_now(); m2k_prof[1] += n_ - prof_t; m2k_prof_m[m] += n_ - prof_t; prof_t = n_; } while (0)
+#else
+#define PROF_START() ((void)0)
+#define PROF(k) ((void)0)
+#define PROF_M(m) ((void)0)
+#endif
 
 #include "m2k_dsp.c"
 #include "m2k_fx.c"

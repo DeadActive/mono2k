@@ -15,7 +15,7 @@
 /* the store's region: the last 64 KiB of the family's data area (Felucca's projects and samples live in it too) */
 #define BANK_AT 0x000D0000u
 #define BANK_LEN 0x00010000u
-#define CV_MAX (240u * 24u)                     /* the platform's text: a line of FONT_S at a time (crash, update, rescue) */
+#define CV_MAX (240u * 18u)                     /* the platform's text: a line of FONT_S at a time (crash, update, rescue) */
 #include "platform.c"
 #include "m2k.h"                                 /* the core: its own unit (core.o), its API alone */
 
@@ -59,6 +59,15 @@ static void render_ahead(void)
     }
 }
 
+/* ---- the second core: the core hands it some tracks of each block (m2k_par_begin), CS-1's audio worker runs them */
+#if DINGHY_DUAL_CORE
+static void (*par_fn)(void);
+static void par_tramp(void *c) { (void)c; par_fn(); }
+static int par_begin(void (*job)(void)) { par_fn = job; return audio_worker_submit(par_tramp, 0); }
+static uint32_t job_ticks;                      /* the second core's time on jobs, for the meter */
+static void par_end(void) { audio_worker_join(); job_ticks += audio_worker.last_job_ticks; }
+#endif
+
 /* ---- MIDI out (GLO > MIDI's clock and notes): each message once the interrupt has taken the sound it belongs to
  * (the ring runs ahead of the speaker; sent at render time it would run 17 ms ahead of the sound). USB only: the
  * FM-1's TRS jack is an input */
@@ -92,21 +101,62 @@ static void take_panel(void)
     while (midi_get(&st, &d1, &d2)) m2k_midi(st, d1, d2);
 }
 
-/* ---- a test build's meter (M2K_FM1_DIAG): along the top edge, the render's share of real time (the whole width
- * is 100 %); at the top right, a block while the sound ran short in the last second */
+/* ---- a test build's meter (M2K_FM1_DIAG): over the top 16 lines, in red, shares of real time in %: CPU the first
+ * core rendering the sound (waiting for the second included: what must stay under 100), W the second core's work,
+ * F drawing the screen; a block at the top right while the sound ran short in the last second */
 #ifndef M2K_FM1_DIAG
 #define M2K_FM1_DIAG 0
 #endif
-static uint32_t diag_pct, diag_short_ms, diag_last_short;
+static uint32_t diag_short_ms, diag_last_short, diag_t0, frame_ticks;
+static char diag_txt[40];
+
+static void diag_num(char *o, uint32_t v)
+{
+    char b[8];
+    int n = 0;
+    do { b[n++] = (char)('0' + v % 10u); v /= 10u; } while (v && n < 7);
+    while (n) *o++ = b[--n];
+    *o = 0;
+}
 
 static void diag_tick(void)
 {
-    if (load_frames >= FS / 4u) {               /* a quarter second's worth: ticks per frame against 1 / FS */
-        uint32_t per = load_ticks / load_frames, real = 1000000u * FM1_TICKS_PER_US / FS;
-        diag_pct = per * 100u / (real ? real : 1u);
-        load_ticks = load_frames = 0;
+#if M2K_FM1_DIAG
+    uint32_t now = fm1_ticks(), span = now - diag_t0;
+    if (span >= 500u * 1000u * FM1_TICKS_PER_US) {      /* every half second */
+        uint32_t w = 0;
+#if DINGHY_DUAL_CORE
+        w = job_ticks;
+        job_ticks = 0;
+#endif
+        char *o = diag_txt;
+        *o++ = 'C'; *o++ = 'P'; *o++ = 'U'; *o++ = ' ';
+        diag_num(o, load_ticks / (span / 100u)); while (*o) o++;
+        *o++ = ' '; *o++ = ' '; *o++ = 'W'; *o++ = ' ';
+        diag_num(o, w / (span / 100u)); while (*o) o++;
+        *o++ = ' '; *o++ = ' '; *o++ = 'F'; *o++ = ' ';
+        diag_num(o, frame_ticks / (span / 100u)); while (*o) o++;
+        load_ticks = load_frames = frame_ticks = 0;
+        diag_t0 = now;
     }
+#endif
     if (ring_short != diag_last_short) { diag_last_short = ring_short; diag_short_ms = fm1_ms; }
+}
+
+/* a 3 x 5 font, doubled: digits, the parts' letters and a space (each glyph: 5 rows of 3 bits) */
+static const uint16_t *diag_glyph(char c)
+{
+    static const uint16_t D[10][5] = {{7,5,5,5,7},{2,6,2,2,7},{7,1,7,4,7},{7,1,7,1,7},{5,5,7,1,1},{7,4,7,1,7},{7,4,7,5,7},
+                                      {7,1,1,1,1},{7,5,7,5,7},{7,5,7,1,7}};
+    static const uint16_t A[][5] = {{7,4,4,4,7} /* C */, {7,5,7,4,4} /* P */, {5,5,5,5,7} /* U */, {5,7,7,5,5} /* M */,
+                                    {6,5,5,5,6} /* D */, {6,5,6,5,6} /* B */, {7,4,7,1,7} /* S */, {7,4,6,4,4} /* F */,
+                                    {5,5,7,7,5} /* W */};
+    static const uint16_t SP[5] = {0, 0, 0, 0, 0};
+    if (c >= '0' && c <= '9') return D[c - '0'];
+    switch (c) { case 'C': return A[0]; case 'P': return A[1]; case 'U': return A[2]; case 'M': return A[3];
+                 case 'D': return A[4]; case 'B': return A[5]; case 'S': return A[6]; case 'F': return A[7];
+                 case 'W': return A[8]; }
+    return SP;
 }
 
 /* ---- the screen: the core's 1-bit frame, ink and paper as RGB565 (the panel takes it big-endian), sent in strips
@@ -120,10 +170,14 @@ static const uint8_t *frame;
 
 static uint16_t be16(uint16_t c) { return (uint16_t)((c >> 8) | (c << 8)); }
 
+static uint32_t frame_ms;
+
 static void screen_frame(void)
 {
-    uint32_t s, i;
+    uint32_t s, i, t0 = fm1_ticks();
+    frame_ms = fm1_ms;
     frame = m2k_frame(fm1_ms);
+    frame_ticks += fm1_ticks() - t0;
     for (s = 0; s < NSTRIP; s++) {
         const uint8_t *a = frame + s * ROWS * 30u, *b = shown + s * ROWS * 30u;
         for (i = 0; i < ROWS * 30u && a[i] == b[i]; i++)
@@ -136,7 +190,7 @@ static void screen_frame(void)
 static void screen_send(void)                   /* one strip, if the last has gone out */
 {
     uint32_t s, x, y;
-    uint16_t ink = be16(RGB(11, 11, 11)), paper = be16(RGB(242, 241, 236));   /* the site's ink and paper */
+    uint16_t ink = be16(0x0000u), paper = be16(0xFFFFu);   /* pure black and white: the panel's most contrast */
     if (!pending || !lcd_idle())
         return;
     for (s = 0; s < NSTRIP && !todo[s]; s++)
@@ -149,12 +203,20 @@ static void screen_send(void)                   /* one strip, if the last has go
         for (x = 0; x < 240u; x++)
             px[y * 240u + x] = src[y * 30u + (x >> 3)] >> (7u - (x & 7u)) & 1u ? ink : paper;
     memcpy(shown + s * ROWS * 30u, src, ROWS * 30u);
-    if (M2K_FM1_DIAG && s == 0) {               /* the meter over the first strip (it is resent each frame) */
-        uint32_t w = diag_pct * 240u / 100u, red = be16(RGB(220, 40, 30));
-        for (x = 0; x < 240u; x++) px[x] = px[240u + x] = x < (w > 240u ? 240u : w) ? red : px[x];
+    if (M2K_FM1_DIAG && s < 2u) {               /* the meter over the first two strips (resent each frame) */
+        uint16_t red = be16(RGB(255, 0, 0));
+        uint32_t c, gx = 2;
+        for (c = 0; diag_txt[c] && gx + 6u < 230u; c++, gx += 8u) {
+            const uint16_t *g = diag_glyph(diag_txt[c]);
+            for (y = 0; y < ROWS; y++) {
+                uint32_t row = (s * ROWS + y) / 2u - 1u;   /* glyph rows from line 2, doubled */
+                if (s * ROWS + y < 2u || row >= 5u) continue;
+                for (x = 0; x < 6u; x++) if (g[row] >> (2u - x / 2u) & 1u) px[y * 240u + gx + x] = red;
+            }
+        }
         if (fm1_ms - diag_short_ms < 1000u && diag_last_short)
-            for (y = 2; y < ROWS; y++) for (x = 232; x < 240u; x++) px[y * 240u + x] = red;
-        shown[0] ^= 0x01u;                      /* so the next frame sends this strip again */
+            for (y = 0; y < ROWS; y++) for (x = 232; x < 240u; x++) px[y * 240u + x] = red;
+        shown[s * ROWS * 30u] ^= 0x01u;         /* so the next frame sends this strip again */
     }
     lcd_blit(0, s * ROWS, 240, ROWS, px);
     sbuf ^= 1u;
@@ -258,9 +320,12 @@ static int store_load(void)
 
 static void app_init(void)
 {
+#if DINGHY_DUAL_CORE
+    if (audio_worker_online) { m2k_par_begin = par_begin; m2k_par_end = par_end; }
+#endif
     m2k_init(fm1_ticks());
     store_load();                               /* the factory's bank stays when there is none */
-    lcd_fill(0, 0, 240, 240, RGB(242, 241, 236));
+    lcd_fill(0, 0, 240, 240, 0xFFFFu);
     render_ahead();
     screen_frame();
 }
@@ -273,7 +338,7 @@ static void app_loop(void)
     midi_drain();
     render_ahead();
     midi_drain();
-    if (!pending) {
+    if (!pending && fm1_ms - frame_ms >= 33u) {   /* 30 frames a second at most, as the browser draws them */
         lights();
         screen_frame();
     }

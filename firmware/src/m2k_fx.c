@@ -42,8 +42,25 @@ static void delay_block(int ti, const int32_t *in, int32_t *L, int32_t *R)
         t->dmode = (uint8_t)dual;
         t->dacc[0] = t->dacc[1] = t->dn = 0;
         t->dhp[0] = t->dhp[1] = t->dlp[0] = t->dlp[1] = 0;
+        t->dquiet = DL_LEN;
     }
     uint32_t n = dual ? DL_LEN / 2 : DL_LEN, mask = n - 1;
+    /* nothing sent, every entry of the line written silent since, the filters settled (an integer one-pole can stall a
+     * step or two off zero): nothing to hear, nothing to work out (most tracks, most of the time; the FM-1's time) */
+    int quiet = t->dquiet >= n;
+    for (int i = 0; quiet && i < M2K_SUB; i++) quiet = in[i] == 0;
+    if (quiet) {
+        int32_t s = 0;
+        for (int c = 0; c < 2; c++) {
+            int32_t v[4] = {t->dhp[c], t->dlp[c], t->dprev[c], t->dacc[c]};
+            for (int k = 0; k < 4; k++) s |= v[k] > 3 || v[k] < -3;
+        }
+        if (!s) {
+            t->dhp[0] = t->dhp[1] = t->dlp[0] = t->dlp[1] = t->dprev[0] = t->dprev[1] = t->dacc[0] = t->dacc[1] = 0;
+            mon.dly[ti] = 0;
+            return;
+        }
+    }
     /* the time, half-rate samples Q8: whole samples once it settles (a read between two samples dulls the top) */
     int32_t target = ((int32_t)((uint32_t)P7(t, P_DTIM) * (sps_q8 >> 5)) + (167 << 8) + 128) & ~255;
     int32_t dd = target - t->dt_q8;
@@ -84,7 +101,13 @@ static void delay_block(int ti, const int32_t *in, int32_t *L, int32_t *R)
         t->dph += rate;
         if (t->dph >= 65536u) {        /* the clock ticks: the inputs since the last tick, averaged, go in */
             t->dph -= 65536u;
-            for (int c = 0; c <= dual; c++) b[c * n + (t->dw & mask)] = mulaw_enc(t->dacc[c] / t->dn);
+            int loud = 0;
+            for (int c = 0; c <= dual; c++) {
+                uint8_t q = mulaw_enc(t->dacc[c] / t->dn);
+                b[c * n + (t->dw & mask)] = q;
+                loud |= q != 0xFF && q != 0x7F;           /* mu-law's two silences */
+            }
+            t->dquiet = loud ? 0 : t->dquiet < 0x40000000u ? t->dquiet + 1 : t->dquiet;
             t->dw++;
             t->dacc[0] = t->dacc[1] = t->dn = 0;
         }
@@ -313,24 +336,70 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
 static void seq_block(void);
 static int seq_running(void);
 
+/* the second core's share of a block: tracks par_from..5, into their own sums (par_L ...) */
+int (*m2k_par_begin)(void (*job)(void));
+void (*m2k_par_end)(void);
+static int par_from = M2K_TRACKS;
+static int32_t par_L[M2K_SUB], par_R[M2K_SUB], par_rs[M2K_SUB], par_ds[M2K_SUB];
+
+static void par_job(void)
+{
+    m_set(par_L, 0, sizeof par_L);
+    m_set(par_R, 0, sizeof par_R);
+    m_set(par_rs, 0, sizeof par_rs);
+    for (int t = par_from; t < M2K_TRACKS; t++) {
+        m_set(par_ds, 0, sizeof par_ds);
+        track_block(t, par_L, par_R, par_ds, par_rs);
+        delay_block(t, par_ds, par_L, par_R);
+    }
+}
+
+/* where the tracks split: an FX machine stays with the track it hears (the one before it, FX-RING's EXT the one before
+ * that), and the sounding tracks are shared out, the first core keeping the bus (worth about two) */
+static int par_split(void)
+{
+    const uint8_t *mc = pat[cur_pat].machine;
+    int best = M2K_TRACKS, cost = 99, n[M2K_TRACKS + 1] = {0};
+    for (int t = 0; t < M2K_TRACKS; t++) n[t + 1] = n[t] + (trk[t].sounding ? 2 : 0) + 1;
+    for (int s = 1; s < M2K_TRACKS; s++) {
+        if (mc[s] == M_FXC || mc[s] == M_FXR || mc[s] == M_FXD || (s + 1 < M2K_TRACKS && mc[s + 1] == M_FXR)) continue;
+        int a = n[s] + 4, b = n[M2K_TRACKS] - n[s], c = a > b ? a : b;
+        if (c < cost) { cost = c; best = s; }
+    }
+    return best;
+}
+
 void m2k_render(int16_t *lr, int frames)
 {
     static int32_t L[M2K_SUB], R[M2K_SUB], rs[M2K_SUB], ds[M2K_SUB];
     for (int f = 0; f + M2K_SUB <= frames; f += M2K_SUB) {
+        PROF_START();
         seq_block();
         tape_rolling = seq_running();
         for (int t = 0; t < M2K_TRACKS; t++) if (trk[t].sounding) tape_rolling = 1;
-        for (int t = 0; t < M2K_TRACKS; t++) m_set(trk[t].mod_acc, 0, sizeof trk[t].mod_acc);
         for (int t = 0; t < M2K_TRACKS; t++) lfo_block(t);
-        for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].mod, trk[t].mod_acc, sizeof trk[t].mod);
+        mod_apply();
         m_set(L, 0, sizeof L);
         m_set(R, 0, sizeof R);
         m_set(rs, 0, sizeof rs);
-        for (int t = 0; t < M2K_TRACKS; t++) {
+        hold_bpm = ext_bpm ? ext_bpm : 30u + pat[cur_pat].glob[G_TMPO];
+        PROF(0);
+        int split = M2K_TRACKS;
+        if (m2k_par_begin) {
+            par_from = par_split();
+            if (par_from < M2K_TRACKS && m2k_par_begin(par_job)) split = par_from;
+        }
+        for (int t = 0; t < split; t++) {
             m_set(ds, 0, sizeof ds);
             track_block(t, L, R, ds, rs);
             delay_block(t, ds, L, R);
+            PROF(3);
+        }
+        if (split < M2K_TRACKS) {
+            m2k_par_end();
+            for (int i = 0; i < M2K_SUB; i++) { L[i] += par_L[i]; R[i] += par_R[i]; rs[i] += par_rs[i]; }
         }
         bus_block(L, R, rs, lr + 2 * f);
+        PROF(4);
     }
 }

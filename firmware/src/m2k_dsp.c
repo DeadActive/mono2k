@@ -59,8 +59,8 @@ static inline void zsvf_tick(zsvf_t *f, int32_t v0, int32_t *lp, int32_t *bp, in
     int64_t p1 = (int64_t)f->a1 * f->s1 + (int64_t)f->a2 * v3 + f->r1;
     int64_t p2 = (int64_t)f->a2 * f->s1 + (int64_t)f->a3 * v3 + f->r2;
     int32_t v1 = (int32_t)(p1 >> 30), d2 = (int32_t)(p2 >> 30);
-    f->r1 = p1 - (int64_t)v1 * (1LL << 30);                    /* a multiply: shifting a negative left is undefined */
-    f->r2 = p2 - (int64_t)d2 * (1LL << 30);
+    f->r1 = p1 & ((1LL << 30) - 1);                            /* what the shift dropped: p - (p >> 30) * 2^30, the same */
+    f->r2 = p2 & ((1LL << 30) - 1);                            /* bits for less work (two's complement) */
     int32_t v2 = f->s2 + d2;
     f->s1 = CLAMP(2 * v1 - f->s1, -ZS_MAX, ZS_MAX);
     f->s2 = CLAMP(2 * v2 - f->s2, -ZS_MAX, ZS_MAX);
@@ -73,7 +73,7 @@ static inline int32_t zop_lp(zop_t *f, int32_t x)
 {
     int64_t p = (int64_t)(x - f->s) * f->G + f->r;
     int32_t v = (int32_t)(p >> 24);
-    f->r = p - (int64_t)v * (1LL << 24);
+    f->r = p & ((1LL << 24) - 1);
     int32_t y = v + f->s;
     f->s = CLAMP(y + v, -ZS_MAX, ZS_MAX);
     return y;
@@ -84,7 +84,7 @@ static inline int32_t op_lp(zop_t *f, int32_t x)
 {
     int64_t p = (int64_t)(x - f->s) * f->G + f->r;
     int32_t v = (int32_t)(p >> 24);
-    f->r = p - (int64_t)v * (1LL << 24);
+    f->r = p & ((1LL << 24) - 1);
     f->s += v;
     return f->s;
 }
@@ -134,6 +134,7 @@ typedef struct {
     uint32_t dw, dph;                  /* write index; the line's clock, Q16 of a line sample */
     int32_t dt_q8;                     /* smoothed delay time in half-rate samples, Q8 */
     int32_t dacc[2], dn, dprev[2], dcur[2], dhp[2], dlp[2];
+    uint32_t dquiet;                   /* the delay's line writes in a row that were silence (all of it: it is skipped) */
     uint8_t dmode;                     /* 0: one line, the echoes keep the source's side; 1: ping-pong */
     /* LFOs */
     uint32_t lph[3];
@@ -141,7 +142,7 @@ typedef struct {
     uint8_t ldone[3];
     /* params: the kit with this trig's locks, and the modulation in 1/256 steps */
     uint8_t eff[P_COUNT];
-    int32_t mod[P_COUNT], mod_acc[P_COUNT];
+    int32_t mod[P_COUNT];              /* the LFOs' modulation, set a block at a time (modq: only what they touch) */
     int32_t peak;
     /* the modulation effect; its side (chorus and flanger across the stereo) high-passed and resampled as the mid */
     uint32_t mph;
@@ -979,6 +980,25 @@ static int32_t lfo_shape(int w, uint32_t ph, int32_t *rnd)
 
 static uint32_t bpm10;                 /* tempo in 1/10 bpm, set by the sequencer */
 
+/* the LFOs' modulation: at most three a track, so only what they touch is set, and cleared the block after */
+typedef struct { uint8_t t, p; int32_t v; } modq_t;
+static modq_t modq[M2K_TRACKS * 3], modp[M2K_TRACKS * 3];
+static int modn, modpn;
+
+static void mod_add(int t, int p, int32_t v)
+{
+    for (int i = 0; i < modn; i++) if (modq[i].t == t && modq[i].p == p) { modq[i].v += v; return; }
+    modq[modn++] = (modq_t){(uint8_t)t, (uint8_t)p, v};
+}
+
+static void mod_apply(void)
+{
+    for (int i = 0; i < modpn; i++) trk[modp[i].t].mod[modp[i].p] = 0;
+    for (int i = 0; i < modn; i++) { trk[modq[i].t].mod[modq[i].p] = modq[i].v; modp[i] = modq[i]; }
+    modpn = modn;
+    modn = 0;
+}
+
 static void lfo_block(int ti)
 {
     trk_t *t = &trk[ti];
@@ -998,13 +1018,14 @@ static void lfo_block(int ti)
             }
             if (trig == 4 && t->lph[l] >= 0x80000000u && p < 0x80000000u) { t->ldone[l] = 1; t->lph[l] = 0x80000000u; }
         }
+        int32_t depth = PB8(t, b + L_DPTH) >> 8;    /* -64..63 */
+        if (!depth && ti != mon.lfo_view) { t->lval[l] = 0; mon.lfo[ti][l] = 0; continue; }   /* its phase runs on; no
+                                                                                             * shape for nothing */
         int32_t v = lfo_shape(wave, t->lph[l], &t->lrnd[l]);
         if (trig == 2) v = t->lhold[l];
         t->lval[l] = v;
         mon.lfo[ti][l] = v;
-        int32_t depth = PB8(t, b + L_DPTH) >> 8;    /* -64..63 */
-        int dt = PN(t, b + L_TRCK, M2K_TRACKS);
-        trk[dt].mod_acc[dest - 1] += (v * depth) >> 6;
+        if (depth) mod_add(PN(t, b + L_TRCK, M2K_TRACKS), dest - 1, (v * depth) >> 6);
     }
 }
 
@@ -1129,7 +1150,6 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     int m = pp->machine[ti];
     if (t->gate_left > 0 && --t->gate_left == 0) { t->gate = 0; t->gate_left = -1; mx_gate_end(ti); }   /* the step's gate:
                                                                                          * hold and decay go on */
-    hold_bpm = ext_bpm ? ext_bpm : 30u + pp->glob[G_TMPO];
     env_block(t);
     m_set(tout[ti], 0, sizeof tout[ti]);
     m_set(tvol[ti], 0, sizeof tvol[ti]);
@@ -1138,13 +1158,16 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
         t->peak = 0;
         mon.aenv[ti] = 0;
         mon.astage[ti] = 0;
+        PROF(2);
         return;
     }
     /* pitch: the note, its glide, the track's PTCH */
     int g = t->slide && t->eff[P_PORT] == 0 ? 40 : P7(t, P_PORT);
     t->pitch += (int32_t)(((int64_t)(t->ptarget - t->pitch) * T_GLIDE[g]) >> 16);
     int32_t pitch = t->pitch + (PB8(t, P_PTCH) >> 2);
+    PROF(2);
     mach_block(ti, m, pitch);
+    PROF_M(m);
 
     /* the filter follows the note (and the tuned pitch): a cutoff 2^((step - 16) / 8) x f0, HP at BASE, LP at BASE + WDTH; the envelope adds
      * 7 d|d| / 256 steps at full (d: BOFS / WOFS from their centre). Positions in 1/96 octave over note 0, Q8 */
@@ -1288,4 +1311,5 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     }
     t->peak = pk;
     if (pk > mon.peak[ti]) mon.peak[ti] = pk;
+    PROF(2);
 }

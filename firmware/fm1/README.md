@@ -25,6 +25,9 @@ the sizes: the image within the app slot (581 KB), `.data + .bss` within 96 KiB,
 
 ## How it runs
 
+- Two cores: each 16-sample block the core hands tracks [split, 6) to the second (CS-1's audio worker, its loop in
+  RAM) and renders the rest, then the bus; the split keeps every FX machine with the track it hears and shares the
+  sounding tracks out. `DUAL=0` in the environment builds one core.
 - The core runs in the main loop alone, as it runs in the browser's worklet. The loop renders the sound ahead into a
   ring (six blocks of 128 frames, 17 ms) and the audio interrupt only copies it out, so no interrupt lands inside an
   edit. A pass renders at most half the ring, so a core slower than the sound stutters but never starves the panel
@@ -46,7 +49,6 @@ the sizes: the image within the app slot (581 KB), `.data + .bss` within 96 KiB,
 - One project of 16 patterns (bank A) in place of four of 64: the core keeps its working patterns unpacked, 3.5 KB
   each, and the FM-1's RAM holds 16 beside the sound's buffers. The counts are build settings (`M2K_PATTERNS`,
   `M2K_PROJECTS`, `M2K_IMG_DATA` in `tools/fm1/build.py`); 64 patterns need a pattern cache in the core.
-- The second core (`DINGHY_DUAL_CORE=0`): the sound renders on one; `--diag` shows how much of it that takes.
 - Key velocity (MONO2K plays every note alike), USB audio stays as the platform has it.
 - MASTER is the FM-1's level pot, not an encoder: a held step's trig type (GRID, a step held, MASTER on the web) is
   set in the browser for now.

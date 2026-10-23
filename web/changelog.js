@@ -9,6 +9,10 @@ window.M2K_CHANGES = [
   {
     date: "2026-10-23", title: "VO-6, the Monomachine's voice",
     items: [
+      ["sound", "The FM-1 build renders on both of the FM-1's cores, the tracks shared out between them, and does a third less work for the same sound: silent delays rest, the LFOs that move nothing are left alone, the filters' arithmetic is leaner. It sounds sample for sample as before."],
+      ["screen", "The page's picture takes the larger part of the screen, the value beside it the smaller; the amp envelope drawn as the voice runs it (a straight attack, the hold, the decay and release falling in dB), the filter as the chain's real response in dB over 20 Hz to 20 kHz, its resonances peaking where they do; GLO > MIDI shows the six tracks' channels, the clock in and out and the beat. On the FM-1, pure black and white."],
+      ["workflow", "GLO > SET shows the project knobs only where there are projects to choose from."],
+      ["fixes", "A reset clears the MOD effect's lines too: no old chorus at the start of the next sound."],
       ["machines", "VOX-6 rebuilt on the Monomachine's VO-6 page, measured: VOC1 and VOC2 set the vowel's two formants, VOIC whispers it, its pitch and level as the Monomachine's (it fades in from each trig). CUTUP's voice keeps its vowels. The consonants come next."],
       ["web", "The Installer connects to the FM-1 over USB in Chrome or Edge and says what it runs: M-VAVE's firmware, MONO2K, another open firmware, or an update waiting to finish. It installs MONO2K once the FM-1 build is published (or a test package from a file), finishes an update cut short, and takes the FM-1 back to M-VAVE's V15 from the official file."],
       ["fixes", "VOX-6's CONS steps evenly through its 21 choices, as the Monomachine's screen does."],
