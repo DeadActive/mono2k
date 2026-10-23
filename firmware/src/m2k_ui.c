@@ -1071,7 +1071,7 @@ static struct { uint8_t kind, machine, kit[P_COUNT]; } clipb;
 static struct { uint8_t n, ok, off[8]; m2k_step_t st[8]; uint8_t nlk; m2k_lock_t lk[64]; } step_clip;
 
 /* undo: one level, the open pattern as it was before the last undoable action; a run of the same keeps the first */
-static m2k_pattern_t undo_pat POOL;
+static m2k_pattern_t undo_pat;                    /* (in RAM: the FM-1's pool is full with the second core's stacks) */
 static struct { uint8_t ok, redo, which, noun, verb; uint32_t t; } undo;
 
 static int undo_repeat(int noun, int verb)

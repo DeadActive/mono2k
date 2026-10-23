@@ -44,8 +44,8 @@ Repo: `~/Documents/Music/Git/mono2k`, public at github.com/InigoHernandez/mono2k
 | Part | What there is | What it meant for MONO2K |
 | --- | --- | --- |
 | Chip | JieLi AC791N: two 32-bit pi32v2 cores, **no FPU** | Integer DSP only; the build links **no libgcc**, so no float and no 64-bit division (a 64-bit multiply is fine) |
-| RAM | 96 KiB for `.data + .bss`, 336 KiB "pool" (Felucca's linker section) | Big buffers (delay lines, the pattern image, the sound library) go to `POOL`; MONO2K uses ~88 KB of RAM and ~332 KB of pool |
-| Flash | an app slot of 581,564 B (`0x8DFBC`) for code, tables and waves; a data area at `0x93000..0xE0000`; OTA staging at `0xE0000` | MONO2K's image is near the slot's top. Its store is the last 128 KiB of the data area, `0xC0000..0xE0000`, which other firmwares (Felucca) also use for their projects and samples |
+| RAM | 96 KiB for `.data + .bss`, 336 KiB "pool" (Felucca's linker section) | Big buffers (delay lines, the pattern image, the sound library) go to `POOL`; MONO2K uses 91,948 B of RAM and 332,452 B of pool (the second core's 8 KiB of stacks come out of the pool's room: a 3.5 KB buffer had to move to RAM) |
+| Flash | an app slot of 581,564 B (`0x8DFBC`) for code, tables and waves; a data area at `0x93000..0xE0000`; OTA staging at `0xE0000` | MONO2K's image is 500,880 B. Its store is the last 128 KiB of the data area, `0xC0000..0xE0000`, which other firmwares (Felucca) also use for their projects and samples |
 | Screen | 240 x 240 colour LCD over SPI at 12 MHz (RGB565) | A whole frame is ~77 ms of SPI: send only the 8-line strips that changed, one strip per pass while the audio renders |
 | Keys | 27: F3..G5, 16 lower ("white") and 11 upper ("black"); analog sensing exists (fm1-velocity) | MONO2K plays every note alike (no velocity yet) |
 | Buttons | 14: FX SEL ENV LFO EDIT GLO HOME SAVE ARP SEQ PLAY REC OCT− OCT+ | Every combination in the workflow is built from these |
@@ -413,7 +413,7 @@ that are not MONO2K's. What to take, what to leave, and the decisions to make fi
   every step in a `PROCESSING.md`, never hand-edit). 64 waves x 256 x 2 B = 32 KB. For less aliasing on high notes,
   keep two or three band-limited versions per wave (an octave table), as the LXR does.
 - **Samples: the flash budget decides.** The app slot (581 KB) holds code, tables and data together; MONO2K's image
-  is near the top with 32 KB of waves. Rough sizes (estimates): 16-bit at 22.05 kHz = 44 KB/s; 8-bit mu-law at
+  is 501 KB with 32 KB of waves, so ~80 KB were left. Rough sizes (estimates): 16-bit at 22.05 kHz = 44 KB/s; 8-bit mu-law at
   22.05 kHz = 22 KB/s; 4-bit ADPCM = 11 KB/s. So 200 KB of samples is ~9 s of mu-law or ~18 s of ADPCM. Lofi
   welcomes both. More room means samples in the data area (`0x93000..0xC0000` is ~180 KB, shared with other
   firmwares' data), loaded through the link: plan the format (a header, a CRC, loop points) the way the store is.
