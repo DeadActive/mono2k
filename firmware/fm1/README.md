@@ -37,7 +37,7 @@ the sizes: the image within the app slot (581 KB), `.data + .bss` within 96 KiB,
 - The panel: the platform's buttons, encoders and 27 keys mapped onto the core's (`m2k.h`); the LEDs on from a
   quarter of the core's brightness (the FM-1's are on or off). MASTER is the platform's output level.
 - MIDI in: USB-MIDI and the TRS jack, into `m2k_midi`.
-- The store: a stream (`m2k_fw_store_put` / `_get`) into the last 64 KiB of the data area, `0xD0000`..`0xE0000`,
+- The store: a stream (`m2k_fw_store_put` / `_get`) into the last 128 KiB of the data area, `0xC0000`..`0xE0000`,
   a 4 KiB sector at a time, its header (magic, length, CRC-32) last, so a save cut short reads as none. SAVE marks it;
   it is written when the sequencer stands (a sector's erase stops the sound ~50 ms). That region is part of the
   area Felucca keeps its projects and samples in: a save of MONO2K's overwrites whatever another firmware kept there.
@@ -51,11 +51,12 @@ the sizes: the image within the app slot (581 KB), `.data + .bss` within 96 KiB,
 - The update entry, the USB rescue (hold OCT− at power-on) and the boot guard (two failed boots: the rescue) are the
   platform's: an installer reaches the FM-1 whatever the app does.
 
-## What the first build leaves out
+## What the build leaves out
 
-- One project of 16 patterns (bank A) in place of four of 64: the core keeps its working patterns unpacked, 3.5 KB
-  each, and the FM-1's RAM holds 16 beside the sound's buffers. The counts are build settings (`M2K_PATTERNS`,
-  `M2K_PROJECTS`, `M2K_IMG_DATA` in `tools/fm1/build.py`); 64 patterns need a pattern cache in the core.
+- One project of 64 patterns in place of four: the core keeps two patterns unpacked (3.5 KB each) and the rest packed
+  in a 46 KB working image beside a 46 KB saved one, a blank pattern taking no bytes, so bank A's demos and some 20
+  to 30 patterns of one's own fit; a pattern that would not leave room opens no more, and says so. The counts are
+  build settings (`M2K_PATTERNS`, `M2K_PAT_SLOTS`, `M2K_PROJECTS`, `M2K_IMG_DATA` in `tools/fm1/build.py`).
 - Key velocity (MONO2K plays every note alike), USB audio stays as the platform has it.
 - MASTER is the FM-1's level pot, not an encoder: a held step's trig type (GRID, a step held, MASTER on the web) is
   set in the browser for now.

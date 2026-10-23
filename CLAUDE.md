@@ -37,6 +37,11 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   player to `web/changelog.js` (the manual's Change log: an entry per day of updates, newest first, a kind on every
   line: machines sound sequencer workflow patterns screen web fixes), and bumps `changelog.js?v=` in `manual.html`. After a wasm build bump `m2k.wasm?v=` in
   `app.js`, `manual.js` and `editor.js` alike (and `worklet.js?v=` in `app.js` and `editor.js` with the worklet).
+- The screen's grid (m2k_ui.c): five bands, the header 0-15, the knobs 16-57, the stage 58-186 (the value's column GX
+  wide, the picture `PIC_W` x 125), the steps 188-211, the footer 213-239; held windows (GLO, HOME, EDIT, SEQ) over the
+  stage. The host's text audit (`M2K_TEXT_AUDIT`: every text's ink box; a paper fill hides what it covers) fails the
+  tour and `m2k_host --text-sweep` (every page, machine and knob value) on any two texts that touch or one cut: run it
+  after any change to the screen, and fit text with `text_fit` rather than guessing widths.
 - Checks: `sh tools/check.sh` (~6 min): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core built
   for armv7m soft float calls no float helper and no 64-bit division (flash / RAM printed); the self-test, every
   screen, bank A and every reference spec under ASan + UBSan, clean; the format's conversions mutated
@@ -53,8 +58,12 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   `F0 7D 'M2K' cmd pack7(body) F7` through the platform's `APP_SYSEX` hook; `host/m2k_link_test.c` runs both on a NOR
   flash in memory, and `check.sh` with the browser's store for the FM-1, `m2k_host --web-store`, and the FM-1's read
   in the browser, `--fm1-store`). The core is its own unit there (`core.o`): reach it
-  through `m2k.h` alone. RAM: 96 KiB `.bss` + 336 KiB pool; the first build is one project of 16 patterns
-  (`M2K_PATTERNS`, `M2K_PROJECTS`, `M2K_IMG_DATA` set by build.py). Never publish a package on the site that has not
+  through `m2k.h` alone. RAM: 96 KiB `.bss` + 336 KiB pool; the FM-1 keeps one project of 64 patterns, two of them
+  unpacked (`M2K_PAT_SLOTS` 2: `PAT(i)` is pattern i everywhere, a cache over the working image on the FM-1; reach
+  patterns only through it, and never hold two `PAT()` pointers to patterns other than the open one), the rest
+  packed in a 46 KB image, a blank one taking no bytes; a pattern opens only if the open one keeps room to grow
+  (`pat_can_open`). `M2K_PATTERNS`, `M2K_PAT_SLOTS`, `M2K_PROJECTS`, `M2K_IMG_DATA` are set by build.py; check.sh holds
+  bank A through the cache to the browser's, byte for byte. Never publish a package on the site that has not
   run on an FM-1. The installer page (`installer.html`, Felucca's `web/fm1/fm1ota.js`, `fm1pkg.js`, unchanged) installs
   a package from a file meanwhile.
 - The FM-1's budget: Felucca's heaviest patch is ~1570 Mac instructions a sample (its tests/cpu_baseline.txt) and

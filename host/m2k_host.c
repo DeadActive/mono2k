@@ -88,7 +88,8 @@ static const ev_t MANUAL[] = {
     {9500, 'k', 0, 1, 0}, {9520, 'k', 0, 0, 0}, {9540, 'k', 4, 1, 0}, {9560, 'k', 4, 0, 0}, {10200, 's', 0, 0, "28_pads"},
     {10300, 'b', B_HOME, 1, 0}, {10400, 'k', 2, 1, 0}, {10420, 'k', 2, 0, 0}, {11000, 's', 0, 0, "29_home_held"},
     {11100, 'b', B_HOME, 0, 0}, {11200, 'b', B_EDIT, 1, 0}, {11900, 's', 0, 0, "29b_edit_held"}, {12000, 'b', B_EDIT, 0, 0},
-    {12100, 'x', 0, 0, 0},
+    {12100, 'b', B_SEQ, 1, 0}, {12800, 's', 0, 0, "29c_seq_held"}, {12900, 'b', B_SEQ, 0, 0},
+    {13000, 'x', 0, 0, 0},
 };
 
 static void manual_scene(void)
@@ -1732,6 +1733,39 @@ static int selftest(void)
         CHECK(kept_snd && pat[0].kit[2][P_DEC] == fr.kit[2][P_DEC] && !ui.grid,
               "EDIT held: SAVE keeps the sound in the first INIT slot, SEQ INITs it (no GRID)");
         }
+        /* SEQ: a tap is GRID; held, the white keys are tools on the track's steps (their locks with them), the knobs
+         * LEN SWING ACCENT TEMPO, and letting go is not a tap */
+        {
+        m2k_init(41);
+        ui.now = 1000;
+        m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);
+        int tap = ui.grid == 1;
+        m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);
+        tap &= ui.grid == 0;
+        m2k_pattern_t *q = &pat[0];
+        int len = seq_len(), t = ui.trk;
+        for (int st = 0; st < M2K_STEPS; st++) q->step[t][st].flags = 0;
+        for (int k = 0; k < M2K_LOCKS; k++) if (q->lock[k].trk == t) q->lock[k].trk = 0xFF;
+        q->step[t][0].flags = ST_TRIG; q->step[t][0].note = 50;
+        q->step[t][5].flags = ST_TRIG; q->step[t][5].note = 55;
+        lock_set(t, 5, P_DEC, 99);
+        m2k_button(B_SEQ, 1);
+        m2k_key(2, 1); m2k_key(2, 0);                 /* G3, white 2: REVERSE */
+        int rev = (q->step[t][len - 1].flags & ST_TRIG) && q->step[t][len - 6].note == 55 && lock_find(t, len - 6, P_DEC) >= 0;
+        m2k_key(4, 1); m2k_key(4, 0);                 /* A3, white 3: SHIFT < */
+        int shl = (q->step[t][len - 2].flags & ST_TRIG) && lock_find(t, len - 7, P_DEC) >= 0;
+        m2k_key(11, 1); m2k_key(11, 0);               /* E4, white 7: COPY */
+        int len0 = PAT(cur_pat)->glob[G_LEN];
+        edit(0, -1);                                  /* KNOB 1 in the layer: LEN */
+        int lenk = PAT(cur_pat)->glob[G_LEN] == len0 - 1;
+        m2k_button(B_SEQ, 0);
+        int nogrid = ui.grid == 0;
+        ui.trk = (uint8_t)((t + 1) % M2K_TRACKS);
+        m2k_button(B_SEQ, 1); m2k_key(12, 1); m2k_key(12, 0); m2k_button(B_SEQ, 0);   /* F4, white 8: PASTE */
+        int pasted = !memcmp(q->step[ui.trk], q->step[t], sizeof q->step[t]) && lock_find(ui.trk, len - 7, P_DEC) >= 0;
+        CHECK(tap && rev && shl && lenk && nogrid && pasted,
+              "SEQ: a tap is GRID; held, REVERSE, SHIFT and COPY / PASTE move the steps and their locks, KNOB 1 is LEN");
+        }
     }
     /* the render on two cores (the FM-1's): the second core's tracks run before or after the first's (as they may,
      * at once) and every pattern of bank A sounds sample for sample as on one */
@@ -1792,6 +1826,15 @@ int main(int argc, char **argv)
 {
     if (argc > 1 && !strcmp(argv[1], "--selftest")) return selftest();
     if (argc > 1 && !strcmp(argv[1], "--text-sweep")) return text_sweep();
+    if (argc > 1 && !strcmp(argv[1], "--bank-hash")) {        /* as host/m2k_link_test.c prints it, through the FM-1's cache */
+        m2k_init(3);
+        uint32_t h = 2166136261u;
+        for (int i = 0; i < M2K_PATTERNS; i++) { int n = pat_pack(PAT(i), blob); for (int k = 0; k < n; k++) h = (h ^ blob[k]) * 16777619u; }
+        const uint8_t *sb = (const uint8_t *)snd;
+        for (unsigned k = 0; k < sizeof snd; k++) h = (h ^ sb[k]) * 16777619u;
+        printf("     bank hash %08x\n", h);
+        return 0;
+    }
     if (argc > 2 && (!strcmp(argv[1], "--web-store") || !strcmp(argv[1], "--fm1-store"))) return link_store(argv[1], argv[2]);
     const char *out = argc > 1 ? argv[1] : "build/host";
     char path[512];

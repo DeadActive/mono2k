@@ -180,11 +180,21 @@ static void fill(int i, int seed)                 /* every step of every track a
         }
 }
 
+static uint32_t bank_hash(void)                   /* every pattern packed, and the sound library (m2k_host --bank-hash) */
+{
+    uint32_t h = 2166136261u;
+    for (int i = 0; i < M2K_PATTERNS; i++) { int n = pat_pack(PAT(i), blob); for (int k = 0; k < n; k++) h = (h ^ blob[k]) * 16777619u; }
+    const uint8_t *sb = (const uint8_t *)snd;
+    for (unsigned k = 0; k < sizeof snd; k++) h = (h ^ sb[k]) * 16777619u;
+    return h;
+}
+
 static void cache_tests(void)
 {
     static int16_t buf[256];
     memset(flash, 0xFF, sizeof flash);
     m2k_init(3);
+    printf("     bank hash %08x\n", bank_hash());
     int names = !strcmp(PAT(0)->name, "MAMMOTH") && !strcmp(PAT(15)->name, "SPLICE");
     for (int i = 16; i < 64; i++) names &= !strcmp(PAT(i)->name, "INIT") && trigs_of(i) == 0;
     check(names && work_img.used < 20000u, "64 patterns: bank A's demos, banks B-D INIT, the blanks taking no room");

@@ -414,6 +414,8 @@ static struct {
     /* a section button held (HOME, EDIT): its keys and buttons (held_combo) */
     uint32_t hold_t0;                  /* HOME or EDIT pressed */
     uint8_t hold_used, pbank, pick[M2K_PATTERNS / 8], hclr;   /* the bank shown, the patterns picked, a first clear */
+    uint32_t seq_t0;                   /* SEQ pressed: a tap is GRID, held it is the SEQ layer */
+    uint8_t seq_used;
     uint32_t rec_t0, save_t0;
     uint8_t save_fired, proj_sel, snd_sel, snd_cat;   /* SYN > SND's slot, the category shown (0 all) */
     uint8_t pkey, pfired, cursor;      /* a page key held in GRID (+1), its hold done; step entry's step */
@@ -536,6 +538,14 @@ static void sound_load(m2k_pattern_t *p)
 }
 
 /* the value a knob shows: a held step's lock, or the kit */
+/* the knob k turns: the page's, or while SEQ is held the sequencer's (LEN, SWING, ACCENT, TEMPO) */
+static int seq_layer(void) { return ui.btn[B_SEQ] && !ui.btn[B_GLO] && !ui.btn[B_HOME] && !ui.btn[B_EDIT]; }
+static int knob_at(int k)
+{
+    static const uint8_t SEQ_K[4] = {GL(G_LEN), GL(G_SWNG), GL(G_ACNT), GL(G_TMPO)};
+    return seq_layer() ? SEQ_K[k] : knob_param(ui.page, ui.sub, k);
+}
+
 static int knob_value(int code)
 {
     const m2k_pattern_t *p = PAT(cur_pat);
@@ -560,8 +570,9 @@ static int knob_locked(int code)
 
 static void edit(int k, int d)
 {
-    int code = knob_param(ui.page, ui.sub, k);
+    int code = knob_at(k);
     if (code == NONE) return;
+    if (seq_layer()) ui.seq_used = 1;
     m2k_pattern_t *p = PAT(cur_pat);
     const pi_t *pi = pinfo(ui.trk, code);
     if (pi->s4[0] == '-') return;
@@ -742,6 +753,66 @@ static void entry_write(int note)
 }
 
 static void select_pattern(int n);
+static void page_length(int pg);
+
+/* the SEQ layer's tools, on the track in view over the pattern's length: its locks move with its steps */
+static struct { m2k_step_t st[M2K_STEPS]; uint8_t nlk, ok; m2k_lock_t lk[M2K_LOCKS]; } seq_clip;
+static const char *const SEQ_TOOL[8] = {"CLEAR", "REVERSE", "SHIFT <", "SHIFT >", "RANDOM", "LEN X2", "COPY", "PASTE"};
+
+static void seq_tool(int i)
+{
+    m2k_pattern_t *p = PAT(cur_pat);
+    int t = ui.trk, len = seq_len();
+    m2k_step_t *st = p->step[t];
+    char o[24] = {'T', (char)('1' + t), ' ', 0};
+    switch (i) {
+    case 0:                                            /* CLEAR: its steps and locks */
+        for (int s = 0; s < M2K_STEPS; s++) { st[s].flags = 0; st[s].cond = 0; st[s].rtrg = 0; }
+        for (int k = 0; k < M2K_LOCKS; k++) if (p->lock[k].trk == t) p->lock[k].trk = 0xFF;
+        break;
+    case 1:                                            /* REVERSE */
+        for (int s = 0; s < len / 2; s++) { m2k_step_t x = st[s]; st[s] = st[len - 1 - s]; st[len - 1 - s] = x; }
+        for (int k = 0; k < M2K_LOCKS; k++) if (p->lock[k].trk == t && p->lock[k].step < len) p->lock[k].step = (uint8_t)(len - 1 - p->lock[k].step);
+        break;
+    case 2: case 3: {                                  /* SHIFT: a step earlier or later, round the length */
+        int d = i == 2 ? len - 1 : 1;
+        m2k_step_t tmp[M2K_STEPS];
+        for (int s = 0; s < len; s++) tmp[(s + d) % len] = st[s];
+        for (int s = 0; s < len; s++) st[s] = tmp[s];
+        for (int k = 0; k < M2K_LOCKS; k++) if (p->lock[k].trk == t && p->lock[k].step < len) p->lock[k].step = (uint8_t)((p->lock[k].step + d) % len);
+        break;
+    }
+    case 4:                                            /* RANDOM: a quarter of the steps, at the track's note */
+        for (int k = 0; k < M2K_LOCKS; k++) if (p->lock[k].trk == t) p->lock[k].trk = 0xFF;
+        for (int s = 0; s < M2K_STEPS; s++) {
+            st[s].flags = (uint8_t)(s < len && (rnd32() & 3) == 0 ? ST_TRIG : 0);
+            st[s].note = ui.note[t]; st[s].cond = 0; st[s].rtrg = 0;
+        }
+        break;
+    case 5:                                            /* LEN X2: the pattern twice as long, the new bars a copy */
+        if (len > 32 || len % 16) { toast("LEN X2", "TO 64 STEPS AT MOST"); return; }
+        page_length(len * 2 / 16 - 1);
+        s_int(s_cpy(o, "LENGTH "), len * 2);
+        toast("SEQ", o);
+        start_glitch(2);
+        return;
+    case 6:                                            /* COPY: its steps and their locks */
+        m_cpy(seq_clip.st, st, sizeof seq_clip.st);
+        seq_clip.nlk = 0;
+        for (int k = 0; k < M2K_LOCKS && seq_clip.nlk < 255; k++) if (p->lock[k].trk == t) seq_clip.lk[seq_clip.nlk++] = p->lock[k];
+        seq_clip.ok = 1;
+        break;
+    case 7:                                            /* PASTE them over its own */
+        if (!seq_clip.ok) { toast("NOTHING", "SEQ + KEY 7 COPIES ONE"); return; }
+        m_cpy(st, seq_clip.st, sizeof seq_clip.st);
+        for (int k = 0; k < M2K_LOCKS; k++) if (p->lock[k].trk == t) p->lock[k].trk = 0xFF;
+        for (int k = 0; k < seq_clip.nlk; k++) lock_set(t, seq_clip.lk[k].step, seq_clip.lk[k].param, seq_clip.lk[k].val);
+        break;
+    }
+    lockmap_build();
+    s_cpy(o + 3, SEQ_TOOL[i]);
+    toast("SEQ", o);
+}
 
 void m2k_key(int k, int down)
 {
@@ -751,6 +822,11 @@ void m2k_key(int k, int down)
     int w = ui.kw[k], b = ui.kb[k];
     if (ui.btn[B_GLO] && w >= 0 && w < M2K_TRACKS) {   /* GLO + white 1..6: mute */
         if (down) { p->mute ^= (uint8_t)(1u << w); ui.glo_used = 1; }
+        return;
+    }
+    if (seq_layer()) {                 /* SEQ held: the white keys 1-8 are tools for the track's steps */
+        if (down && w >= 0 && w < 8) seq_tool(w);
+        ui.seq_used = 1;
         return;
     }
     if (ui.btn[B_HOME] && !ui.btn[B_GLO]) {   /* HOME held: the white keys are the bank's 16 patterns */
@@ -1080,6 +1156,20 @@ void m2k_button(int b, int down)
         return;
     }
     if (b != B_GLO && !down && !was) return;
+    if (b == B_SEQ) {                  /* a tap: GRID (or out of it); held: the SEQ layer (its keys and knobs) */
+        if (down) { ui.seq_t0 = ui.now | 1u; ui.seq_used = 0; return; }
+        uint32_t held = ui.seq_t0 ? ui.now - (ui.seq_t0 & ~1u) : 0;
+        int was_used = ui.seq_used || !ui.seq_t0;
+        ui.seq_t0 = 0;
+        if (was_used || held >= 400) return;
+        ui.grid ^= 1;
+        ui.pads = 0;
+        ui.nheld = 0;
+        if (ui.spage * 16 >= seq_len()) ui.spage = 0;
+        toast(ui.grid ? "GRID: OCT-/+ PAGES" : "KEYS", ui.grid ? "HOLD G#4-D#5: LENGTH" : "PLAY THE TRACK");
+        start_trans(250);
+        return;
+    }
     if (b == B_SAVE) {
         if (down) { ui.save_t0 = ui.now | 1u; ui.save_fired = 0; return; }
         if (!ui.save_t0) return;
@@ -1124,14 +1214,6 @@ void m2k_button(int b, int down)
         break;
     case B_ARP: go(PG_ARP); break;
 
-    case B_SEQ:
-        ui.grid ^= 1;
-        ui.pads = 0;
-        ui.nheld = 0;
-        if (ui.spage * 16 >= seq_len()) ui.spage = 0;
-        toast(ui.grid ? "GRID: OCT-/+ PAGES" : "KEYS", ui.grid ? "HOLD G#4-D#5: LENGTH" : "PLAY THE TRACK");
-        start_trans(250);
-        break;
     case B_PLAY: seq_play(!sq.playing); break;
     case B_OCTD: case B_OCTU: {
         int d = b == B_OCTU ? 1 : -1;
@@ -1265,9 +1347,15 @@ void m2k_encoder(int e, int d)
 
 #define GX 104                         /* the focus's cut: the value left, the picture right (PIC_W wide) */
 #define PIC_W (240 - GX - 4)
-#define FOCUS_Y 18
-#define STRIP_Y 124
-#define FOOT_Y 148
+/* the screen's bands, top to bottom, each on its own rule: the header 0-15; the knobs 16-57 (four cells of 60, as the
+ * FM-1's four knobs sit over the screen); the stage 58-186 (the value's column, GX wide, and the page's picture); the
+ * steps 188-211 (16, grouped by the beat); the footer 213-239 (the bars, the pattern, the tempo) */
+#define KNOB_Y 16
+#define STAGE_Y 58
+#define STAGE_H 129
+#define FOCUS_Y STAGE_Y
+#define STRIP_Y 188
+#define FOOT_Y 213
 
 static void dotted_v(int x, int y, int h) { for (int j = 0; j < h; j += 2) px(x, y + j, 1); }
 static void dotted_h(int x, int y, int w) { for (int i = 0; i < w; i += 2) px(x + i, y, 1); }
@@ -1295,9 +1383,6 @@ static void header(void)
         else frame(xr - 6, 4, 7, 7, 1);
         xr -= 10;
     }
-    char pa[8];
-    s_pat(pa, cur_pat);
-    xr -= text_r(&F_S, xr, 2, pa, 1, 1) + 5;
     if (ui.grid) { int w = text_w(&F_S, "GRID", 1) + 6; tag(xr - w, 0, "GRID", 0); xr -= w + 4; }
     if (ui.pads) { int w = text_w(&F_S, "PADS", 1) + 6; tag(xr - w, 0, "PADS", 0); xr -= w + 4; }
     if (sq.fill) { int w = text_w(&F_S, "FILL", 1) + 6; tag(xr - w, 0, "FILL", 1); xr -= w + 4; }
@@ -1316,15 +1401,14 @@ static void header(void)
     m2k_pattern_t *p = PAT(cur_pat);
     const mi_t *mi = &MI[p->machine[ui.trk]];
     clip(0, 0, xr - 2, 15);
-    if (ui.page == PG_HOME) {
-        text(&F_S, x, 2, p->name, 1, 1);
-    } else {
-        char t[4] = {'T', (char)('1' + ui.trk), 0, 0};
-        x += text(&F_S, x, 2, t, 1, 1) + 4;
+    char t[4] = {'T', (char)('1' + ui.trk), 0, 0};
+    x += text(&F_S, x, 2, t, 1, 1) + 4;
+    if (x + text_w(&F_S, mi->badge, 1) + 12 < xr - 2) {
         badge(x, 1, mi->badge);
         x += text_w(&F_S, mi->badge, 1) + 16;
         if (x + text_w(&F_S, mi->style, 1) < xr - 2) text(&F_S, x, 2, mi->style, 1, 1);
     }
+    (void)p;
     noclip();
     hline(0, 15, 240, 1);
 }
@@ -1392,12 +1476,12 @@ static void focus_left(int code)
     if (code < 8) { *e++ = (char)('A' + code); *e++ = ' '; *e++ = '/'; *e++ = ' '; }
     s_cpy(e, pi->name);
     /* the column is narrow: the letter and name, else the name, else its four letters */
-    text_fit(4, FOCUS_Y + 2, text_w(&F_S, o, 0) <= GX - 8 ? o : pi->name, pi->s4, GX - 8, 1);
-    big_value(2, FOCUS_Y + 16, GX - 6, v, value_font(pi, code), ui.now - ui.roll_t);
+    text_fit(4, FOCUS_Y + 4, text_w(&F_S, o, 0) <= GX - 8 ? o : pi->name, pi->s4, GX - 8, 1);
+    big_value(2, FOCUS_Y + 30, GX - 6, v, value_font(pi, code), ui.now - ui.roll_t);
     int x = 4;
-    if (*u) x += text_fit(4, 106, u, 0, GX - 8 - (knob_locked(code) || (sq.rec && sq.playing) ? 40 : 0), 1) + 6;
-    if (knob_locked(code)) tag(x, 104, "LOCK", 1);
-    else if (sq.rec && sq.playing && code < 0x80) tag(x, 104, "REC", (ui.now >> 8) & 1);
+    if (*u) x += text_fit(4, FOCUS_Y + 110, u, 0, GX - 8 - (knob_locked(code) || (sq.rec && sq.playing) ? 40 : 0), 1) + 6;
+    if (knob_locked(code)) tag(x, FOCUS_Y + 108, "LOCK", 1);
+    else if (sq.rec && sq.playing && code < 0x80) tag(x, FOCUS_Y + 108, "REC", (ui.now >> 8) & 1);
 }
 
 /* the machine card, after Model:Cycles' engine screens: its name, class, style and stats, in ink on the page */
@@ -1406,15 +1490,15 @@ static void machine_card(void)
     /* its name; its class inverted and its style framed, as tags (on two rows when one is too narrow); then punch,
      * metal and plastic, each a row of five segments, dealt in one by one as the card opens */
     const mi_t *mi = &MI[PAT(cur_pat)->machine[ui.trk]];
-    text(&F_M, 4, FOCUS_Y + 4, mi->name, 1, text_w(&F_M, mi->name, 1) <= GX - 8);
-    int wc = text_w(&F_S, mi->cls, 1) + 6, ws = text_w(&F_S, mi->style, 1) + 6, ty = FOCUS_Y + 24;
+    text(&F_M, 4, FOCUS_Y + 8, mi->name, 1, text_w(&F_M, mi->name, 1) <= GX - 8);
+    int wc = text_w(&F_S, mi->cls, 1) + 6, ws = text_w(&F_S, mi->style, 1) + 6, ty = FOCUS_Y + 32;
     tag(4, ty, mi->cls, 1);
     if (4 + wc + 3 + ws <= GX - 4) tag(4 + wc + 3, ty, mi->style, 0);
     else { ty += 14; tag(4, ty, mi->style, 0); }
     static const char *const ST[3] = {"PNCH", "METL", "PLST"};
     uint32_t age = ui.card_t ? ui.now - ui.card_t : 1000;
     for (int r = 0; r < 3; r++) {
-        int y = ty + 20 + r * 14;
+        int y = ty + 30 + r * 18;
         text(&F_S, 4, y, ST[r], 1, 0);
         for (int i = 0; i < 5; i++) {
             if (age <= (uint32_t)(60 + (r * 5 + i) * 25)) continue;
@@ -1556,7 +1640,8 @@ static int env_level(int seg, int q, int dec_inf)
 /* the right column: what the page is about, live */
 static void picture(void)
 {
-    const int X = GX + 2, Y = FOCUS_Y + 2, W = PIC_W;
+    /* the stage: Y0 its top, H its height (125); the pictures drawn for 104 rows sit centred in it at Y */
+    const int X = GX + 2, Y0 = STAGE_Y + 2, H = STAGE_H - 4, Y = Y0 + (H - 104) / 2, W = PIC_W;
     trk_t *t = &trk[ui.trk];
     m2k_pattern_t *p = PAT(cur_pat);
     const uint8_t *k = p->kit[ui.trk];
@@ -1565,9 +1650,9 @@ static void picture(void)
     case PG_SYN:
     case PG_HOME: {
         if (snd_page()) {              /* the library: seven of the slots shown, the one picked inverted, each its category */
-            int n = 0, at = snd_list(ui.snd_sel, &n), first = CLAMP(at - 3, 0, n > 7 ? n - 7 : 0);
-            for (int r = 0; r < 7 && first + r < n; r++) {
-                int i = snd_nth(first + r), y = Y + r * 14, on = i == ui.snd_sel;
+            int n = 0, at = snd_list(ui.snd_sel, &n), first = CLAMP(at - 3, 0, n > 8 ? n - 8 : 0);
+            for (int r = 0; r < 8 && first + r < n; r++) {
+                int i = snd_nth(first + r), y = Y0 + 1 + r * 15, on = i == ui.snd_sel;
                 char o[4];
                 s_num3(o, i + 1);
                 if (on) rect(X, y, W, 13, 1);
@@ -1616,7 +1701,7 @@ static void picture(void)
             for (int i = 0; i < bs - 2; i++) {
                 int32_t in = (i - (bs - 2) / 2) * 65535 / (bs - 2);
                 int32_t c = (int32_t)CLAMP((in * dh) >> 24, -dc, dc);                  /* the headroom and the clip */
-                int32_t o = ((c << 7) / (T_DIST_C[64] >> 8)) * (vol >> 3) >> 12;    /* Q15, 32-bit division only */
+                int32_t o = ((c * 128) / (T_DIST_C[64] >> 8)) * (vol >> 3) >> 12;   /* Q15, 32-bit division only */
                 int y = mid - (int)((o * (bs / 2 - 2)) >> 15);
                 if (i) { line(bx + i, prev, bx + 1 + i, y, 1); if (fk == 0) line(bx + i, prev + 1, bx + 1 + i, y + 1, 1); }
                 prev = y;
@@ -1652,7 +1737,7 @@ static void picture(void)
         int wd = dec_inf ? 18 : 12 + k[P_DEC] * 30 / 127, wr = 8 + k[P_REL] * 24 / 127;
         int tot = wa + wh + wd + wr;
         wa = wa * (W - 6) / tot; wh = wh * (W - 6) / tot; wd = wd * (W - 6) / tot; wr = (W - 6) - wa - wh - wd;
-        int x0 = X + 3, yb = Y + 84, top = Y + 8, hgt = yb - top;
+        int x0 = X + 3, yb = Y0 + H - 22, top = Y0 + 10, hgt = yb - top;
         int xs[5] = {x0, x0 + wa, x0 + wa + wh, x0 + wa + wh + wd, x0 + wa + wh + wd + wr};
         int ys[5], py = yb;
         for (int x = top + hgt / 2, j = 0; j < W; j += 3) px(X + j, x, 1);   /* half way up */
@@ -1705,7 +1790,7 @@ static void picture(void)
              * and decay under it */
             int hp1 = filt_q3(ui.trk, (k[P_BASE] << 8) + ob);
             int lp1 = filt_q3(ui.trk, ((k[P_BASE] + k[P_WDTH]) << 8) + ob + ow);
-            int top = Y + 8, yb2 = Y + 64, yh, yl, prev = yb2;
+            int top = Y0 + 10, yb2 = Y0 + H - 52, yh, yl, prev = yb2;
             filt_curve(X, W, top, yb2, hp1, lp1, hq, lq, fk >= 2 ? PT_VLINES : PT_HATCH, fk >= 2, &yh, &yl);
             for (int i = 0; i < W; i++) {
                 int y = filt_row(filt_db(i * 1016 / (W - 1), hp0, lp0, hq, lq), top, yb2);
@@ -1740,7 +1825,7 @@ static void picture(void)
          * under the line; what is being turned is heavy. While the track sounds, its envelope moves it */
         int hp = hp0, lp = lp0, yh, yl;
         if (t->sounding) { hp = mon.cut_hp[ui.trk]; lp = mon.cut_lp[ui.trk]; }
-        int top = Y + 8, yb = Y + 76;
+        int top = Y0 + 10, yb = Y0 + H - 36;
         filt_curve(X, W, top, yb, hp, lp, hq, lq, fk >= 0 ? PT_VLINES : PT_HATCH, fk >= 0, &yh, &yl);
         int xh = X + hp * (W - 1) / 1016, xl = X + lp * (W - 1) / 1016;
         dotted_v(xh, top - 6, yb - top + 6);
@@ -1769,15 +1854,15 @@ static void picture(void)
             for (int e = 0; e < 12; e++) {
                 int x = X + 6 + (dt * (e + 1) * (W - 8)) / 128;
                 if (x >= X + W) break;
-                int h = (80 * lvl) >> 8;
+                int h = ((H - 14) * lvl) >> 8;
                 uint32_t at = (uint32_t)dt * (uint32_t)(e + 1) * ms_step / 16u;
                 int lit = since >= at && since < at + 90;
-                if (lit) rect(x, Y + 88 - h, 4, h, 1); else { frame(x, Y + 88 - h, 4, h, 1); }
+                if (lit) rect(x, Y0 + H - 6 - h, 4, h, 1); else { frame(x, Y0 + H - 6 - h, 4, h, 1); }
                 lvl = CLAMP((lvl * fb) >> 6, 0, 256);
                 if (lvl < 8) break;
             }
-            rect(X, Y + 2, 4, 86, 1);
-            hline(X, Y + 89, W, 1);
+            rect(X, Y0 + 6, 4, H - 12, 1);
+            hline(X, Y0 + H - 5, W, 1);
         } else if (ui.sub == 2) {      /* a sine through this track's destruction */
             int bits = 16 - (k[P_BITS] * 14 >> 7), fold = k[P_FOLD], xm = (k[P_XOR] * k[P_XOR] * 2) & 0x7FFF;
             int srr = k[P_SRR], step = (128 - srr) * (128 - srr) * 4, acc = 0, hold = 0, prev = 0;
@@ -1790,11 +1875,11 @@ static void picture(void)
                 acc += step;
                 if (acc >= 65536 || i == 0) { acc -= 65536; hold = s; }
                 if (srr) s = hold;
-                int y = Y + 46 - (s * 40 >> 15);
+                int y = Y0 + H / 2 - (s * (H / 2 - 8) >> 15);
                 if (i) line(X + i - 1, prev, X + i, y, 1);
                 prev = y;
             }
-            dotted_h(X, Y + 46, W);
+            dotted_h(X, Y0 + H / 2, W);
         } else if (ui.sub == 3) {      /* the modulation: its sweep at its rate, as deep as DPTH, and how much of it */
             int type = (k[P_MODT] * 3) >> 7, dep = k[P_MODD], mix = k[P_MODM];
             uint32_t ph = (uint32_t)ui.now * (T_MOD_INC[k[P_MODR]] * 44u);
@@ -1817,17 +1902,17 @@ static void picture(void)
             for (int i = 0; i < W; i++) {
                 int d = i - f;
                 int bw = W / 4, bump = d > -bw && d < bw ? (g * (bw - (d < 0 ? -d : d))) / bw : 0;
-                int y = Y + 46 - bump * 40 / 64;
-                for (int j = (y < Y + 46 ? y : Y + 46); j <= (y < Y + 46 ? Y + 46 : y); j++) if (pat_ink(PT_HATCH, X + i, j)) px(X + i, j, 1);
+                int mid = Y0 + H / 2 - 10, y = mid - bump * (H / 2 - 14) / 64;
+                for (int j = (y < mid ? y : mid); j <= (y < mid ? mid : y); j++) if (pat_ink(PT_HATCH, X + i, j)) px(X + i, j, 1);
                 if (i) line(X + i - 1, prev, X + i, y, 1);
                 prev = y;
             }
-            dotted_h(X, Y + 46, W);
+            dotted_h(X, Y0 + H / 2 - 10, W);
             /* the rate reduction, as steps */
             int n = 4 + (127 - k[P_SRR]) * 40 / 127;
             for (int i = 0; i < W; i++) {
                 int q = (i * n / W) * W / n;
-                int y = Y + 92 - (sinp((uint32_t)q * (0xFFFFFFFFu / W)) * 6 >> 15);
+                int y = Y0 + H - 10 - (sinp((uint32_t)q * (0xFFFFFFFFu / W)) * 6 >> 15);
                 px(X + i, y, 1);
             }
         }
@@ -1841,17 +1926,17 @@ static void picture(void)
         for (int i = 0; i < W; i++) {           /* the shape, dotted */
             int32_t v = lfo_shape(wave, (uint32_t)i * (0xFFFFFFFFu / W), &r);
             if (wave == 6) v = ((i / 11) * 7919 % 64 - 32) * 1000;
-            int y = Y + 30 - (v * 26 >> 15);
+            int y = Y0 + 32 - (v * 28 >> 15);
             if ((i & 1) == 0) px(X + i, y, 1);
         }
         for (int i = 0; i < W; i++) {           /* the live value, scrolling */
             int v = ui.lfo_hist[(ui.lfo_w + i) % W];
-            int y = Y + 76 - (v * 22 >> 15);
+            int y = Y0 + H - 34 - (v * 26 >> 15);
             if (i) line(X + i - 1, prev, X + i, y, 1);
             prev = y;
         }
-        dotted_h(X, Y + 56, W);
-        hline(X, Y + 98, W, 1);
+        dotted_h(X, Y0 + 66, W);
+        hline(X, Y0 + H - 4, W, 1);
         break;
     }
     case PG_ARP: {
@@ -1976,121 +2061,154 @@ static void step_cell(int x, int y, int w, int h, int t, int s)
     if (held && ((ui.now >> 7) & 1)) rect(x, y, w, h, 2);
 }
 
+/* the steps of the page in view, the track's: 16 cells grouped by the beat (the playhead's frame never touches a
+ * neighbour) */
+static int strip_x(int i) { return 4 + i * 14 + (i >> 2) * 4; }
+
 static void strip(void)
 {
-    int pg = ui.spage;
-    for (int i = 0; i < 16; i++) step_cell(i * 15, STRIP_Y + 2, 14, 13, ui.trk, pg * 16 + i);
-    for (int i = 0; i < 4; i++) {
-        int x = i * 60;
-        if (i == pg) rect(x, STRIP_Y + 18, 59, 3, 1);
-        else dotted_h(x, STRIP_Y + 19, 59);
-    }
-    if (sq.playing) {
-        int s = play_step();
-        rect(s * 240 / 64, STRIP_Y + 17, 4, 5, 2);
-    }
+    hline(0, STRIP_Y - 1, 240, 1);
+    for (int i = 0; i < 16; i++) step_cell(strip_x(i), STRIP_Y + 4, 12, 15, ui.trk, ui.spage * 16 + i);
 }
 
-static void footer(void)
+/* the four knobs, along the top as on the panel: each its label, its value (inverted while turned, the label; while
+ * locked, the value) and a level under it: a bar (from the middle for a two-sided value), a row of segments for a
+ * few choices, nothing for an action */
+static void knobs(void)
 {
-    rect(0, FOOT_Y, 240, 2, 1);
+    hline(0, STAGE_Y - 1, 240, 1);
     for (int k = 0; k < 4; k++) {
-        int x = k * 60, code = knob_param(ui.page, ui.sub, k);
-        if (k) dotted_v(x - 1, FOOT_Y + 4, 86);
+        int x = k * 60, code = knob_at(k);
+        if (k) dotted_v(x - 1, KNOB_Y + 2, 38);
         if (code == NONE) continue;
         const pi_t *pi = pinfo(ui.trk, code);
-        if (pi->s4[0] == '-') { text(&F_S, x + 4, FOOT_Y + 6, "-", 1, 1); continue; }
+        if (pi->s4[0] == '-') { text(&F_S, x + 4, KNOB_Y + 3, "-", 1, 1); continue; }
         int v = knob_value(code);
         int focus = ui.focus_t && ui.focus == k && ui.now - ui.focus_t < 2500;
-        if (focus) { rect(x + 2, FOOT_Y + 4, 56, 15, 1); text(&F_S, x + 5, FOOT_Y + 6, pi->s4, 0, 1); }
-        else text(&F_S, x + 4, FOOT_Y + 6, pi->s4, 1, 1);
+        if (focus) { rect(x + 2, KNOB_Y + 1, 56, 13, 1); text(&F_S, x + 5, KNOB_Y + 2, pi->s4, 0, 1); }
+        else text(&F_S, x + 4, KNOB_Y + 2, pi->s4, 1, 1);
         char o[16];
         const char *u;
         fmt(pi, ui.trk, v, o, &u);
-        const m2k_font_t *f = text_w(&F_M, o, 0) > 52 ? &F_S : &F_M;
-        if (knob_locked(code)) { int w = text_w(f, o, 0); rect(x + 2, FOOT_Y + 21, w + 4, f->h + 2, 1); text(f, x + 4, FOOT_Y + 22, o, 0, 0); }
-        else text(f, x + 4, FOOT_Y + 22, o, 1, 0);
-        /* the slab (none under an action: LOAD, SAVE are turned, not set) */
+        const m2k_font_t *f = text_w(&F_M, o, 0) <= 52 ? &F_M : &F_S;
+        int vy = f == &F_M ? KNOB_Y + 16 : KNOB_Y + 19;
+        if (knob_locked(code)) { int w = text_w(f, o, 0); rect(x + 2, vy - 1, (w < 52 ? w : 52) + 4, f->h + 2, 1); }
+        clip(x + 3, KNOB_Y, 55, 34);
+        text(f, x + 4, vy, o, !knob_locked(code), 0);
+        noclip();
         if (pi->kind == K_LOAD || pi->kind == K_SLOAD || pi->kind == K_SSAVE || pi->kind == K_WIPE || pi->kind == K_DEMO) continue;
-        int bx = x + 4, by = FOOT_Y + 44, bw = 52, bh = 42;
+        int bx = x + 4, by = KNOB_Y + 35, bw = 52, bh = 3;
         int n = kind_choices(pi->kind);
         if (n && n <= 8) {
-            int c = (v * n) >> 7, sh = (bh - (n - 1)) / n;
+            int c = (v * n) >> 7, sw = (bw - (n - 1) * 2) / n;
             for (int i = 0; i < n; i++) {
-                int y = by + bh - (i + 1) * (sh + 1) + 1;
-                if (i == c) rect(bx, y, bw, sh, 1);
-                else frame(bx, y, bw, sh, 1);
+                if (i == c) rect(bx + i * (sw + 2), by, sw, bh, 1);
+                else hline(bx + i * (sw + 2), by + bh - 1, sw, 1);
             }
             continue;
         }
         int mx = kind_max(pi->kind), mn = kind_min(pi->kind);
-        int target = ((v - mn) * 256 * bh) / (mx - mn ? mx - mn : 1);
+        int target = ((v - mn) * 256 * bw) / (mx - mn ? mx - mn : 1);
         ui.ease[k] += (target - ui.ease[k]) / 3;
-        int h = ui.ease[k] >> 8;
-        /* a level: a frame and its fill, solid; quarter ticks on the side. A two-sided value fills from the middle */
-        frame(bx, by, bw, bh, 1);
-        for (int q = 1; q < 4; q++) hline(bx + bw, by + q * bh / 4, 2, 1);
+        int w = CLAMP(ui.ease[k] >> 8, 0, bw);
+        dotted_h(bx, by + bh - 1, bw);
         int bip = pi->kind == K_BI || pi->kind == K_PAN || pi->kind == K_SEMI || pi->kind == K_FINE || pi->kind == K_TUN2 || pi->kind == K_SEMI24;
         if (bip) {
-            int mid = by + bh / 2;
-            hline(bx - 2, mid, bw + 4, 1);
-            if (h > bh / 2) rect(bx, by + bh - h, bw, h - bh / 2, 1);
-            else rect(bx, mid, bw, bh / 2 - h, 1);
-        } else rect(bx, by + bh - h, bw, h, 1);
+            int mid = bx + bw / 2;
+            vline(mid, by - 2, bh + 3, 1);
+            if (w > bw / 2) rect(mid, by, w - bw / 2, bh, 1);
+            else rect(bx + w, by, mid - bx - w, bh, 1);
+        } else rect(bx, by, w, bh, 1);
     }
 }
 
+/* the footer: the pattern's four bars (the one in view solid, those it does not reach dotted, the playhead's marked),
+ * the pattern and its name, the tempo */
+static void foot(void)
+{
+    hline(0, FOOT_Y - 1, 240, 1);
+    const int y = FOOT_Y + 8;
+    for (int pg = 0; pg < 4; pg++) {
+        int x = 4 + pg * 15, used = pg * 16 < seq_len(), on = pg == ui.spage;
+        if (!used) { for (int i = 0; i < 13; i += 2) { px(x + i, y, 1); px(x + i, y + 9, 1); } }
+        else if (on) rect(x, y, 13, 10, 1);
+        else frame(x, y, 13, 10, 1);
+        if (sq.playing && play_step() / 16 == pg) rect(x + 4, y + 3, 5, 4, !on);
+    }
+    char t[12], *e = s_int(t, (int)seq_bpm());
+    s_cpy(e, " BPM");
+    int tw = text_r(&F_S, 236, y - 1, t, 1, 0);
+    char a[24];
+    e = s_pat(a, cur_pat);
+    *e++ = ' ';
+    s_cpy(e, pat_name(cur_pat));
+    char b[8];
+    s_pat(b, cur_pat);
+    text_fit(68, y - 1, a, b, 236 - tw - 6 - 68, 1);
+}
+
 static void step_card(void);
+
+/* a knob turned on HOME: its value in big type in a window over the lanes */
+static void focus_popup(int code)
+{
+    const pi_t *pi = pinfo(ui.trk, code);
+    char v[16];
+    const char *u;
+    fmt(pi, ui.trk, knob_value(code), v, &u);
+    const int x = 30, y = STAGE_Y + 22, w = 180, h = 76;
+    rect(x, y, w, h, 0);
+    frame(x, y, w, h, 1);
+    rect(x + w, y + 2, 2, h, 1);
+    rect(x + 2, y + h, w, 2, 1);
+    int tw = tag(x + 4, y + 4, pi->s4, 1);
+    text_fit(x + 4 + tw + 6, y + 6, pi->name, 0, w - tw - 16, 1);
+    big_value(x + 6, y + 13, w - 12, v, value_font(pi, code), ui.now - ui.roll_t);   /* its middle on the window's */
+    if (*u) text_fit(x + 6, y + h - 14, u, 0, w - 12, 1);
+}
 
 static void home(void)
 {
     m2k_pattern_t *p = PAT(cur_pat);
     int fresh = ui.focus_t && ui.now - ui.focus_t < 1800;
-    if (ui.grid && ui.nheld && !fresh) {
+    if (ui.grid && ui.nheld && !fresh) {         /* a held step: its card and the track's picture, as on a page */
         step_card();
-    } else if (fresh) {
-        focus_left(knob_param(PG_HOME, 0, ui.focus));
+        dotted_v(GX - 2, STAGE_Y, STAGE_H);
+        picture();
     } else {
-        text(&F_S, 4, FOCUS_Y + 2, "PATTERN", 1, 1);
-        char a[8];
-        s_pat(a, cur_pat);
-        big_value(2, FOCUS_Y + 16, GX - 6, a, &F_V, 1000);
-        char o[40], *e = s_cpy(o, "P");
-        e = s_int(e, cur_proj + 1);
-        e = s_cpy(e, "  ");
-        e = s_int(e, (int)seq_bpm());
-        s_cpy(e, " BPM");
-        text(&F_S, 4, 106, o, 1, 1);
-    }
-    dotted_v(GX - 2, FOCUS_Y, 104);
-    picture();
-    /* where the pattern is: the four pages, the playhead */
-    for (int pg = 0; pg < 4; pg++) {
-        int x = pg * 60, w = 58;
-        int used = pg * 16 < seq_len();
-        if (!used) { rect_pat(x, STRIP_Y + 4, w, 14, PT_SPARSE, 0); continue; }
-        int on = pg == ui.spage;                   /* the page shown: solid, its ticks and the playhead in paper */
-        if (on) rect(x, STRIP_Y + 4, w, 14, 1); else frame(x, STRIP_Y + 4, w, 14, 1);
-        for (int i = 1; i < 16; i++) px(x + i * w / 16, STRIP_Y + 16, !on);
-        if (sq.playing && play_step() / 16 == pg) rect(x + (play_step() % 16) * w / 16, STRIP_Y + 4, 4, 14, !on);
-    }
-    /* the six lanes */
-    rect(0, FOOT_Y, 240, 2, 1);
-    for (int t = 0; t < M2K_TRACKS; t++) {
-        int y = FOOT_Y + 3 + t * 15;
-        int flash = ui.now - ui.flash_t[t] < 90;
-        char n[2] = {(char)('1' + t), 0};
-        if (t == ui.trk || flash) { rect(0, y, 13, 13, 1); text(&F_S, 3, y + 1, n, 0, 0); }
-        else text(&F_S, 3, y + 1, n, 1, 0);
-        int muted = (p->mute >> t) & 1;
-        for (int i = 0; i < 16; i++) {
-            int s = ui.spage * 16 + i;
-            int x = 16 + i * 14;
-            if (muted) { if (p->step[t][s].flags & ST_TRIG) rect_pat(x, y + 1, 12, 11, PT_SPARSE, 0); else px(x + 6, y + 6, 1); frame(x, y + 1, 12, 11, 0); continue; }
-            step_cell(x, y + 1, 12, 11, t, s);
+        /* the six lanes, the page in view, grouped by the beat as the steps below are */
+        for (int t = 0; t < M2K_TRACKS; t++) {
+            int y = STAGE_Y + 3 + t * 21;
+            int flash = ui.now - ui.flash_t[t] < 90;
+            char n[2] = {(char)('1' + t), 0};
+            if (t == ui.trk || flash) { rect(0, y, 14, 18, 1); text(&F_S, 4, y + 4, n, 0, 0); }
+            else text(&F_S, 4, y + 4, n, 1, 0);
+            int muted = (p->mute >> t) & 1;
+            for (int i = 0; i < 16; i++) {
+                int s = ui.spage * 16 + i, x = 18 + i * 13 + (i >> 2) * 3;
+                if (muted) {
+                    if (p->step[t][s].flags & ST_TRIG) rect_pat(x, y + 1, 11, 16, PT_SPARSE, 0); else px(x + 5, y + 9, 1);
+                    continue;
+                }
+                step_cell(x, y + 1, 11, 16, t, s);
+            }
+            if (muted) for (int i = 18; i < 236; i += 3) px(i, y + 9, 1);
         }
-        if (muted) for (int i = 16; i < 240; i += 3) px(i, y + 6, 1);
+        if (fresh) focus_popup(knob_at(ui.focus));
     }
+    /* the four bars, wide: the one in view solid, its ticks and the playhead in paper */
+    hline(0, STRIP_Y - 1, 240, 1);
+    for (int pg = 0; pg < 4; pg++) {
+        int x = 1 + pg * 60, w = 58, y = STRIP_Y + 4;
+        int used = pg * 16 < seq_len();
+        if (!used) { rect_pat(x, y, w, 16, PT_SPARSE, 0); continue; }
+        int on = pg == ui.spage;
+        if (on) rect(x, y, w, 16, 1); else frame(x, y, w, 16, 1);
+        for (int i = 1; i < 16; i++) px(x + i * w / 16, y + 13, !on);
+        if (sq.playing && play_step() / 16 == pg) rect(x + (play_step() % 16) * w / 16, y, 4, 16, !on);
+    }
+    knobs();
+    foot();
 }
 
 /* a held step: its note in big type, its condition, ratchet, accent and slide */
@@ -2100,11 +2218,11 @@ static void step_card(void)
     char o[24], *e = s_cpy(o, "STEP ");
     e = s_int(e, ui.held[0] + 1);
     if (ui.nheld > 1) { e = s_cpy(e, " +"); s_int(e, ui.nheld - 1); }
-    text(&F_S, 4, FOCUS_Y + 2, o, 1, 1);
+    text(&F_S, 4, FOCUS_Y + 4, o, 1, 1);
     s_note(o, st.note);
-    big_value(2, FOCUS_Y + 16, GX - 6, o, &F_V, 1000);
-    text(&F_S, 4, 81, "TRACK: NOTE", 1, text_w(&F_S, "TRACK: NOTE", 1) <= GX - 8);   /* the TRACK knob turns the note */
-    int x = 4, y = 95;
+    big_value(2, FOCUS_Y + 22, GX - 6, o, &F_V, 1000);
+    text_fit(4, FOCUS_Y + 78, "TRACK: NOTE", 0, GX - 8, 1);      /* the TRACK knob turns the note */
+    int x = 4, y = FOCUS_Y + 92;
     const char *tg[5] = {COND_N[st.cond], 0, (st.flags & ST_TTYPE) ? TTYPE_N[ttype_of(st.flags)] : 0,
                          (st.flags & ST_ACC) ? "ACC" : 0, (st.flags & ST_SLD) ? "SLD" : 0};
     char r[4] = {'X', (char)('0' + (st.rtrg ? st.rtrg : 1)), 0, 0};
@@ -2122,19 +2240,25 @@ static void param_page(void)
     int fresh = ui.focus_t && ui.now - ui.focus_t < 2500;
     if (ui.grid && ui.nheld && !fresh) step_card();
     else if (ui.page == PG_SYN && (!fresh || (ui.card_t && ui.now - ui.card_t < 1500))) machine_card();
-    else if (fresh) focus_left(knob_param(ui.page, ui.sub, ui.focus));
+    else if (fresh) focus_left(knob_at(ui.focus));
     else {
         /* resting: the page in big type, its four values listed */
         char o[24];
         page_label(ui.page, ui.sub, o);
         for (char *c = o; *c; c++) if (*c == ' ') { *c = 0; break; }
-        text(&F_S, 4, FOCUS_Y + 2, "PAGE", 1, 1);
-        big_value(2, FOCUS_Y + 16, GX - 6, o, &F_L, 1000);   /* every page's title in one size */
+        text(&F_S, 4, FOCUS_Y + 4, "PAGE", 1, 1);
+        big_value(2, FOCUS_Y + 30, GX - 6, o, &F_L, 1000);   /* every page's title in one size */
+        const mi_t *mi = &MI[PAT(cur_pat)->machine[ui.trk]];   /* where: the track and its machine (its badge if long) */
+        char w[24] = {'T', (char)('1' + ui.trk), ' ', 0}, w2[12] = {'T', (char)('1' + ui.trk), ' ', 0};
+        s_cpy(w + 3, mi->name);
+        s_cpy(w2 + 3, mi->badge);
+        text_fit(4, FOCUS_Y + 110, w, w2, GX - 8, 1);
     }
-    dotted_v(GX - 2, FOCUS_Y, 104);
+    dotted_v(GX - 2, STAGE_Y, STAGE_H);
     picture();
     strip();
-    footer();
+    knobs();
+    foot();
 }
 
 /* the boot: the logotype as the web's hero draws it, one bit-crusher. Its outline solid, inside a Bayer dither from
@@ -2203,7 +2327,7 @@ static void boot(uint32_t t)
 static void glo_help(void)
 {
     if (!ui.btn[B_GLO] || ui.glo_used || !ui.glo_t0 || ui.now - (ui.glo_t0 & ~1u) < 350) return;
-    const int x = 3, y = 19, w = 232, h = 104;
+    const int x = 3, y = STAGE_Y + 4, w = 232, h = 104;
     rect(x, y, w, h, 0);
     frame(x, y, w, h, 1);
     rect(x + w, y + 2, 2, h, 1);
@@ -2225,7 +2349,7 @@ static void glo_help(void)
 static void hold_help(void)
 {
     if (ui.btn[B_GLO] || !ui.hold_t0 || ui.now - (ui.hold_t0 & ~1u) < 350) return;
-    const int x = 3, y = 19, w = 232;
+    const int x = 3, y = STAGE_Y + 4, w = 232;
     if (ui.btn[B_HOME]) {
         const int h = 104;
         rect(x, y, w, h, 0);
@@ -2269,6 +2393,28 @@ static void hold_help(void)
             text(&F_S, x + 4 + text_w(&F_S, "PLAY", 1) + 12, cy + 2, L[2 * i + 1], 1, 0);
         }
     }
+}
+
+/* SEQ held a moment: its tools on the white keys (the knobs above show LEN, SWING, ACCENT, TEMPO meanwhile) */
+static void seq_help(void)
+{
+    if (!seq_layer() || !ui.seq_t0 || ui.now - (ui.seq_t0 & ~1u) < 350) return;
+    const int x = 3, y = STAGE_Y + 4, w = 232, h = 104;
+    rect(x, y, w, h, 0);
+    frame(x, y, w, h, 1);
+    rect(x + w, y + 2, 2, h, 1);
+    rect(x + 2, y + h, w, 2, 1);
+    int tw = tag(x + 4, y + 4, "SEQ", 1);
+    char o[24] = {'T', (char)('1' + ui.trk), ' ', 0};
+    s_cpy(o + 3, "STEPS, KEY:");
+    text(&F_S, x + 4 + tw + 6, y + 6, o, 1, 1);
+    for (int i = 0; i < 8; i++) {
+        int cx = x + 4 + (i >> 2) * 112, cy = y + 22 + (i & 3) * 17;
+        char n[2] = {(char)('1' + i), 0};
+        int kw = tag(cx, cy, n, 0);
+        text(&F_S, cx + kw + 4, cy + 2, SEQ_TOOL[i], 1, 0);
+    }
+    text(&F_S, x + 4, y + h - 13, "KNOBS: LEN SWNG ACNT BPM", 1, 0);
 }
 
 /* a message takes the header for a moment: inverted, its text, a gradient tail (a long one the line under it too) */
@@ -2366,6 +2512,7 @@ const uint8_t *m2k_frame(uint32_t ms)
     else { header(); param_page(); }
     glo_help();
     if (ui.btn[B_HOME] || ui.btn[B_EDIT]) hold_help();
+    seq_help();
     overlays();
 
     if (ui.in_trans) {
