@@ -14,17 +14,18 @@
 #include <string.h>
 
 #define M2K_FW 1
-#define M2K_PATTERNS 16
+#define M2K_PATTERNS 64
+#define M2K_PAT_SLOTS 2
 #define M2K_PROJECTS 1
-#define M2K_IMG_DATA 28672
+#define M2K_IMG_DATA 47104
 #define POOL
 #include "../firmware/src/m2k_core.c"
 
 /* ---- the platform, as m2k_link.c uses it */
 #define APP_NAME "MONO2K"
 #define APP_VER "0.0"
-#define BANK_AT 0x000D0000u
-#define BANK_LEN 0x00010000u
+#define BANK_AT 0x000C0000u
+#define BANK_LEN 0x00020000u
 #define FELUCCA_ID "FM-1_980"
 static uint8_t flash[0x100000];
 static int flash_faults, flash_fail_at = -1, flash_writes;
@@ -151,13 +152,83 @@ static void check(int ok, const char *what)
 
 static void mark(const char *pn, const char *sn)   /* a state to tell apart: pattern A01's name, sound slot 6's */
 {
-    memset(pat[0].name, 0, 8);
-    memcpy(pat[0].name, pn, strlen(pn));
+    memset(PAT(0)->name, 0, 8);
+    memcpy(PAT(0)->name, pn, strlen(pn));
     memset(snd[5].name, 0, 8);
     memcpy(snd[5].name, sn, strlen(sn));
 }
-static int marked(const char *pn, const char *sn) { return !strcmp(pat[0].name, pn) && !strcmp(snd[5].name, sn); }
+static int marked(const char *pn, const char *sn) { return !strcmp(PAT(0)->name, pn) && !strcmp(snd[5].name, sn); }
 static int stored(void) { uint32_t h[4]; return !st_read(BANK_AT, h, 16) && h[0] == STORE_MAGIC && store_load(); }
+
+/* the pattern cache (the FM-1 keeps two of its 64 patterns unpacked, the rest packed in the working image) */
+static int trigs_of(int i)
+{
+    int n = 0;
+    for (int t = 0; t < M2K_TRACKS; t++) for (int st = 0; st < M2K_STEPS; st++) n += PAT(i)->step[t][st].flags & ST_TRIG ? 1 : 0;
+    return n;
+}
+
+static void fill(int i, int seed)                 /* every step of every track a trig, its note by seed */
+{
+    for (int t = 0; t < M2K_TRACKS; t++)
+        for (int st = 0; st < M2K_STEPS; st++) {
+            m2k_step_t *x = &PAT(i)->step[t][st];
+            x->flags = ST_TRIG;
+            x->note = (uint8_t)(24 + (seed * 7 + t * 5 + st) % 72);
+            x->cond = 0;
+            x->rtrg = 0;
+        }
+}
+
+static void cache_tests(void)
+{
+    static int16_t buf[256];
+    memset(flash, 0xFF, sizeof flash);
+    m2k_init(3);
+    int names = !strcmp(PAT(0)->name, "MAMMOTH") && !strcmp(PAT(15)->name, "SPLICE");
+    for (int i = 16; i < 64; i++) names &= !strcmp(PAT(i)->name, "INIT") && trigs_of(i) == 0;
+    check(names && work_img.used < 20000u, "64 patterns: bank A's demos, banks B-D INIT, the blanks taking no room");
+
+    m2k_pattern(16);                              /* B01 */
+    PAT(16)->step[2][5].flags = ST_TRIG; PAT(16)->step[2][5].note = 49;
+    m2k_pattern(36);                              /* C05 */
+    PAT(36)->step[0][0].flags = ST_TRIG; PAT(36)->step[0][0].note = 40;
+    m2k_pattern(0);
+    m2k_pattern(63);
+    int kept = cur_pat == 63 && PAT(16)->step[2][5].note == 49 && trigs_of(16) == 1 && PAT(36)->step[0][0].note == 40;
+    store_save();
+    m2k_init(4);
+    int back = store_load() && PAT(16)->step[2][5].note == 49 && trigs_of(36) == 1 && !strcmp(PAT(0)->name, "MAMMOTH");
+    check(kept && back, "patterns edited, left and come back to keep their steps, through a save and a boot");
+
+    m2k_pattern(16);
+    seq_play(1);
+    m2k_pattern(36);                              /* queued: at the end of the bar */
+    int queued = cur_pat == 16 && sq.queued == 36;
+    for (int f = 0; f < 44100 * 12 && cur_pat == 16; f += 128) m2k_render(buf, 128);
+    int switched = cur_pat == 36;
+    for (int f = 0; f < 44100 * 2; f += 128) m2k_render(buf, 128);
+    seq_play(0);
+    check(queued && switched && trigs_of(16) == 1, "a pattern queued while playing opens at the end of the bar");
+
+    /* the working image fills: a pattern that would not leave the playing one room is refused, and nothing is lost */
+    int filled[64] = {0}, last = -1, refused = 0;
+    for (int i = 16; i < 64 && !refused; i++) {
+        m2k_pattern(i);
+        if (cur_pat != i) { refused = 1; break; }
+        fill(i, i);
+        filled[i] = 1;
+        last = i;
+    }
+    int intact = refused && last > 20;
+    for (int i = 16; i <= last; i++) intact &= !filled[i] || (trigs_of(i) == 6 * 64 && PAT(i)->step[3][9].note == (uint8_t)(24 + (i * 7 + 15 + 9) % 72));
+    printf("     the working image: %u of %u B, patterns full after %d full ones\n", work_img.used, IMG_DATA, last - 15);
+    store_save();
+    m2k_init(5);
+    int stored = store_load();
+    for (int i = 16; i <= last; i++) stored &= trigs_of(i) == 6 * 64;
+    check(intact && stored, "patterns full: the next refused, every full one intact, through a save and a boot");
+}
 
 int main(int argc, char **argv)
 {
@@ -167,8 +238,9 @@ int main(int argc, char **argv)
 
     uint8_t f0[4] = {0x00, 0x59, 0x11, 0x00};
     check(!app_sysex(f0, 4), "the update entry's frames are left to it");
-    check(ask(LK_HELLO, 0, 0) == LK_OK && ans[1] == 1 && ans[2] == 16 && ans[3] == 1 && ans[4] == M2K_SOUNDS &&
-          !memcmp(ans + 8, "MONO2K", 6), "HELLO: the link's version, 16 patterns, 1 project, 64 sounds, the name");
+    check(ask(LK_HELLO, 0, 0) == LK_OK && ans[1] == 1 && ans[2] == 64 && ans[3] == 1 && ans[4] == M2K_SOUNDS &&
+          !memcmp(ans + 8, "MONO2K", 6) && rd32(ans + 24) == M2K_IMG_DATA,
+          "HELLO: the link's version, 64 patterns, 1 project, 128 sounds, the name, the image's room");
 
     mark("LINKA", "SNDA");
     uint32_t na = 0;
@@ -231,8 +303,10 @@ int main(int argc, char **argv)
         size_t n = f ? fread(w, 1, sizeof w, f) : 0;
         if (f) fclose(f);
         check(n > 0 && write_store(w, (uint32_t)n, crc32(w, (uint32_t)n), ~0u) == LK_OK && marked("WEB16", "WEBSND"),
-              "a store the browser wrote for the FM-1 (16 patterns, 1 project): written and read");
+              "a store the browser wrote for the FM-1 (64 patterns, 1 project): written and read");
     }
+
+    cache_tests();
 
     uint8_t pk[10] = {0, 1, 2, 0x7F, 0x80, 0xFF, 0x55, 0xAA, 0x01, 0xFE}, pw[16];
     uint32_t pn = ota_pack7(pk, 10, pw);

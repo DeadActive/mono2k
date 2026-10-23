@@ -47,11 +47,35 @@ static inline int px_get(const uint8_t *buf, int x, int y)
 static void clip(int x, int y, int w, int h) { clip_x0 = (int16_t)x; clip_y0 = (int16_t)y; clip_x1 = (int16_t)(x + w); clip_y1 = (int16_t)(y + h); }
 static void noclip(void) { clip(0, 0, M2K_W, M2K_H); }
 
-static void cls(void) { m_set(fb, 0, sizeof fb); }
+/* the text audit (a host build, M2K_TEXT_AUDIT): every text's ink as drawn, so a test can find two that touch or one
+ * cut by the screen's edge. A fill of paper (a window, a toast's line) or a broad one of ink hides what it covers */
+#ifdef M2K_TEXT_AUDIT
+typedef struct { int16_t x0, y0, x1, y1; uint8_t cut; char s[14]; } ta_t;
+static ta_t ta[512];
+static int ta_n;
+static void ta_cover(int x, int y, int w, int h)
+{
+    int j = 0;
+    for (int i = 0; i < ta_n; i++)
+        if (!(ta[i].x0 < x + w && x <= ta[i].x1 && ta[i].y0 < y + h && y <= ta[i].y1)) ta[j++] = ta[i];
+    ta_n = j;
+}
+#endif
+
+static void cls(void)
+{
+    m_set(fb, 0, sizeof fb);
+#ifdef M2K_TEXT_AUDIT
+    ta_n = 0;
+#endif
+}
 
 /* c: 0 paper, 1 ink, 2 invert */
 static void rect(int x, int y, int w, int h, int c)
 {
+#ifdef M2K_TEXT_AUDIT
+    if (c == 0 || (c == 1 && w * h >= 600)) ta_cover(x, y, w, h);
+#endif
     for (int j = y; j < y + h; j++)
         for (int i = x; i < x + w; i++) px(i, j, c);
 }
@@ -173,11 +197,27 @@ static int text_w(const m2k_font_t *f, const char *s, int track)
 static int text(const m2k_font_t *f, int x, int y, const char *s, int fill, int track)
 {
     int x0 = x;
+#ifdef M2K_TEXT_AUDIT
+    ta_t r = {32767, 32767, -1, -1, 0, {0}};
+    for (int i = 0; i < 13 && s[i]; i++) r.s[i] = s[i];
+#endif
     for (; *s; s++) {
         int g = glyph_of(f, (unsigned char)*s), w = f->w[g];
         for (int gy = 0; gy < f->h; gy++)
             for (int gx = 0; gx < w; gx++) {
                 if (!glyph_bit(f, g, gx, gy)) continue;
+#ifdef M2K_TEXT_AUDIT
+                {
+                    int ax = x + gx, ay = y + gy;
+                    if (ax < clip_x0 || ay < clip_y0 || ax >= clip_x1 || ay >= clip_y1) r.cut = 1;
+                    else {
+                        if (ax < r.x0) r.x0 = (int16_t)ax;
+                        if (ax > r.x1) r.x1 = (int16_t)ax;
+                        if (ay < r.y0) r.y0 = (int16_t)ay;
+                        if (ay > r.y1) r.y1 = (int16_t)ay;
+                    }
+                }
+#endif
                 if (fill == TX_GRAD) {
                     int edge = !glyph_bit(f, g, gx - 1, gy) || !glyph_bit(f, g, gx + 1, gy) ||
                                !glyph_bit(f, g, gx, gy - 1) || !glyph_bit(f, g, gx, gy + 1);
@@ -194,6 +234,9 @@ static int text(const m2k_font_t *f, int x, int y, const char *s, int fill, int 
             }
         x += w + f->track + track;
     }
+#ifdef M2K_TEXT_AUDIT
+    if ((r.x1 >= 0 || r.cut) && ta_n < 512) ta[ta_n++] = r;
+#endif
     return x - x0;
 }
 

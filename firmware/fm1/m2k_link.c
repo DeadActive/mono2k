@@ -144,14 +144,15 @@ static void lk_service(void)
     lk_pending = 0;
     if (d > sizeof lk_dec) { lk_status(cmd, LK_BAD); return; }
     switch (cmd) {
-    case LK_HELLO: {                             /* 1, the counts, playing, the name and version */
+    case LK_HELLO: {                             /* 1, the counts, playing, the name and version, the image's room */
         static const char nm[] = APP_NAME " " APP_VER;
         uint32_t i;
-        memset(lk_out, 0, 24);
+        memset(lk_out, 0, 28);
         lk_out[0] = LK_OK; lk_out[1] = 1; lk_out[2] = M2K_PATTERNS; lk_out[3] = M2K_PROJECTS; lk_out[4] = M2K_SOUNDS;
         lk_out[5] = (uint8_t)m2k_playing();
         for (i = 0; i < 16u && nm[i]; i++) lk_out[8 + i] = (uint8_t)nm[i];
-        lk_reply(cmd, 24);
+        lk_wr32(lk_out + 24, M2K_IMG_DATA);      /* the most a project's packed patterns may take */
+        lk_reply(cmd, 28);
         break;
     }
     case LK_INFO: {                              /* saved now, then its length and CRC */

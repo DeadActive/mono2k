@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* MONO2K's projects, the modern Elektron way: every pattern carries its own sounds. A project is 4 banks (A-D)
- * of 16 patterns. The working patterns live unpacked in RAM (pat[]); the saved projects are packed images: each
- * pattern as a blob of its sounds, its trigs only and its locks only, so a typical one is 0.5-1 KB.
+ * of 16 patterns. The working patterns live unpacked in RAM (PAT(i); on the FM-1 two at a time, the others packed in
+ * the working image); the saved projects are packed images: each pattern as a blob of its sounds, its trigs only and
+ * its locks only, so a typical one is 0.5-1 KB, and a blank (INIT) one nothing.
  *   SAVE          the current pattern's reload point (into the open project's image)
  *   GLO + SAVE    reload: the current pattern back to that point
  *   hold SAVE     the whole project
@@ -194,15 +195,107 @@ static void img_clear(m2k_img_t *im, const char *name)
     m_set(im->len, 0, sizeof im->len);
 }
 
-/* every working pattern into the scratch image; 0 when they do not fit */
+static m2k_pattern_t pat_tmp POOL;           /* scratch: the factory's blank, an old demo read back */
+static void pattern_init_blank(m2k_pattern_t *p);
+
+/* a blank pattern (INIT) packed: in an image it takes no bytes (its length 0), as an empty slot reads */
+static uint8_t blank_blob[1024] POOL;             /* (a blank packs to about 500 bytes) */
+static int blank_n;
+
+static void blank_set(void)                         /* the blank, packed (-1: too large to keep; none then) */
+{
+    pattern_init_blank(&pat_tmp);
+    int n = pat_pack(&pat_tmp, blob);
+    if (n > (int)sizeof blank_blob) { blank_n = -1; return; }
+    m_cpy(blank_blob, blob, (uint32_t)n);
+    blank_n = n;
+}
+
+static int pat_pack_img(const m2k_pattern_t *p)     /* into blob; a blank is 0 */
+{
+    if (!blank_n) blank_set();
+    int n = pat_pack(p, blob);
+    if (n != blank_n) return n;
+    for (int k = 0; k < n; k++) if (blob[k] != blank_blob[k]) return n;
+    return 0;
+}
+
+static int img_put_pat(m2k_img_t *im, int i, const m2k_pattern_t *p) { int n = pat_pack_img(p); return img_put(im, i, blob, n); }
+
+#if PAT_CACHE
+/* the cache: two patterns unpacked (pat_idx), the rest packed in the working image. A slot is taken for another
+ * pattern only from one not playing (written back first); the image keeps room for the playing one to grow to the
+ * most a pattern packs to (pat_can_open), so writing it back always fits */
+static void pat_flush(int v) { if (pat_idx[v] >= 0) img_put_pat(&work_img, pat_idx[v], &store_.p[v]); }
+static void pat_drop(void) { pat_idx[0] = pat_idx[1] = -1; }       /* the working image replaced: nothing held */
+
+static m2k_pattern_t *pat_load(int i)
+{
+    int v = pat_idx[0] == cur_pat ? 1 : pat_idx[1] == cur_pat ? 0 : pat_idx[1] == (int)sq.queued ? 0 : 1;
+    pat_flush(v);
+    int n;
+    const uint8_t *b = img_get(&work_img, i, &n);
+    if (!n || !pat_unpack(&store_.p[v], b, n)) pattern_init_blank(&store_.p[v]);
+    pat_idx[v] = (int16_t)i;
+    return &store_.p[v];
+}
+
+/* may pattern j play next: the others as they pack now, and room for j to grow to the largest a pattern packs to */
+static int pat_can_open(int j)
+{
+    if (j == cur_pat) return 1;
+    uint32_t used = work_img.used - work_img.len[j];
+    if (pat_idx[0] == cur_pat || pat_idx[1] == cur_pat) used = used - work_img.len[cur_pat] + (uint32_t)pat_pack_img(PAT(cur_pat));
+    return used + BLOB_MAX <= IMG_DATA;
+}
+#else
+static int pat_can_open(int j) { (void)j; return 1; }
+#endif
+
+/* a pattern's name without unpacking it (the screen's lists): the slot's when it is held, else its blob's */
+static const char *pat_name(int i)
+{
+#if PAT_CACHE
+    static char nm[8];
+    if (pat_idx[0] == i || pat_idx[1] == i) return PAT(i)->name;
+    int n;
+    const uint8_t *b = img_get(&work_img, i, &n);
+    if (n < 10) return "INIT";
+    m_cpy(nm, b + 2, 8);
+    nm[7] = 0;
+    return nm;
+#else
+    return PAT(i)->name;
+#endif
+}
+
+/* may add more bytes go into the working image, the playing pattern's room kept (a paste into many) */
+static int pat_room(int add)
+{
+#if PAT_CACHE
+    return (int)work_img.used + add + BLOB_MAX <= IMG_DATA;
+#else
+    (void)add;
+    return 1;
+#endif
+}
+
+/* every working pattern into the scratch image (on the FM-1 the working image itself: the two held written back);
+ * 0 when they do not fit */
 static int img_pack_work(const char *name)
 {
-    img_clear(&work_img, name);
-    for (int i = 0; i < M2K_PATTERNS; i++) {
-        int n = pat_pack(&pat[i], blob);
-        if (!img_put(&work_img, i, blob, n)) return 0;
-    }
+#if PAT_CACHE
+    pat_flush(0);
+    pat_flush(1);
+    m_set(work_img.name, 0, sizeof work_img.name);
+    for (int i = 0; i < 7 && name[i]; i++) work_img.name[i] = name[i];
     return 1;
+#else
+    img_clear(&work_img, name);
+    for (int i = 0; i < M2K_PATTERNS; i++)
+        if (!img_put_pat(&work_img, i, PAT(i))) return 0;
+    return 1;
+#endif
 }
 
 /* every working pattern into an image; 0 when they do not fit (the image is then left as it was) */
@@ -213,12 +306,43 @@ static int img_pack_all(m2k_img_t *dst, const char *name)
     return 1;
 }
 
-static m2k_pattern_t pat_tmp POOL;           /* scratch: the factory's blank, an old demo read back */
-
-/* the sound library: four banks of 16 sounds (S01..S64), each a track's machine and its parameters, kept with the
- * store; an empty slot has no name (M2K_SOUNDS slots, m2k.h). The factory fills it from bank A's tracks */
+/* the sound library: 128 slots (S001..S128, M2K_SOUNDS in m2k.h), each a track's machine and its parameters and a
+ * category, kept with the store. An empty slot (no name) is INIT: loading it starts the track's machine afresh. The
+ * factory fills the first 96 from bank A's tracks (16 patterns, six each) and leaves the last 32 INIT */
 typedef struct { char name[8]; uint8_t machine, kit[P_COUNT]; } m2k_sound_t;
-static m2k_sound_t snd[M2K_SOUNDS];                /* (RAM: the FM-1's pool is full) */
+static m2k_sound_t snd[M2K_SOUNDS] POOL;
+enum { CAT_ALL, CAT_KICK, CAT_SNARE, CAT_HATS, CAT_PERC, CAT_BASS, CAT_LEAD, CAT_PAD, CAT_FX, CAT_COUNT };
+static const char *const CAT_N[CAT_COUNT] = {"ALL", "KICK", "SNARE", "HATS", "PERC", "BASS", "LEAD", "PAD", "FX"};
+static const char *const CAT_S[CAT_COUNT] = {"", "KCK", "SNR", "HAT", "PRC", "BAS", "LD", "PAD", "FX"};
+static uint8_t snd_cat[M2K_SOUNDS];                /* CAT_*; 0 none */
+
+/* a track's notes: the lowest and highest of its trigs (lo > hi with none) */
+static void track_notes(const m2k_pattern_t *p, int t, int *lo, int *hi)
+{
+    *lo = 127; *hi = 0;
+    for (int s = 0; s < M2K_STEPS; s++)
+        if (p->step[t][s].flags & ST_TRIG) { int n = p->step[t][s].note; *lo = n < *lo ? n : *lo; *hi = n > *hi ? n : *hi; }
+}
+
+/* a sound's category, guessed from its machine, its knobs and the notes it plays (lo > hi: none known), after bank A's
+ * parts (docs/bank-a.md names each track's role) */
+static int sound_guess(int m, const uint8_t *k, int lo, int hi)
+{
+    int none = lo > hi, mid = none ? 60 : (lo + hi) / 2, melodic = !none && hi - lo >= 5;
+    switch (m) {
+    case M_FXC: case M_FXR: case M_FXD: return CAT_FX;
+    case M_GNOI: return k[P_DEC] < 48 ? CAT_HATS : CAT_SNARE;
+    case M_GPRC:                                     /* bright and filtered high: hats; metal and short: perc */
+        return k[P_SYN + 2] < 40 && k[P_BASE] >= 32 ? CAT_HATS : k[P_SYN + 2] >= 40 && k[P_DEC] <= 12 ? CAT_PERC : CAT_SNARE;
+    case M_GSIN:                                     /* held or a line: a bass (or perc up high); one note: a kick */
+        if (none) return CAT_PERC;
+        if (k[P_DEC] == 127 || melodic) return mid < 48 ? CAT_BASS : CAT_PERC;
+        return k[P_SYN + 3] < 40 && mid >= 55 ? CAT_SNARE : CAT_KICK;
+    case M_ENS: return CAT_PAD;
+    default:                                         /* short hits: perc; low: bass; a slow attack: a pad */
+        return k[P_DEC] <= 24 ? CAT_PERC : mid < 48 ? CAT_BASS : k[P_ATK] >= 40 ? CAT_PAD : CAT_LEAD;
+    }
+}
 
 static void sound_name(char *o, const m2k_pattern_t *p, int t)   /* "MAMMO3": the pattern's name, the track */
 {
@@ -228,20 +352,24 @@ static void sound_name(char *o, const m2k_pattern_t *p, int t)   /* "MAMMO3": th
     o[i] = 0;
 }
 
-static void sound_save(int slot, const m2k_pattern_t *p, int t)
+static void sound_save(int slot, const m2k_pattern_t *p, int t, int cat)    /* cat 0: guessed */
 {
     m2k_sound_t *d = &snd[slot % M2K_SOUNDS];
     m_set(d, 0, sizeof *d);
     sound_name(d->name, p, t);
     d->machine = p->machine[t];
     m_cpy(d->kit, p->kit[t], P_COUNT);
+    int lo, hi;
+    track_notes(p, t, &lo, &hi);
+    snd_cat[slot % M2K_SOUNDS] = (uint8_t)(cat ? cat : sound_guess(d->machine, d->kit, lo, hi));
 }
 
 static void sounds_factory(void)              /* bank A's tracks, A01 T1 first */
 {
     m_set(snd, 0, sizeof snd);
-    for (int i = 0; i < M2K_SOUNDS && i / M2K_TRACKS < (M2K_PATTERNS < 16 ? M2K_PATTERNS : 16); i++)
-        sound_save(i, &pat[i / M2K_TRACKS], i % M2K_TRACKS);
+    m_set(snd_cat, 0, sizeof snd_cat);
+    for (int i = 0; i < M2K_SOUNDS - 32 && i / M2K_TRACKS < (M2K_PATTERNS < 16 ? M2K_PATTERNS : 16); i++)
+        sound_save(i, PAT(i / M2K_TRACKS), i % M2K_TRACKS, 0);
 }
 
 static void pattern_init_blank(m2k_pattern_t *p)
@@ -253,14 +381,20 @@ static void pattern_init_blank(m2k_pattern_t *p)
     p->glob[G_VERB] = 40;
 }
 
-/* the working patterns from an image: empty or broken slots become blank patterns */
+/* the working patterns from an image: empty or broken slots become blank patterns (on the FM-1 the image becomes the
+ * working one, each pattern unpacked as it is wanted) */
 static void img_unpack_all(const m2k_img_t *im)
 {
+#if PAT_CACHE
+    if (im != &work_img) m_cpy(&work_img, im, (uint32_t)(sizeof *im - IMG_DATA + im->used));
+    pat_drop();
+#else
     for (int i = 0; i < M2K_PATTERNS; i++) {
         int n;
         const uint8_t *b = img_get(im, i, &n);
-        if (!n || !pat_unpack(&pat[i], b, n)) pattern_init_blank(&pat[i]);
+        if (!n || !pat_unpack(PAT(i), b, n)) pattern_init_blank(PAT(i));
     }
+#endif
 }
 
 /* ---------------------------------------------------------------------------------------------- the actions */
@@ -268,21 +402,17 @@ static void img_unpack_all(const m2k_img_t *im)
 static void work_reset_current(void)
 {
     lockmap_build();
-    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[cur_pat].kit[t], P_COUNT);
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, PAT(cur_pat)->kit[t], P_COUNT);
 }
 
-static int pattern_save(void)
-{
-    int n = pat_pack(&pat[cur_pat], blob);
-    return img_put(&proj[cur_proj], cur_pat, blob, n);
-}
+static int pattern_save(void) { return img_put_pat(&proj[cur_proj], cur_pat, PAT(cur_pat)); }
 
 static int pattern_reload(void)
 {
     int n;
     const uint8_t *b = img_get(&proj[cur_proj], cur_pat, &n);
-    if (n) { if (!pat_unpack(&pat[cur_pat], b, n)) return 0; }
-    else pattern_init_blank(&pat[cur_pat]);
+    if (n) { if (!pat_unpack(PAT(cur_pat), b, n)) return 0; }
+    else pattern_init_blank(PAT(cur_pat));
     work_reset_current();
     return 1;
 }
@@ -312,17 +442,18 @@ static void project_load(int slot)
 /* the factory: project 1 is DEMO (bank A the demos, B-D blank), projects 2-4 blank */
 static void projects_factory(void)
 {
+    blank_set();                                 /* the blank, packed: what an image keeps as nothing */
+#if PAT_CACHE
+    pat_drop();
+    img_clear(&work_img, "WORK");                /* every pattern blank (INIT) until the factory writes bank A */
+#endif
     factory();
     sounds_factory();
-    for (int i = 16; i < M2K_PATTERNS; i++) pattern_init_blank(&pat[i]);
+    for (int i = 16; i < M2K_PATTERNS; i++) pattern_init_blank(PAT(i));
     img_pack_all(&proj[0], "DEMO");
-    /* the blank projects: one blank pattern, 64 times */
-    pattern_init_blank(&pat_tmp);
-    int n = pat_pack(&pat_tmp, blob);
-    for (int k = 1; k < M2K_PROJECTS; k++) {
+    for (int k = 1; k < M2K_PROJECTS; k++) {     /* the blank projects: every pattern INIT */
         char nm[8] = {'P', (char)('1' + k), 0};
         img_clear(&proj[k], nm);
-        for (int i = 0; i < M2K_PATTERNS; i++) img_put(&proj[k], i, blob, n);
     }
     cur_proj = 0;
 }
@@ -331,7 +462,7 @@ static void projects_factory(void)
 /* everything the instrument keeps, as one blob for the platform to save: the settings, the working patterns,
  * the four projects. "M2K2", version, open project; then images as (name, used, len[], data). */
 
-#define STORE_MAX (16 + S_COUNT + (M2K_PROJECTS + 1) * (12 + 2 * M2K_PATTERNS + IMG_DATA) + 2 + 80 * 64)
+#define STORE_MAX (16 + S_COUNT + (M2K_PROJECTS + 1) * (12 + 2 * M2K_PATTERNS + IMG_DATA) + 4 + 81 * M2K_SOUNDS)
 #ifndef M2K_FW
 static uint8_t store_buf[STORE_MAX] POOL;
 #endif
@@ -467,8 +598,7 @@ static void refresh_demos(m2k_img_t *im, int rev)
             for (int t = 0; t < M2K_TRACKS; t++) for (int s = 0; s < M2K_STEPS; s++) trigs += o->step[t][s].flags & ST_TRIG;
             if (trigs) continue;
         }
-        int n = pat_pack(&pat[i], blob);
-        img_put(im, i, blob, n);
+        img_put_pat(im, i, PAT(i));
     }
 }
 
@@ -491,6 +621,9 @@ static int store_pack_nk(int n, int k)
     uint8_t sh[2] = {'S', M2K_SOUNDS};
     st_put(sh, 2);
     st_put(snd, sizeof snd);
+    sh[0] = 'C';                                        /* their categories */
+    st_put(sh, 2);
+    st_put(snd_cat, sizeof snd_cat);
     return st_bad ? 0 : (int)st_at;
 }
 
@@ -514,26 +647,35 @@ int m2k_store_unpack(int len)
     int np = ver >= 3 ? o[8] : M2K_PATTERNS, nk = ver >= 3 ? o[9] : M2K_PROJECTS;   /* before 3: this build's own */
     if (np < 1 || np > 64 || nk < 1 || nk > 16) return 0;
     if (!st_get(set, S_COUNT, n)) return 0;
+#if PAT_CACHE
+    pat_drop();                                             /* the working image is about to be replaced */
+    if (!deser_img(&work_img, n, 1, np)) { projects_factory(); return 0; }
+#else
     if (!deser_img(&work_img, n, 1, np)) return 0;          /* the working patterns, in the scratch image */
+#endif
     for (int i = 0; i < nk; i++)
         if (!deser_img(i < M2K_PROJECTS ? &proj[i] : 0, n, 1, np)) { projects_factory(); return 0; }
     for (int i = nk; i < M2K_PROJECTS; i++) {               /* projects the store has not: blank ones */
         char nm[8] = {'P', (char)('1' + i), 0};
-        pattern_init_blank(&pat_tmp);
-        int bn = pat_pack(&pat_tmp, blob);
         img_clear(&proj[i], nm);
-        for (int j = 0; j < M2K_PATTERNS; j++) img_put(&proj[i], j, blob, bn);
     }
     uint8_t sh[2];
     if (ver >= 3 && st_get(sh, 2, n) && sh[0] == 'S') {   /* the sound library: the slots this build keeps */
         m_set(snd, 0, sizeof snd);
+        m_set(snd_cat, 0, sizeof snd_cat);
         for (int i = 0; i < sh[1]; i++) {
             m2k_sound_t tmp;
             if (!st_get(&tmp, sizeof tmp, n)) break;
             if (i < M2K_SOUNDS) { snd[i] = tmp; snd[i].name[7] = 0; if (snd[i].machine >= M_COUNT) snd[i].name[0] = 0; }
         }
+        if (st_get(sh, 2, n) && sh[0] == 'C')           /* the categories (a store before them: guessed) */
+            for (int i = 0; i < sh[1]; i++) { uint8_t c; if (!st_get(&c, 1, n)) break; if (i < M2K_SOUNDS) snd_cat[i] = c < CAT_COUNT ? c : 0; }
+        for (int i = 0; i < M2K_SOUNDS; i++)
+            if (snd[i].name[0] && !snd_cat[i]) snd_cat[i] = (uint8_t)sound_guess(snd[i].machine, snd[i].kit, 127, 0);
     }
-    if (rev < FACTORY_REV && name_is(proj[0].name, "DEMO")) {      /* today's demos, where the old ones still are */
+    /* today's demos, where the old ones still are (not with the cache: the factory would write into the working
+     * image being read; the FM-1 takes new demos through the Patch Editor) */
+    if (!PAT_CACHE && rev < FACTORY_REV && name_is(proj[0].name, "DEMO")) {
         factory();
         refresh_demos(&proj[0], rev);
         if (o[5] == 0) refresh_demos(&work_img, rev);

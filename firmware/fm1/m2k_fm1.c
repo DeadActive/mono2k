@@ -12,9 +12,10 @@
 #ifndef APP_VER
 #define APP_VER "0.0"
 #endif
-/* the store's region: the last 64 KiB of the family's data area (Felucca's projects and samples live in it too) */
-#define BANK_AT 0x000D0000u
-#define BANK_LEN 0x00010000u
+/* the store's region: the last 128 KiB of the family's data area before the update's staging (0x93000..0xE0000;
+ * Felucca's projects and samples live in that area too) */
+#define BANK_AT 0x000C0000u
+#define BANK_LEN 0x00020000u
 #define CV_MAX (240u * 18u)                     /* the platform's text: a line of FONT_S at a time (crash, update, rescue) */
 #define APP_SYSEX app_sysex                     /* the Patch Editor's link (below) */
 #include "platform.c"

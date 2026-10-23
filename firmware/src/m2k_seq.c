@@ -5,6 +5,7 @@
 
 static struct {
     uint8_t playing, step, queued, rec;
+    uint8_t full;                      /* a pattern queued could not open (the FM-1's patterns full): for the screen */
     int32_t ctr;                       /* Q8 samples to the next step */
     uint32_t lockmap[M2K_TRACKS][2];   /* steps with locks, for the screen */
     /* live play */
@@ -69,7 +70,7 @@ static void mx_note_off(int t)
 
 static void mx_gate_end(int ti) { mx_note_off(ti); }
 
-static inline const uint8_t *G(void) { return pat[cur_pat].glob; }
+static inline const uint8_t *G(void) { return PAT(cur_pat)->glob; }
 static inline uint32_t seq_bpm(void) { return ext_bpm ? ext_bpm : 30u + G()[G_TMPO]; }
 static inline int seq_len(void) { int l = G()[G_LEN]; return l < 1 ? 1 : l > 64 ? 64 : l; }
 
@@ -100,14 +101,14 @@ static int32_t step_len(int s)
 static void lockmap_build(void)
 {
     m_set(sq.lockmap, 0, sizeof sq.lockmap);
-    const m2k_pattern_t *p = &pat[cur_pat];
+    const m2k_pattern_t *p = PAT(cur_pat);
     for (int i = 0; i < M2K_LOCKS; i++)
         if (p->lock[i].trk < M2K_TRACKS) sq.lockmap[p->lock[i].trk][p->lock[i].step >> 5] |= 1u << (p->lock[i].step & 31);
 }
 
 static int lock_find(int t, int s, int prm)
 {
-    const m2k_pattern_t *p = &pat[cur_pat];
+    const m2k_pattern_t *p = PAT(cur_pat);
     for (int i = 0; i < M2K_LOCKS; i++)
         if (p->lock[i].trk == t && p->lock[i].step == s && p->lock[i].param == prm) return i;
     return -1;
@@ -115,7 +116,7 @@ static int lock_find(int t, int s, int prm)
 
 static int lock_set(int t, int s, int prm, int v)
 {
-    m2k_pattern_t *p = &pat[cur_pat];
+    m2k_pattern_t *p = PAT(cur_pat);
     int i = lock_find(t, s, prm);
     if (i < 0)
         for (i = 0; i < M2K_LOCKS && p->lock[i].trk != 0xFF; i++)
@@ -128,7 +129,7 @@ static int lock_set(int t, int s, int prm, int v)
 
 static void lock_clear_step(int t, int s)
 {
-    m2k_pattern_t *p = &pat[cur_pat];
+    m2k_pattern_t *p = PAT(cur_pat);
     for (int i = 0; i < M2K_LOCKS; i++)
         if (p->lock[i].trk == t && p->lock[i].step == s) p->lock[i].trk = 0xFF;
     sq.lockmap[t][s >> 5] &= ~(1u << (s & 31));
@@ -138,7 +139,7 @@ static inline int has_locks(int t, int s) { return (sq.lockmap[t][s >> 5] >> (s 
 
 static void apply_locks(int t, int s)
 {
-    const m2k_pattern_t *p = &pat[cur_pat];
+    const m2k_pattern_t *p = PAT(cur_pat);
     m_cpy(trk[t].eff, p->kit[t], P_COUNT);
     if (!has_locks(t, s)) return;
     for (int i = 0; i < M2K_LOCKS; i++)
@@ -147,7 +148,7 @@ static void apply_locks(int t, int s)
 
 static int32_t gate_blocks(int t)
 {
-    int32_t gl = pat[cur_pat].kit[t][P_GATE];
+    int32_t gl = PAT(cur_pat)->kit[t][P_GATE];
     if (gl < 1) gl = 1;
     return (int32_t)(((sps_q8 >> 8) * (uint32_t)gl) / (16u * M2K_SUB)) + 1;
 }
@@ -175,7 +176,7 @@ static int cond_pass(int t, int c)
 
 static void fire_step(int s)
 {
-    m2k_pattern_t *p = &pat[cur_pat];
+    m2k_pattern_t *p = PAT(cur_pat);
     for (int t = 0; t < M2K_TRACKS; t++) {
         m2k_step_t st = p->step[t][s];
         if (!(st.flags & ST_TRIG) || (p->mute >> t & 1)) continue;
@@ -209,10 +210,14 @@ static void step_next(void)
     if (++sq.step >= seq_len()) {
         sq.step = 0;
         sq.loops++;
+        if (sq.queued != cur_pat && !pat_can_open(sq.queued)) {   /* the FM-1's patterns full: this one plays on */
+            sq.queued = (uint8_t)cur_pat;
+            sq.full = 1;
+        }
         if (sq.queued != cur_pat) {
             cur_pat = sq.queued;
             lockmap_build();
-            for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[cur_pat].kit[t], P_COUNT);
+            for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, PAT(cur_pat)->kit[t], P_COUNT);
         }
     }
 }
@@ -255,7 +260,7 @@ static void seq_block(void)
         }
     }
     /* the arp, on its own clock */
-    const uint8_t *k = pat[cur_pat].kit[sq.ktrk];
+    const uint8_t *k = PAT(cur_pat)->kit[sq.ktrk];
     int mode = (k[P_AMOD] * 6) >> 7;
     if (mode && sq.nheld) {
         static const uint8_t div[4] = {2, 4, 8, 16};     /* in 1/8 of a sixteenth: 1/32 .. 1/4 */
@@ -284,7 +289,7 @@ static void seq_block(void)
             default: i = sq.arp_i % n; sq.arp_i++; break;
             }
             int note = sorted[i % sq.nheld] + 12 * (i / sq.nheld);
-            m_cpy(trk[sq.ktrk].eff, pat[cur_pat].kit[sq.ktrk], P_COUNT);
+            m_cpy(trk[sq.ktrk].eff, PAT(cur_pat)->kit[sq.ktrk], P_COUNT);
             voice_on(sq.ktrk, note, 100, 0);
             trk[sq.ktrk].gate_left = gate_blocks(sq.ktrk) / 2 + 1;
         }
@@ -351,22 +356,40 @@ static void live_on(int note, int vel)
     int t = sq.ktrk;
     for (int i = 0; i < sq.nheld; i++) if (sq.held[i] == note) return;
     if (sq.nheld < 8) sq.held[sq.nheld++] = (uint8_t)note;
-    int mode = (pat[cur_pat].kit[t][P_AMOD] * 6) >> 7;
+    int mode = (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7;
     if (mode) {
         if (sq.nheld == 1) { sq.arp_ctr = 0; sq.arp_i = 0; }
         return;
     }
-    m_cpy(trk[t].eff, pat[cur_pat].kit[t], P_COUNT);
+    m_cpy(trk[t].eff, PAT(cur_pat)->kit[t], P_COUNT);
     /* heard alike at any velocity, as the Monomachine plays a note (chain_kick40); a hard key records an accent */
-    voice_on(t, note, 100, sq.nheld > 1 && pat[cur_pat].kit[t][P_PORT] > 0);
+    voice_on(t, note, 100, sq.nheld > 1 && PAT(cur_pat)->kit[t][P_PORT] > 0);
     trk[t].gate_left = -1;
     if (sq.rec && sq.playing) {        /* to the nearest step; ahead of us, it must not play again this time */
         int32_t len = step_len(sq.step ? sq.step - 1 : seq_len() - 1);
         int s = sq.step ? sq.step - 1 : seq_len() - 1;
         if (sq.ctr < len / 2) { s = sq.step; sq.rec_skip[t] = (int8_t)s; }
-        m2k_step_t *st = &pat[cur_pat].step[t][s];
+        m2k_step_t *st = &PAT(cur_pat)->step[t][s];
         st->note = (uint8_t)note;
         st->flags = (uint8_t)(ST_TRIG | (vel > 110 ? ST_ACC : 0));
+    }
+}
+
+/* a pad (the keys in PADS): track t hit at a note as a step trigs it, its gate a step's; while REC plays, written to
+ * the nearest step of that track */
+static void pad_hit(int t, int note)
+{
+    m_cpy(trk[t].eff, PAT(cur_pat)->kit[t], P_COUNT);
+    voice_trig(t, note, 100, 0, 0);
+    trk[t].gate_left = gate_blocks(t);
+    if (set_on(S_NOTO)) { mx_note_off(t); mx_out(3, 0x90 | ((midi_ch() + t) & 15), note, 100); mx.on[t] = (uint8_t)note; }
+    if (sq.rec && sq.playing) {
+        int32_t len = step_len(sq.step ? sq.step - 1 : seq_len() - 1);
+        int s = sq.step ? sq.step - 1 : seq_len() - 1;
+        if (sq.ctr < len / 2) { s = sq.step; sq.rec_skip[t] = (int8_t)s; }
+        m2k_step_t *st = &PAT(cur_pat)->step[t][s];
+        st->note = (uint8_t)note;
+        st->flags = ST_TRIG;
     }
 }
 
@@ -375,7 +398,7 @@ static void live_off(int note)
     int t = sq.ktrk, j = 0;
     for (int i = 0; i < sq.nheld; i++) if (sq.held[i] != note) sq.held[j++] = sq.held[i];
     sq.nheld = (uint8_t)j;
-    int mode = (pat[cur_pat].kit[t][P_AMOD] * 6) >> 7;
+    int mode = (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7;
     if (mode) return;
     if (j && trk[t].note == note) {
         voice_on(t, sq.held[j - 1], 100, 1);         /* back to the last key still held */
@@ -416,20 +439,20 @@ void m2k_midi(int status, int d1, int d2)
     }
     if (cmd == 0xB0) {
         if (d1 == 3) {
-            pat[cur_pat].mute = (uint8_t)((pat[cur_pat].mute & ~(1u << t)) | (d2 ? 1u << t : 0));
+            PAT(cur_pat)->mute = (uint8_t)((PAT(cur_pat)->mute & ~(1u << t)) | (d2 ? 1u << t : 0));
             return;
         }
         int prm = mm_cc_param(d1);
         if (prm < 0) return;
         int v = d2 > 127 ? 127 : d2;
         if (prm == P_LFO + L_DEST || prm == P_LFO + 8 + L_DEST || prm == P_LFO + 16 + L_DEST) v = v > P_COUNT ? P_COUNT : v;
-        pat[cur_pat].kit[t][prm] = (uint8_t)v;
+        PAT(cur_pat)->kit[t][prm] = (uint8_t)v;
         trk[t].eff[prm] = (uint8_t)v;
         return;
     }
     if (cmd == 0x90 && d2) {
         if (t == sq.ktrk) { live_on(d1, d2); return; }
-        m_cpy(trk[t].eff, pat[cur_pat].kit[t], P_COUNT);
+        m_cpy(trk[t].eff, PAT(cur_pat)->kit[t], P_COUNT);
         voice_on(t, d1, 100, 0);                    /* any velocity alike, as the Monomachine's (no accent) */
         trk[t].gate_left = -1;
     } else if (cmd == 0x80 || cmd == 0x90) {
@@ -562,7 +585,7 @@ void m2k_init(uint32_t seed)
     cur_pat = 0;
     sq.queued = 0;
     lockmap_build();
-    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[0].kit[t], P_COUNT);
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, PAT(0)->kit[t], P_COUNT);
     seq_tempo();
     ui_init();
 }

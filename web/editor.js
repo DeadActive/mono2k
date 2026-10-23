@@ -239,7 +239,7 @@
   function sessionShow() {
     const when = getLS(WHEN_KEY);
     $("ed-src").textContent = session === "fm1"
-      ? `Editing the FM-1's patterns (bank A) and sounds${when ? ", as read " + when : ""}. Kept apart from this browser's saves: send them back to the FM-1, or save a file.`
+      ? `Editing the FM-1's patterns and sounds${when ? ", as read " + when : ""}. Kept apart from this browser's saves: send them back to the FM-1, or save a file.`
       : "Editing this browser's saves, the emulator's. Read from the FM-1 to edit its patterns instead.";
     $("ed-src-back").hidden = session !== "fm1";
   }
@@ -283,7 +283,7 @@
         const h = await ask(port, LK.HELLO, [], 1500);
         if (h[0] === 0 && h[1] >= 1) {
           const fw = String.fromCharCode(...h.subarray(8, 24)).replace(/\0.*$/, "");
-          fm1 = { ...port, patterns: h[2], projects: h[3], sounds: h[4] };
+          fm1 = { ...port, patterns: h[2], projects: h[3], sounds: h[4], room: h.length >= 28 ? rd32(h, 24) : 0 };
           acc.onstatechange = (ev) => {
             if (fm1 && ev.port.state === "disconnected" && (ev.port === fm1.input || ev.port === fm1.output)) {
               fm1.input.removeEventListener("midimessage", fm1Msg);
@@ -371,8 +371,26 @@
     sessionShow();
     send({ t: "names" });
   }
+  /* a store's images' sizes (version 3: the header, the settings, then each image's name, size, lengths, data) */
+  function imageSizes(b) {
+    if (b.length < 10 || b[4] < 3) return [];
+    const np = b[8], nk = b[9], out = [];
+    let at = 10 + 16;
+    for (let i = 0; i < 1 + nk && at + 12 <= b.length; i++) {
+      const used = rd32(b, at + 8);
+      out.push(used);
+      at += 12 + 2 * np + used;
+    }
+    return out;
+  }
   function packed(m) {
-    if (m.why === "send") { fm1Write(m.bytes); return; }
+    if (m.why === "send") {
+      const big = Math.max(0, ...imageSizes(m.bytes));
+      if (fm1 && fm1.room && big > fm1.room)
+        return linkSay(`These patterns take ${(big / 1024).toFixed(1)} KB; the FM-1 keeps ${(fm1.room / 1024).toFixed(1)} KB. Clear or INIT some patterns first.`, "err");
+      fm1Write(m.bytes);
+      return;
+    }
     if (m.why !== "file") return;
     const d = new Date(), day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const a = document.createElement("a");
@@ -382,7 +400,7 @@
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    status(`Saved ${a.download}: ${m.fm1 ? "the FM-1's 16 patterns and its sounds" : "this browser's projects and sounds"}.`);
+    status(`Saved ${a.download}: ${m.fm1 ? "the FM-1's patterns and its sounds" : "this browser's projects and sounds"}.`);
   }
 
   $("ed-fm1-go").addEventListener("click", fm1Connect);
@@ -393,16 +411,16 @@
   $("ed-fm1-send").addEventListener("click", () => {
     const what = session === "fm1" ? "These patterns and sounds" : "Bank A of this browser's open project, and its sounds,";
     if (!confirm(`${what} replace what the FM-1 keeps. Send them?`)) return;
-    send({ t: "pack", fm1: true, why: "send" });
+    send({ t: "pack", fm1: true, patterns: fm1.patterns, why: "send" });
   });
-  $("ed-file-save").addEventListener("click", () => send({ t: "pack", fm1: session === "fm1", why: "file" }));
+  $("ed-file-save").addEventListener("click", () => send({ t: "pack", fm1: session === "fm1", patterns: fm1 ? fm1.patterns : 64, why: "file" }));
   $("ed-file-open").addEventListener("change", async (ev) => {
     const f = ev.target.files[0];
     ev.target.value = "";
     if (!f) return;
     const b = new Uint8Array(await f.arrayBuffer());
     if (b.length < 10 || b[0] !== 0x4d || b[1] !== 0x32 || b[2] !== 0x4b || b[3] !== 0x32) { status(`${f.name} is not a MONO2K store (.m2ks).`); return; }
-    const fm1File = b[4] >= 3 && b[8] === 16 && b[9] === 1;
+    const fm1File = b[4] >= 3 && b[9] === 1;
     if (!confirm(fm1File ? `Open ${f.name} as the FM-1's patterns? It replaces the FM-1 copy edited here (the FM-1 itself only when you send it).`
                          : `Open ${f.name} in place of this browser's saves? The emulator plays it too.`)) return;
     pendingSession = fm1File ? "fm1" : "browser";
@@ -444,7 +462,7 @@
           render();
         } else if (m.t === "names") {
           const sel = $("ed-pattern"), keep = curPat;
-          sel.innerHTML = m.pats.slice(0, session === "fm1" ? 16 : m.pats.length).map((nm, i) => `<option value="${i}">${"ABCD"[i >> 4]}${String((i & 15) + 1).padStart(2, "0")} ${esc(nm)}</option>`).join("");
+          sel.innerHTML = m.pats.map((nm, i) => `<option value="${i}">${"ABCD"[i >> 4]}${String((i & 15) + 1).padStart(2, "0")} ${esc(nm)}</option>`).join("");
           if (keep >= 0) sel.value = String(keep);
         } else if (m.t === "store") {
           saveStore(m.bytes);

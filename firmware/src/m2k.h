@@ -15,7 +15,7 @@
 #define M2K_PATTERNS  64          /* per project: 4 banks of 16 (the FM-1's first build: 16, bank A, for its RAM) */
 #endif
 #define M2K_BANKS     (M2K_PATTERNS / 16)
-#define M2K_SOUNDS    64          /* the sound library: four banks of 16 */
+#define M2K_SOUNDS    128         /* the sound library: S001..S128 */
 #ifndef M2K_PROJECTS
 #define M2K_PROJECTS  4           /* (the FM-1's first build: 1) */
 #endif

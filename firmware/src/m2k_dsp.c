@@ -1046,13 +1046,34 @@ static void lfo_trig(trk_t *t)
 
 /* ---------------------------------------------------------------------------------------------- voices */
 
-/* the store: the patterns, then the settings */
+/* the store: the working patterns, then the settings. PAT(i) is pattern i. Where RAM is short (the FM-1:
+ * M2K_PAT_SLOTS 2) two patterns are unpacked at a time, the rest packed in the working image (m2k_proj.c, pat_load);
+ * elsewhere every pattern is (and pat[i] is pattern i too) */
+#ifndef M2K_PAT_SLOTS
+#define M2K_PAT_SLOTS M2K_PATTERNS
+#endif
 static struct {
-    m2k_pattern_t p[M2K_PATTERNS];
+    m2k_pattern_t p[M2K_PAT_SLOTS];
     uint8_t set[S_COUNT];
 } store_ POOL;
-#define pat (store_.p)
 static int cur_pat;
+#if M2K_PAT_SLOTS < M2K_PATTERNS
+#if M2K_PAT_SLOTS != 2
+#error "the pattern cache keeps two patterns unpacked"
+#endif
+#define PAT_CACHE 1
+static int16_t pat_idx[2] = {-1, -1};           /* the pattern each slot holds, -1 none */
+static m2k_pattern_t *pat_load(int i);
+static inline m2k_pattern_t *PAT(int i)
+{
+    return pat_idx[0] == i ? &store_.p[0] : pat_idx[1] == i ? &store_.p[1] : pat_load(i);
+}
+#else
+#define PAT_CACHE 0
+#define PAT(i) (&store_.p[(i)])
+#define pat (store_.p)
+#endif
+static int pat_can_open(int j);                  /* (m2k_proj.c) may pattern j become the playing one */
 static uint8_t master_vol = 100;
 
 /* a trig: the note always (a trigless trig moves the pitch too), then the amp (and the machine with it), the filter's
@@ -1076,7 +1097,7 @@ static void voice_trig(int ti, int note, int vel, int slide, unsigned skip)
         t->sounding = 1;
         t->astage = 1;
         if (t->eff[P_ATK] == 0) t->aenv = 0;  /* percussive: start from zero, the click is the point */
-        mach_trig(t, pat[cur_pat].machine[ti]);
+        mach_trig(t, PAT(cur_pat)->machine[ti]);
     }
     if (!(skip & ST_NOFLT)) {
         t->fstage = 1;
@@ -1146,7 +1167,7 @@ static inline int32_t mod_tick(trk_t *t, int16_t *buf, int32_t x, int type, uint
 static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t *rsend)
 {
     trk_t *t = &trk[ti];
-    const m2k_pattern_t *pp = &pat[cur_pat];
+    const m2k_pattern_t *pp = PAT(cur_pat);
     int m = pp->machine[ti];
     if (t->gate_left > 0 && --t->gate_left == 0) { t->gate = 0; t->gate_left = -1; mx_gate_end(ti); }   /* the step's gate:
                                                                                          * hold and decay go on */

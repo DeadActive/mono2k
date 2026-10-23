@@ -176,7 +176,7 @@ static inline int32_t adpcm_step(int c, int32_t x)
 /* the sequencer calls this on every sixteenth: maybe start a repeat */
 static void bus_step(void)
 {
-    const uint8_t *g = pat[cur_pat].glob;
+    const uint8_t *g = PAT(cur_pat)->glob;
     if (!g[G_GLCH] || bus.g_on) return;
     if ((rnd32() & 0xFFFF) >= T_GLCH_P[g[G_GLCH]]) return;     /* a sixteenth's chance: 0.3 % at 1, 3.9 % at 64, 50 % at 127 */
     static const uint8_t frac4[5] = {1, 2, 4, 8, 16};          /* 1/64 .. 1/4 in quarters of a sixteenth */
@@ -199,7 +199,7 @@ static void bus_step(void)
 
 static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out)
 {
-    const uint8_t *g = pat[cur_pat].glob;
+    const uint8_t *g = PAT(cur_pat)->glob;
     /* reverb at half rate */
     int verb = g[G_VERB];
     if (verb) {
@@ -358,7 +358,7 @@ static void par_job(void)
  * that), and the sounding tracks are shared out, the first core keeping the bus (worth about two) */
 static int par_split(void)
 {
-    const uint8_t *mc = pat[cur_pat].machine;
+    const uint8_t *mc = PAT(cur_pat)->machine;
     int best = M2K_TRACKS, cost = 99, n[M2K_TRACKS + 1] = {0};
     for (int t = 0; t < M2K_TRACKS; t++) n[t + 1] = n[t] + (trk[t].sounding ? 2 : 0) + 1;
     for (int s = 1; s < M2K_TRACKS; s++) {
@@ -382,7 +382,7 @@ void m2k_render(int16_t *lr, int frames)
         m_set(L, 0, sizeof L);
         m_set(R, 0, sizeof R);
         m_set(rs, 0, sizeof rs);
-        hold_bpm = ext_bpm ? ext_bpm : 30u + pat[cur_pat].glob[G_TMPO];
+        hold_bpm = ext_bpm ? ext_bpm : 30u + PAT(cur_pat)->glob[G_TMPO];
         PROF(0);
         int split = M2K_TRACKS;
         if (m2k_par_begin) {

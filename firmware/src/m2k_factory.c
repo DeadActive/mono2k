@@ -477,7 +477,7 @@ static void kit_v4(m2k_pattern_t *p, int t, int m)
  * (16 on it, 8 an octave), DTIM in 256ths of a note, DSND from 64 (below keeps the side, above ping-pongs) */
 static m2k_pattern_t *pat_v5(int i, const char *name, int bpm, const uint8_t *machines)
 {
-    m2k_pattern_t *p = &pat[i];
+    m2k_pattern_t *p = PAT(i);
     pat_init(p, name);
     for (int t = 0; t < M2K_TRACKS; t++) {
         kit_default(p, t, machines[t]);
@@ -1286,17 +1286,17 @@ static void factory(void)
      * today's, once (every other part is written on today's) */
     static const uint8_t OLD_SLOTS[] = {11};
     for (unsigned i = 0; i < sizeof OLD_SLOTS; i++) {
-        ens_v6(&pat[OLD_SLOTS[i]]);
-        bus_v9(&pat[OLD_SLOTS[i]]);
+        ens_v6(PAT(OLD_SLOTS[i]));
+        bus_v9(PAT(OLD_SLOTS[i]));
     }
     /* the parts with an FM+ track, written on MONO2K's old FM pages: onto the Monomachine's, once, until each is
      * voiced on them */
     static const uint8_t FM_OLD[] = {1, 3, 4, 6, 10, 11, 15};   /* CUTUP GRISTLE CAROM VESPER RIVETS SYRUP SPLICE */
-    for (unsigned i = 0; i < sizeof FM_OLD; i++) fm_v9(&pat[FM_OLD[i]]);
+    for (unsigned i = 0; i < sizeof FM_OLD; i++) fm_v9(PAT(FM_OLD[i]));
     /* and every part, its GND-SIN tracks written on that machine's old page (TUNE first): onto the Monomachine's */
-    for (int i = 0; i < 16; i++) gsin_v11(&pat[i]);
+    for (int i = 0; i < 16; i++) gsin_v11(PAT(i));
     /* and its HOLDs, written in 14.6 ms steps (the times in the comments): in beats at the part's tempo, once */
-    for (int i = 0; i < 16; i++) hold_v12(&pat[i]);
+    for (int i = 0; i < 16; i++) hold_v12(PAT(i));
     /* and its VOX-6 tracks (A02 CUTUP's), written on MONO2K's old page: onto VO-6's, once */
-    for (int i = 0; i < 16; i++) vox_v13(&pat[i]);
+    for (int i = 0; i < 16; i++) vox_v13(PAT(i));
 }

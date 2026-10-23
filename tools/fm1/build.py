@@ -157,8 +157,9 @@ def build_loader():
 
 # the second core renders some tracks of each block (the core's m2k_par_begin; DUAL=0 in the environment: one core)
 DUAL = 0 if os.environ.get("DUAL") == "0" else 1
-# the FM-1's first build: one project of 16 patterns (bank A), in its RAM (README: the FM-1 build)
-CORE = ["-DM2K_FW=1", "-DM2K_PATTERNS=16", "-DM2K_PROJECTS=1", "-DM2K_IMG_DATA=28672"]
+# the FM-1's build: one project of 64 patterns (bank A the demos, B-D INIT), two of them unpacked at a time, the rest
+# packed in a 46 KB working image (README: the FM-1 build)
+CORE = ["-DM2K_FW=1", "-DM2K_PATTERNS=64", "-DM2K_PAT_SLOTS=2", "-DM2K_PROJECTS=1", "-DM2K_IMG_DATA=47104"]
 
 
 def build_app():
