@@ -6,6 +6,7 @@
 static struct {
     uint8_t playing, step, queued, rec;
     uint8_t full;                      /* a pattern queued could not open (the FM-1's patterns full): for the screen */
+    uint8_t jump;                      /* the queued pattern now, at the next step (HOME + its key again) */
     int32_t ctr;                       /* Q8 samples to the next step */
     uint32_t lockmap[M2K_TRACKS][2];   /* steps with locks, for the screen */
     /* live play */
@@ -207,7 +208,8 @@ static void fire_step(int s)
 
 static void step_next(void)
 {
-    if (++sq.step >= seq_len()) {
+    if (++sq.step >= seq_len() || (sq.jump && sq.queued != cur_pat)) {
+        sq.jump = 0;
         sq.step = 0;
         sq.loops++;
         if (sq.queued != cur_pat && !pat_can_open(sq.queued)) {   /* the FM-1's patterns full: this one plays on */

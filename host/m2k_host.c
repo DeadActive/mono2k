@@ -89,7 +89,12 @@ static const ev_t MANUAL[] = {
     {10300, 'b', B_HOME, 1, 0}, {10400, 'k', 2, 1, 0}, {10420, 'k', 2, 0, 0}, {11000, 's', 0, 0, "29_home_held"},
     {11100, 'b', B_HOME, 0, 0}, {11200, 'b', B_EDIT, 1, 0}, {11900, 's', 0, 0, "29b_edit_held"}, {12000, 'b', B_EDIT, 0, 0},
     {12100, 'b', B_SEQ, 1, 0}, {12800, 's', 0, 0, "29c_seq_held"}, {12900, 'b', B_SEQ, 0, 0},
-    {13000, 'x', 0, 0, 0},
+    {13000, 'b', B_HOME, 1, 0}, {13020, 'b', B_HOME, 0, 0}, {13600, 'b', B_GLO, 1, 0}, {13700, 'b', B_SEQ, 1, 0},
+    {14300, 's', 0, 0, "29d_clear_ring"}, {14400, 'b', B_SEQ, 0, 0}, {14420, 'b', B_GLO, 0, 0},
+    {14500, 'b', B_GLO, 1, 0}, {14520, 'b', B_GLO, 0, 0}, {14540, 'b', B_GLO, 1, 0}, {14560, 'b', B_GLO, 0, 0},
+    {14580, 'b', B_GLO, 1, 0}, {14600, 'b', B_GLO, 0, 0}, {14620, 'b', B_GLO, 1, 0}, {14640, 'b', B_GLO, 0, 0},
+    {15200, 'e', E_K3, 1, 0}, {15800, 's', 0, 0, "29e_ask"}, {15900, 'b', B_OCTD, 1, 0}, {15920, 'b', B_OCTD, 0, 0},
+    {16000, 'x', 0, 0, 0},
 };
 
 static void manual_scene(void)
@@ -1274,21 +1279,19 @@ static int selftest(void)
                   "format: every chord of bank A (ea69d53) keeps its notes through version 7, none in OFF");
         }
     }
-    /* the clipboard, a sound: track 6's copied with GLO + REC on its page, pasted onto track 1 with GLO + PLAY */
+    /* the clipboard, a sound: track 6's copied with EDIT held + REC, pasted onto track 1 with EDIT + PLAY */
     {
         m2k_init(7);
         uint32_t now = 100000;
         #define TAP_B(bb) do { m2k_button(bb, 1); m2k_frame(now += 20); m2k_button(bb, 0); m2k_frame(now += 20); } while (0)
-        #define GLO_B(bb) do { m2k_button(B_GLO, 1); m2k_frame(now += 20); TAP_B(bb); m2k_button(B_GLO, 0); m2k_frame(now += 20); } while (0)
+        #define GLO_B(bb) do { m2k_button(B_EDIT, 1); m2k_frame(now += 20); TAP_B(bb); m2k_button(B_EDIT, 0); m2k_frame(now += 20); } while (0)
         cur_pat = 0;
         m2k_track(5);
-        TAP_B(B_EDIT);                                           /* a track's page: the sound, not the pattern */
         GLO_B(B_REC);
         CHECK(!strcmp(ui.toast, "COPY") && !strcmp(ui.toast2, "T6 SOUND"), "clipboard: track 6's sound copied (T6 SOUND)");
         m2k_track(0);
-        TAP_B(B_EDIT);
         GLO_B(B_PLAY);
-        CHECK(!strcmp(ui.toast, "PASTE") && !strcmp(ui.toast2, "T1 SOUND") && pat[0].machine[0] == pat[0].machine[5] &&
+        CHECK(!strcmp(ui.toast, "T1 SOUND PASTED") && pat[0].machine[0] == pat[0].machine[5] &&
               !memcmp(pat[0].kit[0], pat[0].kit[5], P_COUNT), "clipboard: pasted onto track 1, machine and kit");
         #undef GLO_B
         #undef TAP_B
@@ -1346,11 +1349,11 @@ static int selftest(void)
         int c0 = ui.cursor;
         m2k_key(kw0, 1); m2k_key(kw0, 0);
         m2k_key(kw2, 1); m2k_key(kw2, 0);
-        m2k_button(B_GLO, 1); m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0); m2k_button(B_GLO, 0);
+        m2k_button(B_EDIT, 1); m2k_button(B_EDIT, 0);
         m2k_key(kw1, 1); m2k_key(kw1, 0);
         m2k_step_t *sp = pat[16].step[ui.trk];
         CHECK(sp[c0].note == 53 + kw0 && sp[c0 + 1].note == 53 + kw2 && !(sp[c0 + 2].flags & ST_TRIG) &&
-              sp[c0 + 3].note == 53 + kw1 && (sp[c0 + 3].flags & ST_TRIG), "keys: step entry writes notes, GLO + OCT+ a rest");
+              sp[c0 + 3].note == 53 + kw1 && (sp[c0 + 3].flags & ST_TRIG), "keys: step entry writes notes, EDIT a rest");
         TAP_B(B_REC);
         pat[16] = keep;
         m2k_pattern(0);
@@ -1596,11 +1599,10 @@ static int selftest(void)
         int saved = snd[100].machine == mach && snd[100].kit[P_DEC] == 77 && snd[100].name[0] && snd_cat[100];
         pat[16].kit[2][P_DEC] = 30;
         ui.now = 9000;
-        edit(2, 1);                                               /* over a sound: not yet */
-        int kept = snd[100].kit[P_DEC] == 77;
-        ui.now = 9500;
-        edit(2, 1);                                               /* the second turn replaces it */
-        int replaced = snd[100].kit[P_DEC] == 30;
+        edit(2, 1);                                               /* over a sound: asked */
+        int kept = snd[100].kit[P_DEC] == 77 && ask.kind == ASK_SND_OVER;
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);             /* YES */
+        int replaced = snd[100].kit[P_DEC] == 30 && !ask.kind;
         ui.trk = 4;
         edit(1, 1);                                               /* LOAD, once */
         int loaded = pat[16].machine[4] == mach && pat[16].kit[4][P_DEC] == 30 && trk[4].eff[P_DEC] == 30;
@@ -1612,7 +1614,7 @@ static int selftest(void)
         kit_default(&fresh, 4, mach);
         int init = pat[16].machine[4] == mach && !memcmp(pat[16].kit[4], fresh.kit[4], P_COUNT);
         CHECK(saved && kept && replaced && loaded && init,
-              "sounds: SAVE into INIT at once and over a sound on the second turn, LOAD once, INIT afresh");
+              "sounds: SAVE into INIT at once, over a sound when OCT+ says YES, LOAD once, INIT afresh");
         ui.snd_sel = 0;
         int c0 = snd_cat[0];
         edit(3, 1);                                               /* CAT: KICK */
@@ -1623,11 +1625,12 @@ static int selftest(void)
         CHECK(ui.snd_cat == CAT_KICK && shown_ok && n >= 32 && snd_shown(ui.snd_sel) && (c0 || 1),
               "sounds: CAT shows one category and the INIT slots; SLOT steps through those alone");
     }
-    /* GLO + SEQ clears the steps and keeps the sounds; again soon after, the pattern is INIT (on a track's page, its
-     * sound); GLO + EDIT opens the sound library; GLO + ARP makes the keys pads: white 1-6 and 9-14 hit T1-T6, written
-     * to the nearest step while REC plays */
+    /* the verbs: GLO + SEQ clears the pattern's steps (the sounds stay), again within 3 s undoes it, held a second
+     * makes it INIT; GLO + OCT- / OCT+ undo and redo; in GRID they act on the track; GLO + EDIT opens the library */
     {
         m2k_init(36);
+        m2k_pattern_t orig = pat[0], blank;
+        pattern_init_blank(&blank);
         ui.page = PG_HOME;
         ui.now = 1000;
         m2k_button(B_GLO, 1); m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);
@@ -1635,22 +1638,30 @@ static int selftest(void)
         for (int t = 0; t < M2K_TRACKS; t++) for (int st = 0; st < M2K_STEPS; st++) cleared &= !(pat[0].step[t][st].flags & ST_TRIG);
         int sounds = !strcmp(pat[0].name, "MAMMOTH") && pat[0].machine[2] == M_ENS;
         ui.now = 2000;
-        m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0); m2k_button(B_GLO, 0);
-        m2k_pattern_t blank;
-        pattern_init_blank(&blank);
-        int init = !memcmp(&pat[0], &blank, sizeof blank);
-        ui.page = PG_SYN;
-        ui.trk = 3;
-        pat[0].kit[3][P_DEC] = 11;
+        m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);                  /* again: undone */
+        int undone = !memcmp(&pat[0], &orig, sizeof orig);
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);                /* REDO: cleared again */
+        int redone = !(pat[0].step[0][0].flags & ST_TRIG) && !strcmp(pat[0].name, "MAMMOTH");
+        m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);                /* UNDO */
+        int undo2 = !memcmp(&pat[0], &orig, sizeof orig);
         ui.now = 9000;
-        m2k_button(B_GLO, 1); m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);
-        ui.now = 9500;
+        m2k_button(B_SEQ, 1);                                        /* held: the ring, then INIT */
+        ui.now = 9600; ring_tick();
+        int half = !strcmp(pat[0].name, "MAMMOTH");
+        ui.now = 10100; ring_tick();
+        m2k_button(B_SEQ, 0);
+        int init = !memcmp(&pat[0], &blank, sizeof blank);
+        m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);
+        int back = !memcmp(&pat[0], &orig, sizeof orig);
+        ui.grid = 1; ui.trk = 3;                                     /* in GRID: the track */
+        ui.now = 20000;
         m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);
-        int snd_init = pat[0].kit[3][P_DEC] == blank.kit[3][P_DEC];
+        int trk_only = !(pat[0].step[3][0].flags & ST_TRIG) && memcmp(pat[0].step[0], orig.step[0], sizeof orig.step[0]) == 0;
+        ui.grid = 0;
         m2k_button(B_EDIT, 1); m2k_button(B_EDIT, 0); m2k_button(B_GLO, 0);
         int lib = snd_page();
-        CHECK(cleared && sounds && init && snd_init && lib,
-              "GLO + SEQ: the steps clear, the sounds stay; twice: INIT (the pattern, or the track's sound); GLO + EDIT: SND");
+        CHECK(cleared && sounds && undone && redone && undo2 && half && init && back && trk_only && lib,
+              "GLO + SEQ: clear (sounds stay), again: undo, held: INIT; GLO + OCT-/+ undo, redo; in GRID the track; GLO + EDIT: SND");
         m2k_init(37);
         m2k_button(B_GLO, 1); m2k_button(B_ARP, 1); m2k_button(B_ARP, 0); m2k_button(B_GLO, 0);
         int pads = ui.pads && !ui.grid;
@@ -1669,27 +1680,30 @@ static int selftest(void)
         for (int st = 0; st < M2K_STEPS; st++) written += pat[0].step[0][st].flags & ST_TRIG ? 1 : 0;
         seq_play(0);
         CHECK(pads && hit && written == 1, "PADS (GLO + ARP): white keys hit T1-T6, each on its own; with REC, a trig written");
-        /* GLO > SET: WIPE turned twice makes every pattern INIT (the sounds kept); DEMO twice brings bank A's back */
+        /* GLO > SET: WIPE asks, OCT+ makes every pattern INIT (the sounds kept), OCT- or any other button keeps them;
+         * DEMO asks, OCT+ brings bank A's back */
         m2k_init(38);
         ui.page = PG_GLO; ui.sub = 3;
         ui.now = 3000;
         int wk = -1, dk = -1;
         for (int k = 0; k < 4; k++) { int c = knob_param(PG_GLO, 3, k); if (c == SETTING(22)) wk = k; if (c == SETTING(23)) dk = k; }
         edit(wk, 1);
-        int first = !strcmp(pat[0].name, "MAMMOTH");
+        m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);             /* NO */
+        int first = !strcmp(pat[0].name, "MAMMOTH") && !ask.kind;
         ui.now = 3500;
         edit(wk, 1);
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);             /* YES */
         int wiped = 1;
         for (int i = 0; i < M2K_PATTERNS; i++) wiped &= !strcmp(pat[i].name, "INIT");
         int kept = snd[0].name[0] != 0;
         int demos = 1;
         if (dk >= 0) {
-            ui.now = 6000; edit(dk, 1); ui.now = 6400; edit(dk, 1);
+            ui.now = 6000; edit(dk, 1); m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
             demos = !strcmp(pat[0].name, "MAMMOTH") && !strcmp(pat[15].name, "SPLICE") && !strcmp(pat[16].name, "INIT");
         }
-        CHECK(wk >= 0 && first && wiped && kept && demos, "GLO > SET: WIPE twice, every pattern INIT, the sounds kept; DEMO twice, bank A back");
-        /* HOME held: the white keys pick patterns, SEQ clears them (again: INIT), REC copies, PLAY pastes, OCT+ the
-         * next bank; EDIT held: SEQ INITs the sound, SAVE keeps it in the first INIT slot */
+        CHECK(wk >= 0 && first && wiped && kept && demos, "GLO > SET: WIPE asks (OCT- NO, OCT+ YES: every pattern INIT, the sounds kept); DEMO, bank A back");
+        /* HOME held: the white keys pick patterns, SEQ clears them (held: INIT), REC copies, PLAY pastes, the black
+         * keys 1-4 the bank; EDIT held: SEQ INITs the sound, SAVE keeps it in the first INIT slot */
         {
         m2k_init(39);
         ui.now = 1000;
@@ -1704,13 +1718,15 @@ static int selftest(void)
         for (int st = 0; st < M2K_STEPS; st++) others += pat[0].step[0][st].flags & ST_TRIG ? 1 : 0;
         int sounds = !strcmp(pat[1].name, "CUTUP");
         ui.now = 1500;
-        m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);
+        m2k_button(B_SEQ, 1);                         /* held a second: INIT */
+        ui.now = 2600; ring_tick();
+        m2k_button(B_SEQ, 0);
         int init = !strcmp(pat[1].name, "INIT") && !strcmp(pat[4].name, "INIT");
         m2k_button(B_HOME, 0);
         m2k_pattern(0);
         m2k_button(B_HOME, 1);
         m2k_button(B_REC, 1); m2k_button(B_REC, 0);   /* copy A01 */
-        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0); /* bank B */
+        m2k_key(3, 1); m2k_key(3, 0);                 /* G#3, black 2: bank B */
         m2k_key(4, 1); m2k_key(4, 0);                 /* A3, white 3: B03 */
         m2k_key(6, 1); m2k_key(6, 0);                 /* B3, white 4: B04 */
         m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0);
@@ -1718,7 +1734,7 @@ static int selftest(void)
         int pasted = 0;
         for (int i = 16; i < 32; i++) pasted += !strcmp(pat[i].name, "MAMMOTH");
         CHECK(picked && clr && others && sounds && init && pasted == 2 && sq.playing == 0,
-              "HOME held: keys pick patterns, SEQ clears them (sounds kept), again INIT; REC copies, OCT+ bank B, PLAY pastes");
+              "HOME held: keys pick patterns, SEQ clears them (sounds kept), held INIT; REC copies, black 2 bank B, PLAY pastes");
         m2k_init(40);
         ui.trk = 2;
         pat[0].kit[2][P_DEC] = 3;
@@ -1754,17 +1770,38 @@ static int selftest(void)
         int rev = (q->step[t][len - 1].flags & ST_TRIG) && q->step[t][len - 6].note == 55 && lock_find(t, len - 6, P_DEC) >= 0;
         m2k_key(4, 1); m2k_key(4, 0);                 /* A3, white 3: SHIFT < */
         int shl = (q->step[t][len - 2].flags & ST_TRIG) && lock_find(t, len - 7, P_DEC) >= 0;
-        m2k_key(11, 1); m2k_key(11, 0);               /* E4, white 7: COPY */
+        m2k_button(B_REC, 1); m2k_button(B_REC, 0);   /* REC: copy the track's steps */
         int len0 = PAT(cur_pat)->glob[G_LEN];
         edit(0, -1);                                  /* KNOB 1 in the layer: LEN */
         int lenk = PAT(cur_pat)->glob[G_LEN] == len0 - 1;
+        edit(0, 1);
         m2k_button(B_SEQ, 0);
         int nogrid = ui.grid == 0;
         ui.trk = (uint8_t)((t + 1) % M2K_TRACKS);
-        m2k_button(B_SEQ, 1); m2k_key(12, 1); m2k_key(12, 0); m2k_button(B_SEQ, 0);   /* F4, white 8: PASTE */
+        m2k_button(B_SEQ, 1); m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0); m2k_button(B_SEQ, 0);   /* PLAY: paste */
         int pasted = !memcmp(q->step[ui.trk], q->step[t], sizeof q->step[t]) && lock_find(ui.trk, len - 7, P_DEC) >= 0;
-        CHECK(tap && rev && shl && lenk && nogrid && pasted,
-              "SEQ: a tap is GRID; held, REVERSE, SHIFT and COPY / PASTE move the steps and their locks, KNOB 1 is LEN");
+        m2k_button(B_SEQ, 1); m2k_key(12, 1); m2k_key(12, 0); m2k_button(B_SEQ, 0);   /* F4, white 8: HALF */
+        int half = seq_len() == len / 2;
+        CHECK(tap && rev && shl && lenk && nogrid && pasted && half,
+              "SEQ: a tap is GRID; held, REVERSE and SHIFT move the steps and their locks, REC / PLAY copy and paste, HALF, KNOB 1 LEN");
+        /* a step held in GRID: REC copies it, PLAY pastes it onto another held, SEQ clears the held step's locks */
+        m2k_init(42);
+        ui.grid = 1; ui.trk = 0; ui.spage = 0;
+        m2k_pattern_t *r = &pat[0];
+        for (int st = 0; st < M2K_STEPS; st++) r->step[0][st].flags = 0;
+        for (int k = 0; k < M2K_LOCKS; k++) if (r->lock[k].trk == 0) r->lock[k].trk = 0xFF;
+        r->step[0][0].flags = ST_TRIG | ST_ACC; r->step[0][0].note = 67; lock_set(0, 0, P_DEC, 12);
+        m2k_key(0, 1);                                /* F3: step 1 held */
+        m2k_button(B_REC, 1); m2k_button(B_REC, 0);
+        m2k_key(0, 0);
+        m2k_key(7, 1);                                /* C4: step 5 held */
+        m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0);
+        int spasted = r->step[0][4].note == 67 && (r->step[0][4].flags & ST_ACC) && lock_find(0, 4, P_DEC) >= 0;
+        m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);   /* SEQ: its locks cleared, the step kept */
+        int lclr = lock_find(0, 4, P_DEC) < 0 && (r->step[0][4].flags & ST_TRIG);
+        m2k_key(7, 0);
+        int stays = (r->step[0][4].flags & ST_TRIG) && ui.grid == 1;
+        CHECK(spasted && lclr && stays, "a held step: REC copies it, PLAY pastes it onto another, SEQ clears its locks");
         }
     }
     /* the render on two cores (the FM-1's): the second core's tracks run before or after the first's (as they may,
