@@ -434,6 +434,19 @@ details.gl-dealt[open] > :not(summary) { animation: gl-deal 240ms steps(1, end);
 .bigbtn[disabled] { cursor: not-allowed; color: var(--ink); background: var(--paper); border: 1px solid var(--ink); background-image: var(--d-sparse); image-rendering: pixelated; }
 .bigbtn[disabled]:hover { outline: 0; }
 .bigbtn.alt { font: var(--title); padding: var(--s2) var(--s3); }
+/* the installer: what the FM-1 says, the write's progress, the files */
+.inst__log { margin-top: var(--s2); padding: var(--s1) var(--s2); max-width: 40em; font: 13px / 20px var(--mono); border: 1px solid var(--ink); border-left-width: 6px; overflow-wrap: anywhere; }
+.inst__log.ok { background-image: var(--d-sparse); image-rendering: pixelated; }
+.inst__log.ok, .inst__log.err { font-weight: 700; }
+.inst__log.err { border-style: dashed; }
+.inst__bar { display: block; width: 100%; max-width: 40em; height: var(--s2); margin-top: var(--s2); appearance: none; -webkit-appearance: none; border: 1px solid var(--ink); background: var(--paper); }
+.inst__bar::-webkit-progress-bar { background: var(--paper); }
+.inst__bar::-webkit-progress-value { background: var(--ink); }
+.inst__bar::-moz-progress-bar { background: var(--ink); }
+.inst .side table + table { margin-top: var(--s4); }
+.inst input[type="file"] { font: var(--small); color: var(--ink); }
+.inst input[type="file"]::file-selector-button { margin-right: var(--s1); padding: 4px var(--s2); font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; color: var(--paper); background: var(--ink); border: 1px solid var(--ink); border-radius: 0; cursor: pointer; }
+.inst .params summary { padding: var(--s1) 0; cursor: pointer; font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; }
 
 /* the patch editor: the bar, the tracks (the emulator's), the machine, then a card a page, a slider a knob */
 .ed { position: relative; z-index: 1; padding: var(--s6) var(--gut) var(--s12); }
