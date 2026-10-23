@@ -6,7 +6,9 @@
 //
 //   mm_ref ROM lcd DIR             the screen after assigning each machine number to track 1 (DIR/lcd_NN.pbm)
 //   mm_ref ROM render DIR < SPEC   one WAV per line of SPEC: name machine note velocity gate_s tail_s [cc=value ...]
-//                                  (mm:cc=value for this renderer alone, m2k:cc=value skipped)
+//                                  (mm:cc=value for this renderer alone, m2k:cc=value skipped; pre=MS the note played
+//                                  MS ms on the line's machine first, then 300 ms of rest: a note in sequence; bpm=N
+//                                  skipped, the tempo is set on the panel)
 //   mm_ref ROM pages DIR           GND-SIN's init pages, as the screen shows them, one per press of the page key
 //   mm_ref ROM loop DIR < LOOP     a loop over several tracks (tools/ref/power.loop), DIR/loop_mm.wav
 //   mm_ref ROM values DIR M CC     machine M's page as the screen shows each value 0..127 of controller CC
@@ -295,16 +297,25 @@ namespace
 			advance(*hw, g_rate / 2);
 			assign(*hw, 0, static_cast<uint8_t>(machine));
 			std::string kv;
+			unsigned pre = 0;
 			while(in >> kv)
 			{
 				// "m2k:cc=v" is MONO2K's alone (a control it keeps elsewhere); "mm:cc=v" is this instrument's alone
-				if(kv.rfind("m2k:", 0) == 0) continue;
+				if(kv.rfind("m2k:", 0) == 0 || kv.rfind("bpm=", 0) == 0) continue;
+				if(kv.rfind("pre=", 0) == 0) { pre = static_cast<unsigned>(std::stoi(kv.substr(4))); continue; }
 				if(kv.rfind("mm:", 0) == 0) kv = kv.substr(3);
 				const auto eq = kv.find('=');
 				require(eq != std::string::npos, "cc=value expected");
 				midi(*hw, 0xb0, static_cast<uint8_t>(std::stoi(kv.substr(0, eq))), static_cast<uint8_t>(std::stoi(kv.substr(eq + 1))));
 			}
 			advance(*hw, g_rate * 3 / 2);           // the controllers land one by one on the OS: let them all arrive
+			if(pre)                                 // a note before on the same machine: what a note in sequence hears
+			{
+				midi(*hw, 0x90, static_cast<uint8_t>(note), static_cast<uint8_t>(vel));
+				advance(*hw, g_rate / 1000 * pre);
+				midi(*hw, 0x80, static_cast<uint8_t>(note), 0);
+				advance(*hw, g_rate * 3 / 10);
+			}
 			std::vector<float> lr;
 			midi(*hw, 0x90, static_cast<uint8_t>(note), static_cast<uint8_t>(vel));
 			render(*hw, static_cast<uint32_t>(gate * g_rate), lr);

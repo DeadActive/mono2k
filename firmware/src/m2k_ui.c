@@ -148,7 +148,6 @@ static int kind_choices(int k);
 static int choice_of(int kind, int v)
 {
     int n = kind_choices(kind);
-    if (kind == K_CONS) return v <= 6 ? 0 : (v - 1) / 6 > 20 ? 20 : (v - 1) / 6;   /* the Monomachine's: - 0..6, then 6 each */
     return kind == K_FR24 ? fr24(v) : n ? (v * n) >> 7 : 0;
 }
 
@@ -497,7 +496,7 @@ static void edit(int k, int d)
     int v = knob_value(code);
     fmt(pi, ui.trk, v, old, &u);
     int n = kind_choices(pi->kind), nv;
-    if (n) { int c = CLAMP(choice_of(pi->kind, v) + d, 0, n - 1); nv = pi->kind == K_CONS ? (c ? 6 * c + 3 : 0) : enc(c, n); }
+    if (n) nv = enc(CLAMP(choice_of(pi->kind, v) + d, 0, n - 1), n);
     else nv = CLAMP(v + d, kind_min(pi->kind), kind_max(pi->kind));
     if (code == SETTING(16)) {
         ui.proj_sel = (uint8_t)((nv * M2K_PROJECTS) >> 7);

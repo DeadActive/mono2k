@@ -166,8 +166,15 @@ int main(int argc, char **argv)
         /* the line's controllers, through MONO2K's own copy of the Monomachine's CC map */
         const char *c = line;
         for (int f = 0; f < 6 && *c; f++) { while (*c && *c != ' ' && *c != '\t') c++; while (*c == ' ' || *c == '\t') c++; }
+        int pre = 0;
         while (*c && *c != '\n') {
             int cc, v, used, skip = 0;
+            if (!strncmp(c, "pre=", 4)) {   /* "pre=MS": the note played MS ms first, then 300 ms of rest (in sequence) */
+                if (sscanf(c + 4, "%d%n", &pre, &used) != 1 || pre < 0 || pre > 5000) break;
+                c += 4 + used;
+                while (*c == ' ' || *c == '\t') c++;
+                continue;
+            }
             /* "mm:cc=v" is the Monomachine's alone (a control MONO2K keeps elsewhere); "m2k:cc=v" is MONO2K's alone */
             if (!strncmp(c, "bpm=", 4)) {   /* "bpm=N": the pattern's tempo (the Monomachine's set on its panel) */
                 if (sscanf(c + 4, "%d%n", &v, &used) != 1 || v < 30 || v > 157) break;
@@ -199,6 +206,15 @@ int main(int argc, char **argv)
         }
         uint32_t g = (uint32_t)(gate * M2K_SR) & ~127u, tl = (uint32_t)(tail * M2K_SR) & ~127u;
         int16_t *s = calloc((size_t)(g + tl) * 2, sizeof *s);
+        if (pre) {
+            uint32_t pg = ((uint32_t)pre * (M2K_SR / 1000)) & ~127u, pr = (M2K_SR * 3 / 10) & ~127u;
+            int16_t *b = calloc((size_t)(pg > pr ? pg : pr) * 2, sizeof *b);
+            m2k_midi(0x90, note, vel);
+            run(b, pg, &ms);
+            m2k_midi(0x80, note, 0);
+            run(b, pr, &ms);
+            free(b);
+        }
         m2k_midi(0x90, note, vel);
         run(s, g, &ms);
         m2k_midi(0x80, note, 0);
