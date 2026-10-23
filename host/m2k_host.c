@@ -707,7 +707,7 @@ static int selftest(void)
         lk(&a, 0, 8, P_SYN + 1, 99);
         lk(&a, 0, 12, P_SYN, 65);
         int n = pat_pack(&a, bl);
-        CHECK(bl[1] == 14, "format: patterns are written as version 14");
+        CHECK(bl[1] == 15, "format: patterns are written as version 15");
         n = pat_pack_v(&a, bl, 4);
         CHECK(pat_unpack(&b, bl, n), "format: a version-4 pattern loads");
         CHECK(b.kit[0][P_DIST] == T_V5_DIST[34] && b.kit[0][P_DTIM] == 32 && b.kit[0][P_DSND] == 64 &&
@@ -1884,6 +1884,70 @@ static int selftest(void)
         seq_play(0);
         CHECK(tapped && sel && fillq && solo && unsolo && allon && saw_fill && fill_ends,
               "GLO: white 8 taps the tempo (120), SELECT turns it, 7 fills the next loop and only it, 9-14 solo while held, 15 unmutes all");
+    }
+    /* speeds: a track at 2x plays its steps twice as often as one at 1x, at 1/2x half as often, at 3/4x three quarters;
+     * a new pattern sets them going from its first step; SEQ held, KNOB 2 is the track's speed */
+    {
+        m2k_init(45);
+        m2k_pattern_t *q = &pat[0];
+        for (int t = 0; t < M2K_TRACKS; t++)
+            for (int st = 0; st < M2K_STEPS; st++) { q->step[t][st].flags = st < seq_len() ? ST_TRIG : 0; q->step[t][st].cond = 0; q->step[t][st].rtrg = 0; }
+        for (int k = 0; k < M2K_LOCKS; k++) q->lock[k].trk = 0xFF;
+        q->glob[G_SWNG] = 0;
+        q->glob[G_SPD1 + 1] = enc(6, 7);              /* T2 2x */
+        q->glob[G_SPD1 + 2] = enc(2, 7);              /* T3 1/2x */
+        q->glob[G_SPD1 + 3] = enc(3, 7);              /* T4 3/4x */
+        int cnt[M2K_TRACKS] = {0};
+        uint8_t last[M2K_TRACKS];
+        for (int t = 0; t < M2K_TRACKS; t++) last[t] = (uint8_t)mon.trig[t];
+        seq_play(1);
+        static int16_t sb[256];
+        int32_t bar = (int32_t)(sps_q8 >> 8) * 16;   /* a pattern of 16, in samples */
+        for (int f = 0; f < bar * 4 - 128; f += 16) {   /* (the trig counter is a byte: counted a block at a time) */
+            m2k_render(sb, 16);
+            for (int t = 0; t < M2K_TRACKS; t++) { cnt[t] += (uint8_t)((uint8_t)mon.trig[t] - last[t]); last[t] = (uint8_t)mon.trig[t]; }
+        }
+        seq_play(0);
+        int n1 = cnt[0], n2 = cnt[1], nh = cnt[2], n34 = cnt[3];
+        printf("     trigs in four loops: 1x %d, 2x %d, 1/2x %d, 3/4x %d\n", n1, n2, nh, n34);
+        ui.trk = 1;
+        m2k_button(B_SEQ, 1);
+        int k2 = knob_at(1) == GL(G_SPD1 + 1);
+        m2k_button(B_SEQ, 0);
+        CHECK(n1 == 64 && n2 == 128 && nh == 32 && n34 == 48 && k2,
+              "speeds: 2x twice the trigs of 1x, 1/2x half, 3/4x three quarters; SEQ held, KNOB 2 the track's speed");
+    }
+    /* a step held in GRID: the black keys 1-5 its trig type, 6-11 its condition; OCT- held and a knob turned takes
+     * that knob's lock away (with no step held, the value back to its start), and OCT- alone still turns the octave */
+    {
+        m2k_init(46);
+        int bk[11];
+        for (int k = 0; k < M2K_KEYS; k++) if (ui.kb[k] >= 0 && ui.kb[k] < 11) bk[ui.kb[k]] = k;
+        ui.grid = 1; ui.trk = 0; ui.spage = 0;
+        m2k_pattern_t *q = &pat[0];
+        q->step[0][0].flags = ST_TRIG; q->step[0][0].cond = 0;
+        m2k_key(0, 1);                                /* step 1 held */
+        m2k_key(bk[2], 1); m2k_key(bk[2], 0);         /* black 3: FILTER */
+        int tt = (q->step[0][0].flags & ST_TTYPE) == TTYPE[2];
+        m2k_key(bk[6], 1); m2k_key(bk[6], 0);         /* black 7: 50% */
+        int cd = q->step[0][0].cond == C_P50 && ui.trk == 0;
+        ui.page = PG_AMP; ui.sub = 0;
+        edit(2, 5);                                   /* a lock on DEC */
+        int locked = lock_find(0, 0, P_DEC) >= 0;
+        m2k_button(B_OCTD, 1); edit(2, 1); m2k_button(B_OCTD, 0);
+        int unlocked = lock_find(0, 0, P_DEC) < 0 && q->step[0][0].rtrg <= 1;
+        m2k_key(0, 0);
+        ui.grid = 0;
+        m2k_pattern_t fr;
+        pat_init(&fr, "X");
+        kit_default(&fr, 0, q->machine[0]);
+        q->kit[0][P_DEC] = (uint8_t)(fr.kit[0][P_DEC] ^ 40);
+        m2k_button(B_OCTD, 1); edit(2, 1); m2k_button(B_OCTD, 0);
+        int home = q->kit[0][P_DEC] == fr.kit[0][P_DEC] && ui.oct == 0;
+        m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);
+        int oct = ui.oct == -1;
+        CHECK(tt && cd && locked && unlocked && home && oct,
+              "a held step: black 1-5 its trig type, 6-11 its condition; OCT- + knob: the lock away, else the value home; OCT- alone the octave");
     }
     /* the render on two cores (the FM-1's): the second core's tracks run before or after the first's (as they may,
      * at once) and every pattern of bank A sounds sample for sample as on one */

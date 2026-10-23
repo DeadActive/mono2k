@@ -59,8 +59,11 @@ enum {
     G_TMPO, G_SWNG, G_LEN, G_ACNT,          /* tempo is 30 + v BPM (seq_bpm); accent amount */
     G_TAPE, G_ADPC, G_GLCH, G_GSIZ,          /* the lofi bus */
     G_VERB, G_DAMP, G_HISS, G_DRIV,
-    G_COUNT
+    G_SPD1,                                  /* + t: track t's speed, 1/8x .. 2x (the pattern format's 15th) */
+    G_COUNT = G_SPD1 + 6
 };
+#define G_COUNT_V14 G_SPD1                   /* the globals before the speeds */
+#define SPD_1X 82                            /* a speed's value at 1x (the fifth of seven) */
 
 /* machines */
 /* new ones go last: patterns keep the number (GND-PERC, MONO2K's own noise, was GND-NOIS until the Monomachine's took

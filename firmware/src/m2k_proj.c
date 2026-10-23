@@ -13,7 +13,7 @@
 #define M2K_IMG_DATA (160u * 1024u)        /* a project's packed patterns (the FM-1's first build: 28 KB, 16 of them) */
 #endif
 #define IMG_DATA M2K_IMG_DATA
-#define BLOB_MAX (32 + M2K_TRACKS * P_COUNT + M2K_TRACKS * M2K_STEPS / 8 + M2K_TRACKS * M2K_STEPS * 4 + 2 + M2K_LOCKS * 4)
+#define BLOB_MAX (48 + M2K_TRACKS * P_COUNT + M2K_TRACKS * M2K_STEPS / 8 + M2K_TRACKS * M2K_STEPS * 4 + 2 + M2K_LOCKS * 4)
 
 typedef struct {
     char name[8];
@@ -38,10 +38,12 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
                                         * 5: the track chain on the Monomachine's; 6: GND-SIN's TUNE in 3.125 c;
                                         * 7: SWAV-ENS's page; 8: the wave bank's choice (kits 71 wide); 9: the bus's
                                         * controls on their new laws; 10: FM+STAT's and FM+DYN's pages; 11: SID's;
-                                        * 12: GND-SIN's (TUNE on its eighth knob); 13: HOLD in beats; 14: VO-6's page */
+                                        * 12: GND-SIN's (TUNE on its eighth knob); 13: HOLD in beats; 14: VO-6's page;
+                                        * 15: the tracks' speeds, after the globals */
     m_cpy(o + n, p->name, 8); n += 8;
     m_cpy(o + n, p->machine, M2K_TRACKS); n += M2K_TRACKS;
-    m_cpy(o + n, p->glob, G_COUNT); n += G_COUNT;
+    int gl = ver >= 15 ? G_COUNT : G_COUNT_V14;
+    m_cpy(o + n, p->glob, (uint32_t)gl); n += gl;
     o[n++] = p->mute;
     for (int t = 0; t < M2K_TRACKS; t++) { m_cpy(o + n, p->kit[t], stride); n += stride; }
     uint8_t *mask = o + n;
@@ -68,7 +70,7 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
     return n;
 }
 
-static int pat_pack(const m2k_pattern_t *p, uint8_t *o) { return pat_pack_v(p, o, 14); }
+static int pat_pack(const m2k_pattern_t *p, uint8_t *o) { return pat_pack_v(p, o, 15); }
 
 static uint8_t tune_v5(int v)
 {
@@ -79,17 +81,19 @@ static uint8_t tune_v5(int v)
 static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
-    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 14) return 0;
+    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 15) return 0;
     int ver = o[1], stride = ver >= 8 ? P_COUNT : ver >= 3 ? P_WBNK : P_MODT;   /* before 3 a kit ended before the MOD
                                                                                * effect, before 8 before the bank */
-    const int head = 2 + 8 + M2K_TRACKS + G_COUNT + 1 + M2K_TRACKS * stride + M2K_TRACKS * M2K_STEPS / 8 + 2;
+    const int gl = ver >= 15 ? G_COUNT : G_COUNT_V14;                       /* before 15 no speeds */
+    const int head = 2 + 8 + M2K_TRACKS + gl + 1 + M2K_TRACKS * stride + M2K_TRACKS * M2K_STEPS / 8 + 2;
     if (len < head) return 0;
     m_set(p, 0, sizeof *p);
     n = 2;
     m_cpy(p->name, o + n, 8); n += 8;
     p->name[7] = 0;
     m_cpy(p->machine, o + n, M2K_TRACKS); n += M2K_TRACKS;
-    m_cpy(p->glob, o + n, G_COUNT); n += G_COUNT;
+    m_cpy(p->glob, o + n, (uint32_t)gl); n += gl;
+    if (ver < 15) for (int t = 0; t < M2K_TRACKS; t++) p->glob[G_SPD1 + t] = SPD_1X;
     p->mute = o[n++];
     for (int t = 0; t < M2K_TRACKS; t++) {
         m_cpy(p->kit[t], o + n, stride); n += stride;

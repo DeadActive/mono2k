@@ -9,6 +9,10 @@ static struct {
     uint8_t jump;                      /* the queued pattern now, at the next step (HOME + its key again) */
     uint8_t solo;                      /* the tracks soloed while GLO + white 9-14 are held (0 none) */
     uint8_t fill_next, fill_auto;      /* a fill for the next loop (GLO + white 7), and that loop's own */
+    /* the tracks off 1x: each on its own step and clock (Q8 samples), over the pattern's length */
+    uint8_t ts[M2K_TRACKS];
+    int32_t tctr[M2K_TRACKS];
+    uint8_t tpat;                      /* the pattern those clocks belong to (a new one starts them over) */
     int32_t ctr;                       /* Q8 samples to the next step */
     uint32_t lockmap[M2K_TRACKS][2];   /* steps with locks, for the screen */
     /* live play */
@@ -177,15 +181,23 @@ static int cond_pass(int t, int c)
     return r;
 }
 
-static void fire_step(int s)
+/* a track's speed: 1/8x 1/4x 1/2x 3/4x 1x 3/2x 2x, its step that many times the pattern's (as a fraction, exact) */
+static const uint8_t SPD_NUM[7] = {8, 4, 2, 4, 1, 2, 1}, SPD_DEN[7] = {1, 1, 1, 3, 1, 3, 2};
+static inline int spd_of(int t) { return (G()[G_SPD1 + t] * 7) >> 7; }
+static inline int32_t track_len(int t, int s) { int c = spd_of(t); return step_len(s) * SPD_NUM[c] / SPD_DEN[c]; }
+
+/* the step track t plays (or last played): the pattern's, or its own off 1x */
+static int track_pos(int t);
+
+static void fire_track(int t, int s, int32_t len)
 {
     m2k_pattern_t *p = PAT(cur_pat);
-    for (int t = 0; t < M2K_TRACKS; t++) {
+    {
         m2k_step_t st = p->step[t][s];
-        if (!(st.flags & ST_TRIG) || (p->mute >> t & 1) || (sq.solo && !(sq.solo >> t & 1))) continue;
-        if (sq.rec_skip[t] == s) { sq.rec_skip[t] = -1; continue; }
-        if (sq.nheld && t == sq.ktrk) continue;     /* the player has the track */
-        if (!cond_pass(t, st.cond)) continue;
+        if (!(st.flags & ST_TRIG) || (p->mute >> t & 1) || (sq.solo && !(sq.solo >> t & 1))) return;
+        if (sq.rec_skip[t] == s) { sq.rec_skip[t] = -1; return; }
+        if (sq.nheld && t == sq.ktrk) return;       /* the player has the track */
+        if (!cond_pass(t, st.cond)) return;
         apply_locks(t, s);
         unsigned skip = st.flags & ST_TTYPE;
         voice_trig(t, st.note, (st.flags & ST_ACC) ? 127 : 100, st.flags & ST_SLD, skip);
@@ -194,18 +206,55 @@ static void fire_step(int s)
             mx_out(3, 0x90 | ((midi_ch() + t) & 15), st.note, (st.flags & ST_ACC) ? 127 : 100);
             mx.on[t] = st.note;
         }
-        if (!(skip & ST_NOAMP)) trk[t].gate_left = gate_blocks(t);      /* no AMP trig: the gate runs on as it was */
+        if (!(skip & ST_NOAMP)) {                    /* no AMP trig: the gate runs on as it was */
+            int c = spd_of(t);
+            trk[t].gate_left = c == 4 ? gate_blocks(t) : (gate_blocks(t) - 1) * SPD_NUM[c] / SPD_DEN[c] + 1;
+        }
         int n = st.rtrg < 1 ? 1 : st.rtrg > 4 ? 4 : st.rtrg;
         sq.rt_left[t] = (uint8_t)(n - 1);
         if (n > 1) {
-            sq.rt_len[t] = step_len(s) / n;
+            sq.rt_len[t] = len / n;
             sq.rt_ctr[t] = sq.rt_len[t];
             sq.rt_note[t] = st.note;
             sq.rt_skip[t] = (uint8_t)skip;
             if (!(skip & ST_NOAMP)) trk[t].gate_left = sq.rt_len[t] / (M2K_SUB << 8) * 3 / 4 + 1;
         }
     }
+}
+
+static void fire_step(int s)                         /* the pattern's step: the tracks at 1x */
+{
+    for (int t = 0; t < M2K_TRACKS; t++) if (spd_of(t) == 4) fire_track(t, s, step_len(s));
     bus_step();
+}
+
+/* the tracks off 1x, each on its own clock; a new pattern (or the start) sets them going from its first step */
+static void tracks_off_1x(void)
+{
+    if (sq.tpat != cur_pat) {
+        sq.tpat = (uint8_t)cur_pat;
+        m_set(sq.ts, 0, sizeof sq.ts);
+        m_set(sq.tctr, 0, sizeof sq.tctr);
+    }
+    int len = seq_len();
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        if (spd_of(t) == 4) continue;
+        sq.tctr[t] -= M2K_SUB << 8;
+        while (sq.tctr[t] <= 0) {
+            int st = sq.ts[t] % len;
+            int32_t l = track_len(t, st);
+            fire_track(t, st, l);
+            sq.tctr[t] += l;
+            sq.ts[t] = (uint8_t)((st + 1) % len);
+        }
+    }
+}
+
+static int track_pos(int t)
+{
+    if (spd_of(t) == 4) { int s = (int)sq.step - 1; return s < 0 ? seq_len() - 1 : s; }
+    int s = (int)sq.ts[t] - 1;
+    return s < 0 ? seq_len() - 1 : s;
 }
 
 static void step_next(void)
@@ -239,6 +288,7 @@ static void seq_block(void)
             fire_step(sq.step);
             step_next();
         }
+        tracks_off_1x();                /* (off 1x: on the tempo the clock gives) */
     } else if (sq.playing) {
         sq.ctr -= M2K_SUB << 8;
         while (sq.ctr <= 0) {
@@ -246,6 +296,7 @@ static void seq_block(void)
             sq.ctr += step_len(sq.step);
             step_next();
         }
+        tracks_off_1x();
         if (set_on(S_SYNO)) {          /* the clock out: 24 a beat, on the grid (no swing) */
             mx.out_ctr -= M2K_SUB << 8;
             while (mx.out_ctr <= 0) {
@@ -310,6 +361,7 @@ static void seq_play(int on)
         sq.step = 0;
         sq.ctr = 0;
         sq.loops = 0;
+        sq.tpat = 0xFF;                  /* the tracks off 1x start with it */
         lockmap_build();
         if (!mx.ext && set_on(S_SYNO)) { mx_out(1, 0xFA, 0, 0); mx.out_ctr = 0; }   /* a pulse with the first step */
     }
@@ -534,6 +586,7 @@ static void pat_init(m2k_pattern_t *p, const char *name)
     p->glob[G_ACNT] = 60;
     p->glob[G_VERB] = 60;
     p->glob[G_DAMP] = 50;
+    for (int t = 0; t < M2K_TRACKS; t++) p->glob[G_SPD1 + t] = SPD_1X;
 }
 
 #include "m2k_factory.c"

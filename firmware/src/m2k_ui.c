@@ -13,7 +13,7 @@
 enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOF1, K_VOF2, K_CONS, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
-    K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD, K_MCH, K_SSEL, K_SLOAD, K_SSAVE, K_SCAT, K_WIPE, K_DEMO,
+    K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD, K_MCH, K_SSEL, K_SLOAD, K_SSAVE, K_SCAT, K_WIPE, K_DEMO, K_SPD,
     K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ, K_ONOFF, K_MSRC, K_MFRQ
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
@@ -42,6 +42,8 @@ static const pi_t PI_GLOB[G_COUNT] = {
     {"BPM", "TEMPO", K_BPM}, {"SWNG", "SWING", K_SWNG}, {"LEN", "PATTERN LENGTH", K_LEN}, {"ACNT", "ACCENT", K_NUM},
     {"TAPE", "TAPE WOW", K_NUM}, {"ADPC", "ADPCM CRUNCH", K_NUM}, {"GLCH", "GLITCH CHANCE", K_GLCH}, {"SIZE", "REPEAT SIZE", K_GSIZ},
     {"DCAY", "REVERB DECAY", K_NUM}, {"DAMP", "REVERB DAMPING", K_NUM}, {"HISS", "HISS AND DUST", K_NUM}, {"DRIV", "BUS DRIVE", K_NUM},
+    {"SPD", "T1 SPEED", K_SPD}, {"SPD", "T2 SPEED", K_SPD}, {"SPD", "T3 SPEED", K_SPD}, {"SPD", "T4 SPEED", K_SPD},
+    {"SPD", "T5 SPEED", K_SPD}, {"SPD", "T6 SPEED", K_SPD},
 };
 
 static const pi_t PI_SET[13] = {
@@ -172,6 +174,7 @@ static int kind_choices(int k)
     case K_MCH: return 16;
     case K_SSEL: return M2K_SOUNDS;
     case K_SCAT: return CAT_COUNT;
+    case K_SPD: return 7;
     case K_MODT: return 3;
     case K_PROJ: return M2K_PROJECTS;
     case K_VOIC: case K_LWAV: return 7;
@@ -350,6 +353,8 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_SLOAD: s_cpy(out, "TURN"); *unit = "TO LOAD"; break;
     case K_SSAVE: s_cpy(out, "TURN"); *unit = "TO SAVE"; break;
     case K_SCAT: s_cpy(out, CAT_N[c]); *unit = "SHOWN"; break;
+    case K_SPD: { static const char *const N[7] = {"1/8X", "1/4X", "1/2X", "3/4X", "1X", "3/2X", "2X"};
+                  s_cpy(out, N[c]); *unit = "THE TRACK'S STEPS"; break; }
     case K_PROJ: { char *e = s_cpy(out, "P"); s_int(e, c + 1); *unit = m2k_project_name(c); break; }
     case K_LOAD: s_cpy(out, "TURN"); *unit = "TO LOAD"; break;
     case K_WIPE: s_cpy(out, "TURN"); *unit = "ALL INIT"; break;
@@ -420,6 +425,7 @@ static struct {
     uint8_t lay_used[2];
     uint32_t tap_t[4];                 /* tap tempo's last taps (GLO + white 8) */
     uint8_t ntap;
+    uint8_t octd, octd_used;           /* OCT- held: a knob turned meanwhile takes its lock away (or its value home) */
     uint32_t rec_t0, save_t0;
     uint8_t save_fired, proj_sel, snd_sel, snd_cat;   /* SYN > SND's slot, the category shown (0 all) */
     uint8_t pkey, pfired, cursor;      /* a page key held in GRID (+1), its hold done; step entry's step */
@@ -506,6 +512,11 @@ static void go(int page)
     start_trans(250);
 }
 
+/* the verbs' nouns and verbs (below), and the undo's copy, for the knobs' own takings-away */
+enum { N_PAT, N_TRK, N_PICK, N_SND, N_STEP };
+enum { V_COPY, V_PASTE, V_CLEAR };
+static void undo_mark(int noun, int verb);
+
 /* a question (only before a write that cannot be taken back: a sound over a sound, every pattern, the demos, a
  * project): OCT+ YES, OCT- NO, anything else NO */
 enum { ASK_NONE, ASK_SND_OVER, ASK_WIPE, ASK_DEMO, ASK_PROJ };
@@ -561,7 +572,7 @@ static int perf_layer(void) { return ui.btn[B_FX] && !ui.btn[B_GLO] && !ui.btn[B
 static int mom_layer(void) { return ui.btn[B_LFO] && !ui.btn[B_GLO] && !ui.btn[B_HOME] && !ui.btn[B_EDIT]; }
 static int knob_at(int k)
 {
-    static const uint8_t SEQ_K[4] = {GL(G_LEN), GL(G_SWNG), GL(G_ACNT), GL(G_TMPO)};
+    const uint8_t SEQ_K[4] = {GL(G_LEN), (uint8_t)GL(G_SPD1 + ui.trk), GL(G_SWNG), GL(G_TMPO)};   /* (the track's speed) */
     static const uint8_t PERF_K[4] = {GL(G_GLCH), GL(G_TAPE), GL(G_ADPC), GL(G_DRIV)};   /* the bus's, to stay */
     return seq_layer() ? SEQ_K[k] : perf_layer() ? PERF_K[k] : knob_param(ui.page, ui.sub, k);
 }
@@ -617,6 +628,29 @@ static void edit(int k, int d)
 {
     int code = knob_at(k);
     if (code == NONE) return;
+    if (ui.octd && code < 0xC0) {                     /* OCT- held: the lock away (a step held), else the value home */
+        ui.octd_used = 1;
+        m2k_pattern_t *q = PAT(cur_pat);
+        const pi_t *pi0 = pinfo(ui.trk, code);
+        if (ui.grid && ui.nheld && code < 0x80) {
+            undo_mark(N_STEP, 20);
+            for (int i = 0; i < ui.nheld; i++) {
+                int li = lock_find(ui.trk, ui.held[i], code);
+                if (li >= 0) q->lock[li].trk = 0xFF;
+            }
+            lockmap_build();
+            trk[ui.trk].eff[code] = q->kit[ui.trk][code];
+            ui.held_edit = 1;
+            toast(pi0->s4, "LOCK REMOVED");
+        } else {
+            undo_mark(N_PAT, 21);
+            if (code >= 0x80) { pat_init(&pat_tmp, "X"); q->glob[code & 0x7F] = pat_tmp.glob[code & 0x7F]; }
+            else { kit_default(&pat_tmp, ui.trk, q->machine[ui.trk]); q->kit[ui.trk][code] = pat_tmp.kit[ui.trk][code]; trk[ui.trk].eff[code] = q->kit[ui.trk][code]; }
+            toast(pi0->s4, "BACK TO ITS START");
+        }
+        ui.focus = (uint8_t)k; ui.focus_t = ui.now | 1u;
+        return;
+    }
     if (seq_layer()) ui.seq_used = 1;
     if (perf_layer()) ui.lay_used[0] = 1;
     if (mom_layer()) { ui.lay_used[1] = 1; mom_note(code); }
@@ -939,6 +973,20 @@ void m2k_key(int k, int down)
         } else live_off(note);
         return;
     }
+    if (b >= 0 && ui.nheld) {         /* a step held: the black keys set its trig type (1-5) and its condition (6-11) */
+        if (!down) return;
+        static const uint8_t QT[5] = {0, 1, 2, 3, 7};                       /* ALL AMP FILTER LFO NONE */
+        static const uint8_t QC[6] = {C_ALWAYS, C_P50, C_1_2, C_1_4, C_FILL, C_NFILL};
+        for (int i = 0; i < ui.nheld; i++) {
+            m2k_step_t *q = &p->step[ui.trk][ui.held[i]];
+            if (b < 5) q->flags = (uint8_t)((q->flags & ~ST_TTYPE) | TTYPE[QT[b]]);
+            else if (b < 11) q->cond = QC[b - 5];
+        }
+        ui.held_edit = 1;
+        if (b < 5) toast("TRIG", TTYPE_N[QT[b]]);
+        else toast("CONDITION", COND_N[QC[b - 5]]);
+        return;
+    }
     if (b >= 0) {
         if (b >= 6 && b < 10) {        /* P1..P4: a tap shows the page, a hold makes the pattern end there */
             if (down) { page_key(b - 6); ui.pkey = (uint8_t)(b - 5); ui.pkey_t0 = ui.now | 1u; ui.pfired = 0; }
@@ -1010,9 +1058,6 @@ static void held_note(int d)
  * held: GLO, the track's steps in GRID or the open pattern; HOME, the patterns picked; EDIT, the track's sound; SEQ,
  * the track's steps; a step held in GRID, that step. Repeating a paste or a clear within 3 s undoes it; holding the
  * clear a second makes it INIT (a ring fills). GLO + OCT- undoes, GLO + OCT+ redoes */
-enum { N_PAT, N_TRK, N_PICK, N_SND, N_STEP };
-enum { V_COPY, V_PASTE, V_CLEAR };
-
 static m2k_pattern_t clip_pat POOL;                 /* the clipboards: a pattern, a sound, a track's steps, steps */
 static struct { uint8_t kind, machine, kit[P_COUNT]; } clipb;
 static struct { uint8_t n, ok, off[8]; m2k_step_t st[8]; uint8_t nlk; m2k_lock_t lk[64]; } step_clip;
@@ -1377,6 +1422,13 @@ void m2k_button(int b, int down)
         return;
     }
     if (b == B_OCTU && down && mom_layer()) { mom.keep = 1; ui.lay_used[1] = 1; toast("KEEP", "LET GO OF LFO"); return; }
+    if (b == B_OCTD) {                 /* OCT- on its release, unless a knob turned while it was held (that knob's home) */
+        if (down) { ui.octd = 1; ui.octd_used = 0; return; }
+        int used = ui.octd_used;
+        ui.octd = 0;
+        if (used || !was) return;
+        down = 1;                      /* (the release does what the press did) */
+    }
     if (b != B_GLO && !down && !was) return;
     if (b == B_FX || b == B_LFO) {    /* a tap: the page; held: PERFORM (FX), the momentary knobs (LFO) */
         int i = b == B_LFO;
@@ -1540,6 +1592,14 @@ void m2k_encoder(int e, int d)
         start_trans_dir(190, 1);
         break;
     case E_ALGO:
+        if (seq_layer()) {                             /* SEQ held: the accent's amount */
+            ui.seq_used = 1;
+            p->glob[G_ACNT] = (uint8_t)CLAMP(p->glob[G_ACNT] + d, 0, 127);
+            char o[12];
+            s_int(o, p->glob[G_ACNT]);
+            toast("ACCENT", o);
+            break;
+        }
         if (ui.grid && ui.nheld) {
             for (int i = 0; i < ui.nheld; i++) {
                 m2k_step_t *st = &p->step[ui.trk][ui.held[i]];
@@ -2266,7 +2326,7 @@ static void step_cell(int x, int y, int w, int h, int t, int s)
 {
     m2k_pattern_t *p = PAT(cur_pat);
     m2k_step_t st = p->step[t][s];
-    int playing = sq.playing && play_step() == s;
+    int playing = sq.playing && track_pos(t) == s;
     int held = 0;
     if (ui.grid && t == ui.trk) for (int i = 0; i < ui.nheld; i++) if (ui.held[i] == s) held = 1;
     if (s >= seq_len()) { rect_pat(x, y, w, h, PT_SPARSE, 0); return; }
@@ -2658,7 +2718,7 @@ static void seq_help(void)
         int kw = tag(cx, cy, n, 0);
         text(&F_S, cx + kw + 4, cy + 2, SEQ_TOOL[i], 1, 0);
     }
-    text(&F_S, x + 4, y + h - 13, "REC/PLAY: COPY/PASTE", 1, 0);
+    text(&F_S, x + 4, y + h - 13, "REC COPY, PLAY PASTE", 1, 0);
 }
 
 /* FX held a moment: PERFORM's effects on the black keys, the bus's knobs; LFO held: the knobs snap back */
