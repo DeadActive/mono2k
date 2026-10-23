@@ -5,10 +5,13 @@
  *   SAVE          the current pattern's reload point (into the open project's image)
  *   GLO + SAVE    reload: the current pattern back to that point
  *   hold SAVE     the whole project
- * The images live in RAM on the computer (host, browser); on the FM-1 they will be its flash, through the same
- * get / put. */
+ * The images live in RAM; the store (them, the working patterns, the settings) is one stream, into a buffer on the
+ * computer (host, browser) and into the flash on the FM-1 (m2k_fw_store_put / _get), never whole in its RAM. */
 
-#define IMG_DATA (160u * 1024u)
+#ifndef M2K_IMG_DATA
+#define M2K_IMG_DATA (160u * 1024u)        /* a project's packed patterns (the FM-1's first build: 28 KB, 16 of them) */
+#endif
+#define IMG_DATA M2K_IMG_DATA
 #define BLOB_MAX (32 + M2K_TRACKS * P_COUNT + M2K_TRACKS * M2K_STEPS / 8 + M2K_TRACKS * M2K_STEPS * 4 + 2 + M2K_LOCKS * 4)
 
 typedef struct {
@@ -191,17 +194,26 @@ static void img_clear(m2k_img_t *im, const char *name)
     m_set(im->len, 0, sizeof im->len);
 }
 
-/* all 64 working patterns into an image; 0 when it does not fit (the image is then left as it was) */
-static int img_pack_all(m2k_img_t *dst, const char *name)
+/* every working pattern into the scratch image; 0 when they do not fit */
+static int img_pack_work(const char *name)
 {
     img_clear(&work_img, name);
     for (int i = 0; i < M2K_PATTERNS; i++) {
         int n = pat_pack(&pat[i], blob);
         if (!img_put(&work_img, i, blob, n)) return 0;
     }
+    return 1;
+}
+
+/* every working pattern into an image; 0 when they do not fit (the image is then left as it was) */
+static int img_pack_all(m2k_img_t *dst, const char *name)
+{
+    if (!img_pack_work(name)) return 0;
     m_cpy(dst, &work_img, (uint32_t)(sizeof *dst - IMG_DATA + work_img.used));
     return 1;
 }
+
+static m2k_pattern_t pat_tmp POOL;           /* scratch: the factory's blank, an old demo read back */
 
 static void pattern_init_blank(m2k_pattern_t *p)
 {
@@ -275,9 +287,8 @@ static void projects_factory(void)
     for (int i = 16; i < M2K_PATTERNS; i++) pattern_init_blank(&pat[i]);
     img_pack_all(&proj[0], "DEMO");
     /* the blank projects: one blank pattern, 64 times */
-    static m2k_pattern_t blank POOL;
-    pattern_init_blank(&blank);
-    int n = pat_pack(&blank, blob);
+    pattern_init_blank(&pat_tmp);
+    int n = pat_pack(&pat_tmp, blob);
     for (int k = 1; k < M2K_PROJECTS; k++) {
         char nm[8] = {'P', (char)('1' + k), 0};
         img_clear(&proj[k], nm);
@@ -291,40 +302,71 @@ static void projects_factory(void)
  * the four projects. "M2K2", version, open project; then images as (name, used, len[], data). */
 
 #define STORE_MAX (16 + S_COUNT + (M2K_PROJECTS + 1) * (12 + 2 * M2K_PATTERNS + IMG_DATA))
+#ifndef M2K_FW
 static uint8_t store_buf[STORE_MAX] POOL;
+#endif
 
-static int ser_img(uint8_t *o, const m2k_img_t *im)
+/* the stream: st_put writes at st_at and moves on, st_get reads so (0 past the end, or when the flash fails) */
+static uint32_t st_at;
+static int st_bad;
+
+static void st_put(const void *p, uint32_t n)
 {
-    int n = 0;
-    m_cpy(o + n, im->name, 8); n += 8;
-    for (int k = 0; k < 4; k++) o[n++] = (uint8_t)(im->used >> (8 * k));
-    for (int i = 0; i < M2K_PATTERNS; i++) { o[n++] = (uint8_t)im->len[i]; o[n++] = (uint8_t)(im->len[i] >> 8); }
-    m_cpy(o + n, im->data, im->used);
-    return n + (int)im->used;
+#ifdef M2K_FW
+    if (!st_bad && m2k_fw_store_put(st_at, (const uint8_t *)p, n)) st_bad = 1;
+#else
+    if (st_at + n <= STORE_MAX) m_cpy(store_buf + st_at, p, n);
+    else st_bad = 1;
+#endif
+    st_at += n;
 }
 
-static int deser_img(m2k_img_t *im, const uint8_t *o, int len)
+static int st_get(void *p, uint32_t n, uint32_t len)
 {
-    if (len < 12 + 2 * M2K_PATTERNS) return -1;
-    m2k_img_t *t = &work_img;
-    int n = 0;
-    m_cpy(t->name, o, 8); n += 8;
+    if (st_at + n > len) return 0;
+#ifdef M2K_FW
+    if (m2k_fw_store_get(st_at, (uint8_t *)p, n)) return 0;
+#else
+    m_cpy(p, store_buf + st_at, n);
+#endif
+    st_at += n;
+    return 1;
+}
+
+static void ser_img(const m2k_img_t *im)
+{
+    uint8_t h[12], l[2 * M2K_PATTERNS];
+    m_cpy(h, im->name, 8);
+    for (int k = 0; k < 4; k++) h[8 + k] = (uint8_t)(im->used >> (8 * k));
+    for (int i = 0; i < M2K_PATTERNS; i++) { l[2 * i] = (uint8_t)im->len[i]; l[2 * i + 1] = (uint8_t)(im->len[i] >> 8); }
+    st_put(h, 12);
+    st_put(l, sizeof l);
+    st_put(im->data, im->used);
+}
+
+/* an image from the stream; through the scratch image (an image refused is left as it was), or straight into im */
+static int deser_img(m2k_img_t *im, uint32_t len, int direct)
+{
+    m2k_img_t *t = direct ? im : &work_img;
+    uint8_t h[12], l[2 * M2K_PATTERNS];
+    if (!st_get(h, 12, len) || !st_get(l, sizeof l, len)) return 0;
+    m_cpy(t->name, h, 8);
     t->name[7] = 0;
-    t->used = (uint32_t)o[n] | ((uint32_t)o[n + 1] << 8) | ((uint32_t)o[n + 2] << 16) | ((uint32_t)o[n + 3] << 24);
-    n += 4;
+    t->used = (uint32_t)h[8] | ((uint32_t)h[9] << 8) | ((uint32_t)h[10] << 16) | ((uint32_t)h[11] << 24);
     uint32_t sum = 0;
-    for (int i = 0; i < M2K_PATTERNS; i++) { t->len[i] = (uint16_t)(o[n] | (o[n + 1] << 8)); sum += t->len[i]; n += 2; }
-    if (sum != t->used || t->used > IMG_DATA || n + (int)t->used > len) return -1;
-    m_cpy(t->data, o + n, t->used);
-    m_cpy(im, t, (uint32_t)(sizeof *im - IMG_DATA + t->used));
-    return n + (int)t->used;
+    for (int i = 0; i < M2K_PATTERNS; i++) { t->len[i] = (uint16_t)(l[2 * i] | (l[2 * i + 1] << 8)); sum += t->len[i]; }
+    if (sum != t->used || t->used > IMG_DATA || !st_get(t->data, t->used, len)) return 0;
+    if (!direct) m_cpy(im, t, (uint32_t)(sizeof *im - IMG_DATA + t->used));
+    return 1;
 }
 
+#ifndef M2K_FW
 uint8_t *m2k_store_buf(int *max)
 {
     *max = STORE_MAX;
     return store_buf;
 }
+#endif
 
 /* the factory's revision: a store saved before it carries the demos it replaced, by revision. 1: the bank rewritten
  * on the Monomachine's chain (version 5); 2: bank A's first four parts after the brief (docs/bank-a.md: HAZE,
@@ -365,12 +407,12 @@ static int name_is(const char *a, const char *b)
  * an INIT only while it is blank) takes today's demo, built in pat[] by the caller. Anything else is the owner's: kept */
 static void refresh_demos(m2k_img_t *im, int rev)
 {
-    static m2k_pattern_t old POOL;
+    m2k_pattern_t *const o = &pat_tmp;
     for (int i = 0; i < 16; i++) {
-        if (!im->len[i] || !pat_unpack(&old, im->data + img_off(im, i), im->len[i]) || !name_is(old.name, OLD_DEMO[rev][i])) continue;
+        if (!im->len[i] || !pat_unpack(o, im->data + img_off(im, i), im->len[i]) || !name_is(o->name, OLD_DEMO[rev][i])) continue;
         if (name_is(OLD_DEMO[rev][i], "INIT")) {
             int trigs = 0;
-            for (int t = 0; t < M2K_TRACKS; t++) for (int s = 0; s < M2K_STEPS; s++) trigs += old.step[t][s].flags & ST_TRIG;
+            for (int t = 0; t < M2K_TRACKS; t++) for (int s = 0; s < M2K_STEPS; s++) trigs += o->step[t][s].flags & ST_TRIG;
             if (trigs) continue;
         }
         int n = pat_pack(&pat[i], blob);
@@ -380,42 +422,36 @@ static void refresh_demos(m2k_img_t *im, int rev)
 
 int m2k_store_pack(void)
 {
-    int n = 0;
-    store_buf[n++] = 'M'; store_buf[n++] = '2'; store_buf[n++] = 'K'; store_buf[n++] = '2';
-    store_buf[n++] = 2;                /* 2: the factory's revision follows the open pattern */
-    store_buf[n++] = (uint8_t)cur_proj;
-    store_buf[n++] = (uint8_t)cur_pat;
-    store_buf[n++] = FACTORY_REV;
-    m_cpy(store_buf + n, store_.set, S_COUNT); n += S_COUNT;
-    static m2k_img_t w POOL;
-    if (!img_pack_all(&w, "WORK")) return 0;
-    n += ser_img(store_buf + n, &w);
-    for (int k = 0; k < M2K_PROJECTS; k++) n += ser_img(store_buf + n, &proj[k]);
-    return n;
+    uint8_t h[8] = {'M', '2', 'K', '2', 2, (uint8_t)cur_proj, (uint8_t)cur_pat, FACTORY_REV};   /* 2: the factory's
+                                                                                                * revision follows */
+    st_at = 0;
+    st_bad = 0;
+    st_put(h, 8);
+    st_put(store_.set, S_COUNT);
+    if (!img_pack_work("WORK")) return 0;
+    ser_img(&work_img);
+    for (int k = 0; k < M2K_PROJECTS; k++) ser_img(&proj[k]);
+    return st_bad ? 0 : (int)st_at;
 }
 
 int m2k_store_unpack(int len)
 {
-    const uint8_t *o = store_buf;
-    if (len < 8 + S_COUNT || o[0] != 'M' || o[1] != '2' || o[2] != 'K' || o[3] != '2' || o[4] < 1 || o[4] > 2) return 0;
-    int n = o[4] == 2 ? 8 : 7, rev = o[4] == 2 ? o[7] : 0;
-    uint8_t set[S_COUNT];
-    m_cpy(set, o + n, S_COUNT); n += S_COUNT;
-    static m2k_img_t w POOL;
-    int r = deser_img(&w, o + n, len - n);
-    if (r < 0) return 0;
-    n += r;
-    for (int k = 0; k < M2K_PROJECTS; k++) {
-        r = deser_img(&proj[k], o + n, len - n);
-        if (r < 0) { projects_factory(); return 0; }
-        n += r;
-    }
+    uint8_t o[8], set[S_COUNT];
+    uint32_t n = (uint32_t)len;
+    st_at = 0;
+    if (!st_get(o, 5, n) || o[0] != 'M' || o[1] != '2' || o[2] != 'K' || o[3] != '2' || o[4] < 1 || o[4] > 2) return 0;
+    if (!st_get(o + 5, o[4] == 2 ? 3 : 2, n)) return 0;
+    int rev = o[4] == 2 ? o[7] : 0;
+    if (!st_get(set, S_COUNT, n)) return 0;
+    if (!deser_img(&work_img, n, 1)) return 0;           /* the working patterns, in the scratch image */
+    for (int k = 0; k < M2K_PROJECTS; k++)
+        if (!deser_img(&proj[k], n, 1)) { projects_factory(); return 0; }
     if (rev < FACTORY_REV && name_is(proj[0].name, "DEMO")) {      /* today's demos, where the old ones still are */
         factory();
         refresh_demos(&proj[0], rev);
-        if (o[5] == 0) refresh_demos(&w, rev);
+        if (o[5] == 0) refresh_demos(&work_img, rev);
     }
-    img_unpack_all(&w);
+    img_unpack_all(&work_img);
     m_cpy(store_.set, set, S_COUNT);
     cur_proj = o[5] < M2K_PROJECTS ? o[5] : 0;
     cur_pat = o[6] < M2K_PATTERNS ? o[6] : 0;
@@ -424,24 +460,27 @@ int m2k_store_unpack(int len)
     return 1;
 }
 
+#ifndef M2K_FW
 /* a project as a file: its saved image */
 int m2k_proj_export(int slot)
 {
     if (slot < 0 || slot >= M2K_PROJECTS) return 0;
-    int n = 0;
-    store_buf[n++] = 'M'; store_buf[n++] = '2'; store_buf[n++] = 'K'; store_buf[n++] = 'P';
-    store_buf[n++] = 1;
-    n += ser_img(store_buf + n, &proj[slot]);
-    return n;
+    static const uint8_t h[5] = {'M', '2', 'K', 'P', 1};
+    st_at = 0;
+    st_bad = 0;
+    st_put(h, 5);
+    ser_img(&proj[slot]);
+    return st_bad ? 0 : (int)st_at;
 }
 
 int m2k_proj_import(int slot, int len)
 {
     const uint8_t *o = store_buf;
     if (slot < 0 || slot >= M2K_PROJECTS || len < 5 || o[0] != 'M' || o[1] != '2' || o[2] != 'K' || o[3] != 'P' || o[4] != 1) return 0;
-    if (deser_img(&proj[slot], o + 5, len - 5) < 0) return 0;
-    return 1;
+    st_at = 5;
+    return deser_img(&proj[slot], (uint32_t)len, 0);
 }
+#endif
 
 void m2k_project(int slot, int save)
 {

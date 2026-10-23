@@ -401,6 +401,8 @@ int m2k_dirty(void)
     return d;
 }
 
+int m2k_playing(void) { return sq.playing; }
+
 static void ui_init(void);
 
 void m2k_init(uint32_t seed)

@@ -11,9 +11,13 @@
 #define M2K_SUB       16          /* control-rate block: envelopes, LFOs, params, triggers */
 #define M2K_TRACKS    6
 #define M2K_STEPS     64
-#define M2K_BANKS     4           /* A-D */
-#define M2K_PATTERNS  64          /* per project: 4 banks of 16 */
-#define M2K_PROJECTS  4
+#ifndef M2K_PATTERNS
+#define M2K_PATTERNS  64          /* per project: 4 banks of 16 (the FM-1's first build: 16, bank A, for its RAM) */
+#endif
+#define M2K_BANKS     (M2K_PATTERNS / 16)
+#ifndef M2K_PROJECTS
+#define M2K_PROJECTS  4           /* (the FM-1's first build: 1) */
+#endif
 #define M2K_LOCKS     384         /* parameter locks per pattern (track, step, param, value) */
 #define M2K_W         240
 #define M2K_H         240
@@ -114,10 +118,15 @@ int m2k_store_pack(void);                           /* packs it; returns its len
 int m2k_store_unpack(int len);                      /* reads a blob written into the buffer; 0: not ours, factory kept */
 int m2k_proj_export(int slot);                      /* a project as a file, into the buffer; returns its length */
 int m2k_proj_import(int slot, int len);             /* a project file from the buffer into a slot */
+/* the FM-1 keeps the store in its flash, not in a buffer: the platform's stream, written and read front to back from
+ * offset 0 (m2k_store_pack and m2k_store_unpack use it in place of the buffer when M2K_FW is set) */
+int m2k_fw_store_put(uint32_t off, const uint8_t *p, uint32_t n);   /* 0: written */
+int m2k_fw_store_get(uint32_t off, uint8_t *p, uint32_t n);         /* 0: read */
 void m2k_project(int slot, int save);               /* load (0) or save (1) a project */
 const char *m2k_project_name(int slot);
 int m2k_project_current(void);
 int m2k_dirty(void);                                /* 1 when SAVE asked for the store to be written */
+int m2k_playing(void);                              /* 1 while the sequencer plays (the FM-1 writes its flash when it stops) */
 void m2k_setting(int i, int v);                     /* e.g. the web page's theme sets S_SCREEN */
 void m2k_pattern(int n);                            /* select a pattern, as PRESETS does */
 void m2k_track(int t);                              /* select a track, as SELECT does (the web's track cells) */
