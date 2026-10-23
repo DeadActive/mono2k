@@ -15,6 +15,7 @@
 #define M2K_PATTERNS  64          /* per project: 4 banks of 16 (the FM-1's first build: 16, bank A, for its RAM) */
 #endif
 #define M2K_BANKS     (M2K_PATTERNS / 16)
+#define M2K_SOUNDS    64          /* the sound library: four banks of 16 */
 #ifndef M2K_PROJECTS
 #define M2K_PROJECTS  4           /* (the FM-1's first build: 1) */
 #endif
@@ -23,11 +24,14 @@
 #define M2K_H         240
 #define M2K_FB_BYTES  (M2K_W * M2K_H / 8)
 
-/* big buffers go to the FM-1's pool RAM (Felucca's linker script); elsewhere they are plain statics */
+/* big buffers go to the FM-1's pool RAM (Felucca's linker script); elsewhere they are plain statics (a host test of
+ * the FM-1's build sets it empty) */
+#ifndef POOL
 #ifdef M2K_FW
 #define POOL __attribute__((section(".pool")))
 #else
 #define POOL
+#endif
 #endif
 
 /* the FM-1's controls, in the order of the platform's input layer */

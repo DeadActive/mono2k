@@ -41,6 +41,13 @@ the sizes: the image within the app slot (581 KB), `.data + .bss` within 96 KiB,
   a 4 KiB sector at a time, its header (magic, length, CRC-32) last, so a save cut short reads as none. SAVE marks it;
   it is written when the sequencer stands (a sector's erase stops the sound ~50 ms). That region is part of the
   area Felucca keeps its projects and samples in: a save of MONO2K's overwrites whatever another firmware kept there.
+- The link (`m2k_link.c`, with the store): the site's Patch Editor reads the store and writes one back over USB-MIDI
+  SysEx, `F0 7D 'M' '2' 'K' cmd pack7(body) F7`, a request at a time, each answered with a status first: HELLO (the
+  link's version, the counts, the name), INFO (saved first: the store's length and CRC-32), READ (128 bytes a reply),
+  BEGIN / WRITE (256 bytes a request, into the store's place) / END (the header once the length and CRC agree, then
+  the core reads it as at boot). A write refused, cut or stalled (4 s) writes the FM-1's own state back. Only while
+  the sequencer stands. `host/m2k_link_test.c` runs it on a flash in memory, with the browser's store for the FM-1
+  and the FM-1's read back in the browser (`tools/check.sh`).
 - The update entry, the USB rescue (hold OCT− at power-on) and the boot guard (two failed boots: the rescue) are the
   platform's: an installer reaches the FM-1 whatever the app does.
 
@@ -58,7 +65,8 @@ the sizes: the image within the app slot (581 KB), `.data + .bss` within 96 KiB,
 ## Changed from the platform
 
 - `hal/fm1_lcd_hw.h` `fm1_lcd_done`, `src/lcd.c` `lcd_idle`: a transfer's end without waiting for it.
-- `src/platform.c`: `BANK_AT` / `BANK_LEN` and `CV_MAX` can be set by the app.
+- `src/platform.c`: `BANK_AT` / `BANK_LEN` and `CV_MAX` can be set by the app; an app's SysEx hook (`APP_SYSEX`)
+  sees each frame before the update entry does.
 - `src/sense.c`: its tables from `gen/sense_tables.h` (generated here) in place of CS-1's.
 
 ## Whose is what

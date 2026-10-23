@@ -216,10 +216,9 @@ static int img_pack_all(m2k_img_t *dst, const char *name)
 static m2k_pattern_t pat_tmp POOL;           /* scratch: the factory's blank, an old demo read back */
 
 /* the sound library: four banks of 16 sounds (S01..S64), each a track's machine and its parameters, kept with the
- * store; an empty slot has no name. The factory fills it from bank A's tracks */
-#define M2K_SOUNDS 64
+ * store; an empty slot has no name (M2K_SOUNDS slots, m2k.h). The factory fills it from bank A's tracks */
 typedef struct { char name[8]; uint8_t machine, kit[P_COUNT]; } m2k_sound_t;
-static m2k_sound_t snd[M2K_SOUNDS] POOL;
+static m2k_sound_t snd[M2K_SOUNDS];                /* (RAM: the FM-1's pool is full) */
 
 static void sound_name(char *o, const m2k_pattern_t *p, int t)   /* "MAMM T3": the pattern's name, the track */
 {
@@ -476,7 +475,8 @@ static void refresh_demos(m2k_img_t *im, int rev)
 
 /* the store, version 3: "M2K2" 3, the open project and pattern, the factory's revision, how many patterns a project and
  * how many projects it holds; the settings; the working patterns; the projects; the sound library ('S', its count,
- * each slot). n and k as this build keeps them, or fewer (the browser writing a store for the FM-1) */
+ * each slot). n and k as this build keeps them, or fewer (the browser writing a store for the FM-1): an open project
+ * past k goes first, as the open one */
 static int store_pack_nk(int n, int k)
 {
     uint8_t h[10] = {'M', '2', 'K', '2', 3, (uint8_t)cur_proj, (uint8_t)cur_pat, FACTORY_REV, (uint8_t)n, (uint8_t)k};
@@ -488,7 +488,7 @@ static int store_pack_nk(int n, int k)
     st_put(store_.set, S_COUNT);
     if (!img_pack_work("WORK")) return 0;
     ser_img(&work_img, n);
-    for (int i = 0; i < k; i++) ser_img(&proj[i < M2K_PROJECTS ? i : 0], n);
+    for (int i = 0; i < k; i++) ser_img(&proj[i == 0 && cur_proj >= k ? cur_proj : i < M2K_PROJECTS ? i : 0], n);
     uint8_t sh[2] = {'S', M2K_SOUNDS};
     st_put(sh, 2);
     st_put(snd, sizeof snd);

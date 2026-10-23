@@ -16,6 +16,7 @@
 #define BANK_AT 0x000D0000u
 #define BANK_LEN 0x00010000u
 #define CV_MAX (240u * 18u)                     /* the platform's text: a line of FONT_S at a time (crash, update, rescue) */
+#define APP_SYSEX app_sysex                     /* the Patch Editor's link (below) */
 #include "platform.c"
 #include "m2k.h"                                 /* the core: its own unit (core.o), its API alone */
 
@@ -233,90 +234,7 @@ static void lights(void)
     for (i = 0; i < 14u; i++) fm1_led_key(i, l[M2K_KEYS + button_of(i)] >= 64u);
 }
 
-/* ---- the store, in the flash: [magic][length][crc32][0] then the stream m2k_store_pack writes, front to back,
- * through a sector at a time (erased, then programmed: ~50 ms each with the interrupts off, so only when the
- * sequencer stands); the header last, so a save cut short reads as none */
-#define STORE_MAGIC 0x464B324Du                 /* "M2KF" */
-#define STORE_HDR 16u
-static uint8_t sec[4096];
-static int32_t sec_at = -1;                     /* the sector the buffer holds, -1 none */
-static uint32_t st_crc, saves_failed;
-static uint8_t save_due;
-
-static uint32_t crc_more(uint32_t c, const uint8_t *p, uint32_t n)
-{
-    uint32_t k;
-    while (n--) {
-        c ^= *p++;
-        for (k = 0; k < 8u; k++) c = c & 1u ? (c >> 1) ^ 0xEDB88320u : c >> 1;
-    }
-    return c;
-}
-
-static int sec_flush(void)
-{
-    uint32_t took;
-    int rc;
-    if (sec_at < 0) return 0;
-    fm1_wdt_feed();
-    rc = fl_erase4k(BANK_AT + (uint32_t)sec_at * 4096u, &took);
-    if (!rc) rc = fl_write(BANK_AT + (uint32_t)sec_at * 4096u, sec, 4096u);
-    sec_at = -1;
-    return rc;
-}
-
-int m2k_fw_store_put(uint32_t off, const uint8_t *p, uint32_t n)
-{
-    off += STORE_HDR;
-    if (off + n > BANK_LEN) return -1;
-    st_crc = crc_more(st_crc, p, n);
-    while (n) {
-        uint32_t s = off >> 12, o = off & 4095u, k = 4096u - o;
-        if (k > n) k = n;
-        if ((int32_t)s != sec_at) {
-            if (sec_flush()) return -1;
-            sec_at = (int32_t)s;
-            memset(sec, 0xFF, sizeof sec);
-        }
-        memcpy(sec + o, p, k);
-        off += k;
-        p += k;
-        n -= k;
-    }
-    return 0;
-}
-
-int m2k_fw_store_get(uint32_t off, uint8_t *p, uint32_t n)
-{
-    return off + STORE_HDR + n > BANK_LEN ? -1 : st_read(BANK_AT + STORE_HDR + off, p, n);
-}
-
-static void store_save(void)
-{
-    uint32_t h[4];
-    int len;
-    if (!flash_ok) return;
-    st_crc = 0xFFFFFFFFu;
-    sec_at = -1;
-    len = m2k_store_pack();
-    if (len <= 0 || sec_flush()) { saves_failed++; return; }
-    h[0] = STORE_MAGIC; h[1] = (uint32_t)len; h[2] = ~st_crc; h[3] = 0;
-    if (fl_write(BANK_AT, (const uint8_t *)h, sizeof h)) saves_failed++;
-}
-
-static int store_load(void)
-{
-    uint32_t h[4], at, c = 0xFFFFFFFFu;
-    uint8_t b[256];
-    if (!flash_ok || st_read(BANK_AT, h, sizeof h) || h[0] != STORE_MAGIC || !h[1] || h[1] > BANK_LEN - STORE_HDR)
-        return 0;
-    for (at = 0; at < h[1]; at += sizeof b) {
-        uint32_t k = h[1] - at > sizeof b ? sizeof b : h[1] - at;
-        if (st_read(BANK_AT + STORE_HDR + at, b, k)) return 0;
-        c = crc_more(c, b, k);
-    }
-    return ~c == h[2] && m2k_store_unpack((int)h[1]);
-}
+#include "m2k_link.c"                          /* the store and the Patch Editor's link */
 
 static void app_init(void)
 {
@@ -344,7 +262,8 @@ static void app_loop(void)
     }
     screen_send();
     if (m2k_dirty()) save_due = 1;
-    if (save_due && !m2k_playing()) {           /* SAVE kept it: into the flash once the sequencer stands */
+    lk_service();
+    if (save_due && !m2k_playing() && !lk_open) {   /* SAVE kept it: into the flash once the sequencer stands */
         store_save();
         save_due = 0;
     }

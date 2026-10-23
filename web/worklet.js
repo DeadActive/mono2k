@@ -63,6 +63,22 @@ class Mono2k extends AudioWorkletProcessor {
       case "param": x.w_param(m.trk, m.code, m.v); break;
       case "machine": x.w_set_machine(m.trk, m.m); this.kit(); break;
       case "kit": this.kit(); break;
+      /* the patch editor's sessions: a store loaded in place of the open one (none: the factory's), and the open one
+       * packed, whole or as the FM-1 keeps it (16 patterns, one project) */
+      case "load": {
+        x.w_init(m.seed >>> 0);
+        const ok = m.bytes ? this.unpack(new Uint8Array(m.bytes)) : 1;
+        const n = x.w_store_pack();
+        this.port.postMessage({ t: "loaded", ok, bytes: new Uint8Array(x.memory.buffer, x.w_store_buf(), n).slice() });
+        this.names();
+        this.kit();
+        break;
+      }
+      case "pack": {
+        const n = m.fm1 ? x.w_store_pack_as(16, 1) : x.w_store_pack();
+        this.port.postMessage({ t: "packed", fm1: !!m.fm1, why: m.why, bytes: new Uint8Array(x.memory.buffer, x.w_store_buf(), n).slice() });
+        break;
+      }
       case "project": {                       /* load (save 0) or save (save 1) a project, then keep it */
         x.w_project(m.slot, m.save ? 1 : 0);
         const n = x.w_store_pack();

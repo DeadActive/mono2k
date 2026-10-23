@@ -11,11 +11,15 @@
   const hex = (c) => { const m = c.replace("#", ""); return [parseInt(m.slice(0, 2), 16), parseInt(m.slice(2, 4), 16), parseInt(m.slice(4, 6), 16)]; };
   const status = (s) => { $("ed-status").textContent = s; };
 
-  /* the saves, shared with the emulator page */
-  const STORE_KEY = "mono2k.store.v2";
-  const loadStore = () => {
+  /* the saves: this browser's, shared with the emulator page, or the FM-1's patterns read over the link, kept apart */
+  const STORE_KEY = "mono2k.store.v2", FM1_KEY = "mono2k.fm1.v1", SESSION_KEY = "mono2k.editor.session", WHEN_KEY = "mono2k.fm1.when";
+  const keyOf = (sess) => (sess === "fm1" ? FM1_KEY : STORE_KEY);
+  const getLS = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const setLS = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* a private window: kept for this visit only */ } };
+  let session = getLS(SESSION_KEY) === "fm1" && getLS(FM1_KEY) ? "fm1" : "browser", pendingSession = null;
+  const loadStore = (sess) => {
     try {
-      const s = localStorage.getItem(STORE_KEY);
+      const s = localStorage.getItem(keyOf(sess || session));
       if (!s) return null;
       const b = atob(s), u = new Uint8Array(b.length);
       for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
@@ -26,7 +30,7 @@
     try {
       let s = "";
       for (let i = 0; i < bytes.length; i += 4096) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 4096));
-      localStorage.setItem(STORE_KEY, btoa(s));
+      localStorage.setItem(keyOf(session), btoa(s));
     } catch (e) { status("Could not save in this browser (a private window?)."); }
   };
 
@@ -192,9 +196,223 @@
     status(midiOut ? `Changes go to ${midiOut.name} too, on the Monomachine's CC numbers, channel = track.` : "");
   });
 
+  // ------------------------------------------------------------------------------------- the FM-1, over USB
+  /* MONO2K on the FM-1 answers SysEx F0 7D 'M' '2' 'K' cmd pack7(body) F7 (firmware/fm1/m2k_link.c): its store read
+   * out 128 bytes a reply (saved on the FM-1 first), one written back 256 bytes a request, each request answered
+   * before the next; a status first in every answer. Its patterns are edited here as a session of their own. */
+  const LK = { HELLO: 1, INFO: 2, READ: 3, BEGIN: 4, WRITE: 5, END: 6 };
+  const LK_ERR = ["", "The FM-1 is playing: stop it (PLAY) and try again.", "That is too large for the FM-1's store.",
+    "The FM-1 had no transfer open.", "A piece arrived out of order.", "The FM-1's flash refused the write: it keeps what it had.",
+    "The data arrived damaged: the FM-1 keeps what it had.", "The FM-1 could not read that store: it keeps what it had.",
+    "The FM-1 did not understand the request: update MONO2K on it."];
+  const seed = () => (Math.random() * 4294967295) >>> 0;
+  const pack7 = (b) => {                       /* 8 bits to 7, LSB first (the platform's ota_pack7) */
+    const o = [];
+    let acc = 0, nb = 0;
+    for (const v of b) { acc |= v << nb; nb += 8; while (nb >= 7) { o.push(acc & 0x7f); acc >>= 7; nb -= 7; } }
+    if (nb) o.push(acc & 0x7f);
+    return o;
+  };
+  const unpack7 = (b) => {
+    const o = [];
+    let acc = 0, nb = 0;
+    for (const v of b) { acc |= (v & 0x7f) << nb; nb += 7; if (nb >= 8) { o.push(acc & 0xff); acc >>= 8; nb -= 8; } }
+    return new Uint8Array(o);
+  };
+  const CRC = new Uint32Array(256).map((_, i) => { let c = i; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xedb88320 : c >>> 1; return c >>> 0; });
+  const crc32 = (b) => { let c = 0xffffffff; for (const v of b) c = CRC[(c ^ v) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const rd32 = (b, o) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
+  const le32 = (v) => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
+
+  let fm1 = null, fm1Wait = null, linkBusy = false;
+  const linkSay = (s, kind) => { const el = $("ed-link-state"); el.textContent = s; el.className = "small" + (kind ? " " + kind : ""); };
+  const prog = (f) => { const el = $("ed-prog"); el.hidden = f === null; if (f !== null) el.value = f; };
+  function linkButtons() {
+    $("ed-fm1-go").textContent = fm1 ? "Connected" : "Connect";
+    $("ed-fm1-go").setAttribute("aria-pressed", String(!!fm1));
+    $("ed-fm1-read").disabled = !fm1 || linkBusy;
+    $("ed-fm1-send").disabled = !fm1 || linkBusy;
+    $("ed-fm1-go").disabled = linkBusy;
+    $("ed-file-save").disabled = linkBusy;
+    $("ed-file-open").disabled = linkBusy;
+  }
+  function sessionShow() {
+    const when = getLS(WHEN_KEY);
+    $("ed-src").textContent = session === "fm1"
+      ? `Editing the FM-1's patterns (bank A) and sounds${when ? ", as read " + when : ""}. Kept apart from this browser's saves: send them back to the FM-1, or save a file.`
+      : "Editing this browser's saves, the emulator's. Read from the FM-1 to edit its patterns instead.";
+    $("ed-src-back").hidden = session !== "fm1";
+  }
+  const fm1Msg = (ev) => {
+    const d = ev.data;
+    if (d.length < 8 || d[0] !== 0xf0 || d[1] !== 0x7d || d[2] !== 0x4d || d[3] !== 0x32 || d[4] !== 0x4b) return;
+    const w = fm1Wait;
+    if (!w || d[5] !== (w.cmd | 0x40)) return;
+    fm1Wait = null;
+    w.done(unpack7(d.subarray(6, d.length - 1)));
+  };
+  const ask = (port, cmd, body, ms) => new Promise((res, rej) => {
+    const t = setTimeout(() => { fm1Wait = null; rej(new Error("no answer")); }, ms || 3000);
+    fm1Wait = { cmd, done: (b) => { clearTimeout(t); res(b); } };
+    try { port.output.send([0xf0, 0x7d, 0x4d, 0x32, 0x4b, cmd, ...pack7(body || []), 0xf7]); }
+    catch (e) { clearTimeout(t); fm1Wait = null; rej(e); }
+  });
+  const askAgain = async (cmd, body, ms) => {   /* a request lost on the way is asked again, twice */
+    for (let k = 0; ; k++) {
+      try { return await ask(fm1, cmd, body, ms); }
+      catch (e) { if (k === 2) throw new Error("The FM-1 stopped answering. Check the cable and connect again."); }
+    }
+  };
+
+  async function fm1Connect() {
+    if (fm1 || linkBusy) return;
+    if (!navigator.requestMIDIAccess) return linkSay("This browser has no Web MIDI: use Chrome or Edge on a computer.", "err");
+    let acc;
+    try { acc = await navigator.requestMIDIAccess({ sysex: true }); }
+    catch (e) { return linkSay("MIDI with SysEx was not allowed. Allow it for this site (the icon in the address bar) and connect again.", "err"); }
+    linkSay("Looking for the FM-1…");
+    const outs = [...acc.outputs.values()];
+    for (const input of acc.inputs.values()) {
+      if (input.state === "disconnected" || !/fm-1|felucca|composite|sinco|usb-midi|mono2k/i.test(input.name || "")) continue;
+      const output = outs.find((o) => o.name === input.name && o.state !== "disconnected");
+      if (!output) continue;
+      try { await input.open(); await output.open(); } catch (e) { continue; }
+      const port = { input, output };
+      input.addEventListener("midimessage", fm1Msg);
+      try {
+        const h = await ask(port, LK.HELLO, [], 1500);
+        if (h[0] === 0 && h[1] >= 1) {
+          const fw = String.fromCharCode(...h.subarray(8, 24)).replace(/\0.*$/, "");
+          fm1 = { ...port, patterns: h[2], projects: h[3], sounds: h[4] };
+          acc.onstatechange = (ev) => {
+            if (fm1 && ev.port.state === "disconnected" && (ev.port === fm1.input || ev.port === fm1.output)) {
+              fm1.input.removeEventListener("midimessage", fm1Msg);
+              fm1 = null;
+              linkSay("The FM-1 was disconnected.", "err");
+              linkButtons();
+            }
+          };
+          linkSay(`${fw} on the FM-1, ${h[2]} patterns${h[5] ? ", playing" : ""}. Read its patterns, or send these.`, "ok");
+          linkButtons();
+          return;
+        }
+      } catch (e) { /* not MONO2K, or an older one: no link */ }
+      input.removeEventListener("midimessage", fm1Msg);
+    }
+    linkSay("No FM-1 running MONO2K answered. Connect it over USB and close other pages that use it (the Installer). A MONO2K older than this one has no link: update it from the Installer.", "err");
+  }
+
+  async function fm1Read() {
+    if (!fm1 || linkBusy) return;
+    linkBusy = true; linkButtons();
+    try {
+      linkSay("Saving on the FM-1…");
+      const i = await askAgain(LK.INFO, [], 8000);
+      if (i[0]) throw new Error(LK_ERR[i[0]] || `The FM-1 refused (${i[0]}).`);
+      const len = rd32(i, 1), crc = rd32(i, 5), b = new Uint8Array(len);
+      linkSay("Reading the FM-1's patterns and sounds…");
+      for (let at = 0; at < len;) {
+        const n = Math.min(128, len - at);
+        const r = await askAgain(LK.READ, [...le32(at), n]);
+        if (r[0] || rd32(r, 1) !== at || r[5] !== n) throw new Error(LK_ERR[r[0]] || "A piece arrived wrong: read again.");
+        b.set(r.subarray(6, 6 + n), at);
+        at += n;
+        prog(at / len);
+      }
+      if (crc32(b) !== crc) throw new Error("The store arrived damaged: read again.");
+      pendingSession = "fm1";
+      send({ t: "load", bytes: b, seed: seed() });
+      setLS(WHEN_KEY, new Date().toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }));
+      linkSay(`Read ${(len / 1024).toFixed(1)} KB from the FM-1.`, "ok");
+    } catch (e) {
+      linkSay(e.message, "err");
+    } finally {
+      linkBusy = false; linkButtons(); prog(null);
+    }
+  }
+
+  async function fm1Write(b) {
+    if (!fm1 || linkBusy) return;
+    linkBusy = true; linkButtons();
+    try {
+      linkSay("Sending to the FM-1…");
+      const r0 = await askAgain(LK.BEGIN, [...le32(b.length), ...le32(crc32(b))]);
+      if (r0[0]) throw new Error(LK_ERR[r0[0]] || `The FM-1 refused (${r0[0]}).`);
+      for (let at = 0; at < b.length;) {
+        const n = Math.min(256, b.length - at), body = new Uint8Array(4 + n);
+        body.set(le32(at));
+        body.set(b.subarray(at, at + n), 4);
+        const r = await askAgain(LK.WRITE, body, 2000);
+        if (!(r[0] === 0 || (r[0] === 4 && rd32(r, 1) === at + n))) throw new Error(LK_ERR[r[0]] || "The FM-1 refused a piece.");
+        at += n;
+        prog(at / b.length);
+      }
+      linkSay("The FM-1 is reading it…");
+      const e = await askAgain(LK.END, [], 8000);
+      if (e[0]) throw new Error(LK_ERR[e[0]] || `The FM-1 refused (${e[0]}).`);
+      linkSay("Sent: the FM-1 plays these patterns and sounds now, and keeps them.", "ok");
+    } catch (e) {
+      linkSay(e.message, "err");
+    } finally {
+      linkBusy = false; linkButtons(); prog(null);
+    }
+  }
+
+  /* the worklet's answers: a store loaded in place of the open one, a store packed for a file or the FM-1 */
+  function loaded(m) {
+    const to = pendingSession;
+    pendingSession = null;
+    if (!m.ok) {
+      status("That store could not be read: nothing changed.");
+      send({ t: "load", bytes: loadStore(), seed: seed() });   /* back to the session's own */
+      return;
+    }
+    if (to) { session = to; setLS(SESSION_KEY, session); saveStore(m.bytes); }
+    sessionShow();
+    send({ t: "names" });
+  }
+  function packed(m) {
+    if (m.why === "send") { fm1Write(m.bytes); return; }
+    if (m.why !== "file") return;
+    const d = new Date(), day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([m.bytes], { type: "application/octet-stream" }));
+    a.download = `mono2k-${m.fm1 ? "fm1" : "browser"}-${day}.m2ks`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    status(`Saved ${a.download}: ${m.fm1 ? "the FM-1's 16 patterns and its sounds" : "this browser's projects and sounds"}.`);
+  }
+
+  $("ed-fm1-go").addEventListener("click", fm1Connect);
+  $("ed-fm1-read").addEventListener("click", () => {
+    if (session === "fm1" && !confirm("Read the FM-1 again? Its patterns replace the copy edited here.")) return;
+    fm1Read();
+  });
+  $("ed-fm1-send").addEventListener("click", () => {
+    const what = session === "fm1" ? "These patterns and sounds" : "Bank A of this browser's open project, and its sounds,";
+    if (!confirm(`${what} replace what the FM-1 keeps. Send them?`)) return;
+    send({ t: "pack", fm1: true, why: "send" });
+  });
+  $("ed-file-save").addEventListener("click", () => send({ t: "pack", fm1: session === "fm1", why: "file" }));
+  $("ed-file-open").addEventListener("change", async (ev) => {
+    const f = ev.target.files[0];
+    ev.target.value = "";
+    if (!f) return;
+    const b = new Uint8Array(await f.arrayBuffer());
+    if (b.length < 10 || b[0] !== 0x4d || b[1] !== 0x32 || b[2] !== 0x4b || b[3] !== 0x32) { status(`${f.name} is not a MONO2K store (.m2ks).`); return; }
+    const fm1File = b[4] >= 3 && b[8] === 16 && b[9] === 1;
+    if (!confirm(fm1File ? `Open ${f.name} as the FM-1's patterns? It replaces the FM-1 copy edited here (the FM-1 itself only when you send it).`
+                         : `Open ${f.name} in place of this browser's saves? The emulator plays it too.`)) return;
+    pendingSession = fm1File ? "fm1" : "browser";
+    send({ t: "load", bytes: b, seed: seed() });
+  });
+  $("ed-src-back").addEventListener("click", () => { pendingSession = "browser"; send({ t: "load", bytes: loadStore("browser"), seed: seed() }); });
+
   // -------------------------------------------------------------------------------------------- the core
   async function boot() {
-    const r = await fetch("m2k.wasm?v=69");
+    const r = await fetch("m2k.wasm?v=70");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();
@@ -209,7 +427,7 @@
       if (!pre) await boot();
       try { ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }); }
       catch (e) { ctx = new AudioContext({ latencyHint: "interactive" }); }
-      await ctx.audioWorklet.addModule("worklet.js?v=33");
+      await ctx.audioWorklet.addModule("worklet.js?v=34");
       node = new AudioWorkletNode(ctx, "mono2k", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(ctx.destination);
       node.port.onmessage = (ev) => {
@@ -226,16 +444,21 @@
           render();
         } else if (m.t === "names") {
           const sel = $("ed-pattern"), keep = curPat;
-          sel.innerHTML = m.pats.map((nm, i) => `<option value="${i}">${"ABCD"[i >> 4]}${String((i & 15) + 1).padStart(2, "0")} ${esc(nm)}</option>`).join("");
+          sel.innerHTML = m.pats.slice(0, session === "fm1" ? 16 : m.pats.length).map((nm, i) => `<option value="${i}">${"ABCD"[i >> 4]}${String((i & 15) + 1).padStart(2, "0")} ${esc(nm)}</option>`).join("");
           if (keep >= 0) sel.value = String(keep);
         } else if (m.t === "store") {
           saveStore(m.bytes);
+        } else if (m.t === "loaded") {
+          loaded(m);
+        } else if (m.t === "packed") {
+          packed(m);
         } else if (m.t === "ready") {
           send({ t: "set", i: 0, v: window.M2K_SITE && window.M2K_SITE.dark() ? 0 : 127 });
           send({ t: "kit" });
         }
       };
-      node.port.postMessage({ t: "wasm", bytes: wasmBytes, seed: (Math.random() * 4294967295) >>> 0, store: loadStore() });
+      node.port.postMessage({ t: "wasm", bytes: wasmBytes, seed: seed(), store: loadStore() });
+      sessionShow();
       await ctx.resume();
       $("ed-start").hidden = true;
       $("ed-main").hidden = false;

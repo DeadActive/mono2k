@@ -1434,6 +1434,12 @@ static int selftest(void)
         memmove(store_buf + 5, store_buf + 6, (size_t)e - 6);   /* version 1: no count, 64 patterns */
         store_buf[4] = 1;
         CHECK(m2k_proj_import(3, e - 1) == 1 && !strcmp(m2k_project_name(3), "DEMO"), "project file: version 1 still imported");
+        m2k_init(35);
+        s_cpy(proj[2].name, "THIRD");
+        m2k_project(2, 0);
+        n = m2k_store_pack_as(16, 1);
+        CHECK(n > 0 && m2k_store_unpack(n) == 1 && !strcmp(m2k_project_name(0), "THIRD") && m2k_project_current() == 0,
+              "store for the FM-1: the open project goes, whichever it is");
     }
     /* SYN > SND: SLOT picks, SAVE turned twice keeps the track's sound there, LOAD turned twice puts it on a track */
     {
@@ -1479,9 +1485,38 @@ static int selftest(void)
     return fails != 0;
 }
 
+/* the browser and the FM-1's stores, through the Patch Editor's link (host/m2k_link_test.c): --web-store PATH writes
+ * a store as the browser sends it to the FM-1 (16 patterns, one project; A01 named WEB16, sound 6 WEBSND);
+ * --fm1-store PATH reads one the FM-1 sent (the link test's: A01 LINKA, sound 6 SNDA) as the browser does */
+static int link_store(const char *mode, const char *path)
+{
+    int max;
+    uint8_t *b = m2k_store_buf(&max);
+    m2k_init(1);
+    if (!strcmp(mode, "--web-store")) {
+        memset(pat[0].name, 0, 8); memcpy(pat[0].name, "WEB16", 5);
+        memset(snd[5].name, 0, 8); memcpy(snd[5].name, "WEBSND", 6);
+        int n = m2k_store_pack_as(16, 1);
+        FILE *f = fopen(path, "wb");
+        if (!f || n <= 0 || b[8] != 16 || b[9] != 1) { printf("FAIL a store for the FM-1\n"); if (f) fclose(f); return 1; }
+        fwrite(b, 1, (size_t)n, f);
+        fclose(f);
+        printf("ok   a store for the FM-1: %d B, 16 patterns, 1 project\n", n);
+        return 0;
+    }
+    FILE *f = fopen(path, "rb");
+    if (!f) { perror(path); return 1; }
+    int n = (int)fread(b, 1, (size_t)max, f);
+    fclose(f);
+    int ok = b[8] == 16 && b[9] == 1 && m2k_store_unpack(n) && !strcmp(pat[0].name, "LINKA") && !strcmp(snd[5].name, "SNDA");
+    printf("%s the FM-1's store read in the browser: its 16 patterns as bank A, its sounds\n", ok ? "ok  " : "FAIL");
+    return !ok;
+}
+
 int main(int argc, char **argv)
 {
     if (argc > 1 && !strcmp(argv[1], "--selftest")) return selftest();
+    if (argc > 2 && (!strcmp(argv[1], "--web-store") || !strcmp(argv[1], "--fm1-store"))) return link_store(argv[1], argv[2]);
     const char *out = argc > 1 ? argv[1] : "build/host";
     char path[512];
     if (argc > 2 && !strcmp(argv[2], "--analyze")) return analyze(out);

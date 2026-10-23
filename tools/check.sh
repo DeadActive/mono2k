@@ -5,8 +5,9 @@
 #     is installed (its -Wstringop-overflow and -Warray-bounds see more than clang's); none allowed
 #  2. the device rules: the core built for a 32-bit soft-float target (armv7m) calls no float helper and no 64-bit
 #     division (__aeabi_ldivmod / __aeabi_uldivmod, __divdi3 ...); its section sizes are printed
-#  3. sanitizers: the self-test, every screen, every bank A track, every reference spec and the power test's loop
-#     under ASan + UBSan; any report fails the run
+#  3. sanitizers: the self-test, the FM-1's store and link (host/m2k_link_test.c, with the browser's store for it and
+#     its store read back in the browser), every screen, every bank A track, every reference spec and the power test's
+#     loop under ASan + UBSan; any report fails the run
 #  4. the pattern format's conversions mutated (tools/ref/mutate_formats.py): the self-test catches every mutant of
 #     fm_v9 and sid_v10 but the equivalent one
 #  5. the wave banks (tools/wave_check.py); the bus's controls, every value as recorded and every old value as it
@@ -21,7 +22,7 @@ I="-Ifirmware/src -Ifirmware/gen"
 echo "== warnings"
 for cc in clang $(ls /opt/homebrew/bin/gcc-[0-9]* /usr/local/bin/gcc-[0-9]* 2>/dev/null) ${GCC:-}; do
     case "$($cc --version 2>/dev/null | head -1)" in *clang*) [ "$cc" = clang ] || continue ;; esac
-    for src in host/m2k_host.c host/m2k_ref.c; do
+    for src in host/m2k_host.c host/m2k_ref.c host/m2k_link_test.c; do
         out=$($cc -O2 $W $I -o "$B/$(basename "$src" .c)" "$src" -lm 2>&1)
         n=$(printf "%s" "$out" | grep -c "warning:")
         echo "  $cc $src: $n warnings"
@@ -48,17 +49,21 @@ fi
 
 echo "== sanitizers"
 SAN="-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer"
-clang $SAN -w $I -o "$B/m2k_host_san" host/m2k_host.c -lm && clang $SAN -w $I -o "$B/m2k_ref_san" host/m2k_ref.c -lm || FAIL=1
-mkdir -p "$B/screens" "$B/pitch" "$B/ref"
+clang $SAN -w $I -o "$B/m2k_host_san" host/m2k_host.c -lm && clang $SAN -w $I -o "$B/m2k_ref_san" host/m2k_ref.c -lm &&
+    clang $SAN -w $I -o "$B/m2k_link_san" host/m2k_link_test.c || FAIL=1
+mkdir -p "$B/screens" "$B/pitch" "$B/ref" "$B/link"
 {
     "$B/m2k_host_san" --selftest
+    "$B/m2k_host_san" --web-store "$B/link/web16.bin" && "$B/m2k_link_san" "$B/link/web16.bin" "$B/link/fm1.bin" &&
+        "$B/m2k_host_san" --fm1-store "$B/link/fm1.bin" || echo "LINK FAILED"
+
     "$B/m2k_host_san" "$B/screens"
     "$B/m2k_host_san" "$B/pitch" --pitch
     for f in tools/ref/*.spec; do "$B/m2k_ref_san" "$B/ref" < "$f" > /dev/null; done
     "$B/m2k_ref_san" "$B/ref" --loop 88 < tools/ref/power.loop > /dev/null
 } > "$B/san.log" 2>&1
-rep=$(grep -E "runtime error|ERROR: AddressSanitizer|SELFTEST FAILED" "$B/san.log" | sort | uniq -c)
-if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  self-test, screens, bank A, $(ls tools/ref/*.spec | wc -l | tr -d ' ') specs, the power loop: clean"; fi
+rep=$(grep -E "runtime error|ERROR: AddressSanitizer|SELFTEST FAILED|LINK FAILED|^FAIL" "$B/san.log" | sort | uniq -c)
+if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  self-test, the FM-1 link, screens, bank A, $(ls tools/ref/*.spec | wc -l | tr -d ' ') specs, the power loop: clean"; fi
 
 echo "== the format's conversions, mutated"
 .venv/bin/python tools/ref/mutate_formats.py > "$B/mutate.log" 2>&1 && tail -1 "$B/mutate.log" | sed 's/^/  /' || { grep -E "SURVIVED|unmutated" "$B/mutate.log"; FAIL=1; }

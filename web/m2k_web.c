@@ -20,6 +20,7 @@ EXPORT void w_midi(int s, int a, int b) { m2k_midi(s, a, b); }
 EXPORT uint8_t *w_store_buf(void) { int m; return m2k_store_buf(&m); }
 EXPORT int w_store_max(void) { int m; m2k_store_buf(&m); return m; }
 EXPORT int w_store_pack(void) { return m2k_store_pack(); }
+EXPORT int w_store_pack_as(int patterns, int projects) { return m2k_store_pack_as(patterns, projects); }   /* the FM-1's: 16, 1 */
 EXPORT int w_store_unpack(int n) { return m2k_store_unpack(n); }
 EXPORT int w_proj_export(int slot) { return m2k_proj_export(slot); }
 EXPORT int w_proj_import(int slot, int n) { return m2k_proj_import(slot, n); }

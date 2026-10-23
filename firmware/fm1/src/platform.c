@@ -344,6 +344,10 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
 }
 extern void isr_alnk0(void);
 
+#ifdef APP_SYSEX
+static int APP_SYSEX(const uint8_t *p, uint32_t n);   /* the app's own SysEx: one frame (F0, F7 off), 1 if taken */
+#endif
+
 /* ---- the main loop's duties: watchdog, USB, the installer's update request, the MASTER knob */
 static void platform_poll(void)
 {
@@ -351,6 +355,14 @@ static void platform_poll(void)
     int32_t a;
     fm1_wdt_feed();
     usb_retry(fm1_ms);
+#ifdef APP_SYSEX
+    {
+        const uint8_t *sp;
+        uint32_t sn;
+        if (ota_frame_get(&sp, &sn) && APP_SYSEX(sp, sn))
+            ota_frame_done();                   /* the app's: the update entry never sees it */
+    }
+#endif
     ota_service();
     if (usb.ota_req) {
         usb.ota_req = 0;
