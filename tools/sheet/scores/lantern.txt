@@ -1,0 +1,173 @@
+bpm 100
+glob 1 30
+orig 0 3419 25=64 32=0 18=20
+clear 0
+trig 0 0 61
+ens 0 0 -4 3 10
+trig 0 6 61
+ens 0 6 -4 3 10
+trig 0 16 60
+ens 0 16 -3 5 7
+trig 0 22 60
+ens 0 22 -3 5 7
+trig 0 32 62
+ens 0 32 -2 2 5
+trig 0 38 62
+ens 0 38 -2 2 5
+trig 0 48 62
+ens 0 48 -3 5 7
+trig 0 54 62
+ens 0 54 -3 5 7
+kit 0 59 18
+kit 0 60 9
+kit 0 61 12
+kit 0 62 8
+kit 0 63 4
+kit 0 64 0
+kit 0 65 84
+orig 1 3203 14=64 69=0 35=0
+clear 1
+trig 1 0 33
+trig 1 7 33
+trig 1 10 33
+trig 1 16 33
+trig 1 23 33
+trig 1 26 33
+trig 1 32 33
+trig 1 39 33
+trig 1 42 33
+trig 1 48 33
+trig 1 55 33
+trig 1 58 33
+orig 2 1542 3=5 2=15
+clear 2
+trig 2 4 76
+trig 2 12 76
+trig 2 20 76
+trig 2 28 76
+trig 2 36 76
+trig 2 44 76
+trig 2 52 76
+trig 2 60 76
+ptrack 3 0
+kit 3 8 10
+kit 3 9 127
+kit 3 10 127
+kit 3 11 60
+kit 3 41 100
+trig 3 0 33
+trig 3 10 33
+trig 3 16 41
+trig 3 26 41
+trig 3 32 36
+trig 3 42 36
+trig 3 48 43
+trig 3 58 43
+mtrack 4 2 2058
+clear 4
+trig 4 3 61
+trig 4 8 64
+trig 4 11 71
+trig 4 14 69
+cond 4 14 7
+trig 4 19 69
+trig 4 24 72
+trig 4 27 79
+trig 4 30 77
+cond 4 30 7
+trig 4 35 64
+trig 4 40 67
+trig 4 43 74
+trig 4 46 72
+cond 4 46 7
+trig 4 51 71
+trig 4 56 74
+trig 4 59 81
+trig 4 62 79
+cond 4 62 7
+orig 5 4425 35=40 18=55 33=30
+clear 5
+trig 5 2 64
+cond 5 2 13
+trig 5 6 64
+cond 5 6 13
+trig 5 10 64
+cond 5 10 13
+trig 5 14 64
+cond 5 14 13
+trig 5 18 64
+cond 5 18 13
+trig 5 22 64
+cond 5 22 13
+trig 5 26 64
+cond 5 26 13
+trig 5 30 64
+cond 5 30 13
+trig 5 34 64
+cond 5 34 13
+trig 5 38 64
+cond 5 38 13
+trig 5 42 64
+cond 5 42 13
+trig 5 46 64
+cond 5 46 13
+trig 5 50 64
+cond 5 50 13
+trig 5 54 64
+cond 5 54 13
+trig 5 58 64
+cond 5 58 13
+trig 5 62 64
+cond 5 62 13
+trig 5 2 64
+cond 5 2 14
+trig 5 6 64
+cond 5 6 14
+trig 5 8 64
+cond 5 8 2
+lock 5 8 13 40
+trig 5 10 64
+cond 5 10 14
+trig 5 14 64
+cond 5 14 14
+trig 5 18 64
+cond 5 18 14
+trig 5 22 64
+cond 5 22 14
+trig 5 24 64
+cond 5 24 2
+lock 5 24 13 40
+trig 5 26 64
+cond 5 26 14
+trig 5 30 64
+cond 5 30 14
+trig 5 34 64
+cond 5 34 14
+trig 5 38 64
+cond 5 38 14
+trig 5 40 64
+cond 5 40 2
+lock 5 40 13 40
+trig 5 42 64
+cond 5 42 14
+trig 5 46 64
+cond 5 46 14
+trig 5 50 64
+cond 5 50 14
+trig 5 54 64
+cond 5 54 14
+trig 5 56 64
+cond 5 56 2
+lock 5 56 13 40
+trig 5 58 64
+cond 5 58 14
+trig 5 62 64
+cond 5 62 14
+sync
+kit 0 37 127
+kit 1 37 72
+kit 2 37 117
+kit 3 37 70
+kit 4 37 98
+kit 5 37 56
+kit 0 13 127

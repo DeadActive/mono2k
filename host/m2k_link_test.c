@@ -195,7 +195,7 @@ static void cache_tests(void)
     memset(flash, 0xFF, sizeof flash);
     m2k_init(3);
     printf("     bank hash %08x\n", bank_hash());
-    int names = !strcmp(PAT(0)->name, "LUMEN") && !strcmp(PAT(15)->name, "EMBERS");
+    int names = !strcmp(PAT(0)->name, "CIRCUIT") && !strcmp(PAT(3)->name, "LANTERN");
     for (int i = 16; i < 64; i++) names &= !strcmp(PAT(i)->name, "INIT") && trigs_of(i) == 0;
     check(names && work_img.used < 20000u, "64 patterns: bank A's demos, banks B-D INIT, the blanks taking no room");
 
@@ -208,7 +208,7 @@ static void cache_tests(void)
     int kept = cur_pat == 63 && PAT(16)->step[2][5].note == 49 && trigs_of(16) == 1 && PAT(36)->step[0][0].note == 40;
     store_save();
     m2k_init(4);
-    int back = store_load() && PAT(16)->step[2][5].note == 49 && trigs_of(36) == 1 && !strcmp(PAT(0)->name, "LUMEN");
+    int back = store_load() && PAT(16)->step[2][5].note == 49 && trigs_of(36) == 1 && !strcmp(PAT(0)->name, "CIRCUIT");
     check(kept && back, "patterns edited, left and come back to keep their steps, through a save and a boot");
 
     m2k_pattern(16);

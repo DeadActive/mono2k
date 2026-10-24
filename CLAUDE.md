@@ -24,11 +24,12 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   `build/host/m2k_host build/pitch --pitch` then `.venv/bin/python tools/demo_pitch.py build/pitch [--steps]`:
   each trig's pitch against its note, held notes, resonant rings against the key, semitone clashes; run it on
   every new demo (docs/bank-a-diagnosis.md; keys from docs/bank-a.md's table, `--ea69d53` for the old bank's fixture).
-  `.venv/bin/python tools/demo_levels.py [ROUNDS] [--slots A01,...]` balances the table's parts by measurement (each
-  track by its role, the mix at -15.1 dBFS rms over 30 s) and edits the factory; `build/host/m2k_host DIR --demo [SECONDS] [SLOT ...]` renders patterns for listening. New
-  demos go to the owner in batches of four as ~30 s WAVs with their notes rows, and are committed once approved
-  (LO-BIT CLUB, the bank now, was written whole and unsupervised at the owner's request, 2026-10-23: every part
-  balanced by `demo_levels.py`, checked by `demo_pitch.py` and the host's `--analyze`, sent as WAVs after).
+  `build/host/m2k_host DIR --demo [SECONDS] [SLOT ...]` renders patterns for listening. Bank A is made from sound
+  sheets (`tools/sheet/README.md`): random settings the owner picks by ear, parts written to `docs/composing.md` in
+  `tools/sheet/compose.py`, fixed by measurement (`fit.py`: each track's share on the bar's chord; spectrograms for
+  rings and sweeps), and written into `factory()` by `mel.c`'s `cdump`, so the firmware plays the renders the owner
+  approved. New parts go to the owner as ~30-40 s renders and are committed once approved. (`tools/demo_levels.py`
+  balances by role and was the old banks' tool; the owner rejected a fixed mix rule.)
 - Web: `sh web/build.sh`, serve `web/` (`.claude/launch.json`: mono2k-web on port 8742). Four pages share `style.css`
   and a sub-header: the emulator (`index.html`, `app.js`), the manual (`manual.html`, `manual.js`: one page at a time,
   the machines and knobs read off `m2k.wasm`, the screens `web/manual/*.png` from the host's tour and its manual
@@ -101,8 +102,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   are not what it plays: FM+STAT steps the same 24 as FM+PAR, both ratios. MONO2K matched at every value.
   GND-NOIS is the Monomachine's (ST RED STON, TUNE on H; machine 14, the newest); MONO2K's own noise is GND-PERC and
   keeps machine number 1 (`M_GPRC`), so no conversion: patterns store machine numbers, new machines go last.
-  Bank A is LO-BIT CLUB (factory revision 10, `docs/bank-a.md`), written on today's pages with `part()` in
-  `factory()`: nothing is converted at build. The bank before it (MAMMOTH .. SPLICE, written on the old pages and
+  Bank A is four parts, CIRCUIT TIDE SUSPEND LANTERN (factory revision 11, `docs/bank-a.md`), written on today's
+  pages with `part()` in `factory()` (their kits as `SET`, their steps and locks as tables, from `cdump`): nothing is
+  converted at build. The bank before it (MAMMOTH .. SPLICE, written on the old pages and
   turned at build) is kept only as a test fixture, `host/m2k_bank_rev9.c` (`factory_rev9()`), so the format tests
   and the conversions' mutants still run on real old parts; it is never built into the instrument. A batch that
   replaces demos bumps `FACTORY_REV` and adds the names it replaced to `OLD_DEMO` (m2k_proj.c), so a saved store takes

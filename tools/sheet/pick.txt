@@ -1,0 +1,26 @@
+2901 of 6000 pass the level, motion and toy filters
+962 kept (the best third of each machine by the score)
+ 1	1171	FM+DYN	hits	note 28	score +1.67	rms -13.5
+ 2	5398	FM+DYN	hits	note 33	score +5.02	rms -16.4
+ 3	3489	SWAV-SAW	held	note 34	score +4.67	rms -16.3
+ 4	1954	SWAV-PUL	held	note 35	score +4.91	rms -35.4
+ 5	3470	GND-NOIS	hits	note 36	score +3.46	rms -13.8
+ 6	3611	SID-6581	hits	note 39	score +4.80	rms -38.0
+ 7	5456	FM+STAT	held	note 39	score +2.73	rms -18.1
+ 8	5418	DIGI-WAV	held	note 41	score +4.71	rms -32.9
+ 9	3419	SWAV-ENS	hits	note 42	score +7.24	rms -23.5
+10	3580	GND-NOIS	hits	note 45	score +5.98	rms -12.8
+11	1542	GND-SIN	hits	note 52	score +1.58	rms -25.0
+12	4196	GND-SIN	held	note 53	score +4.72	rms -27.8
+13	2123	FM+STAT	held	note 53	score +5.13	rms -17.6
+14	1729	GND-NOIS	hits	note 53	score +2.12	rms -26.7
+15	4514	FM+STAT	held	note 55	score +1.78	rms -21.4
+16	5166	FM+PAR	held	note 62	score +6.08	rms -21.1
+17	753	FM+PAR	hits	note 71	score +1.93	rms -27.5
+18	1933	DRM-CYMB	hits	note 38	score +6.43	rms -24.8
+19	2324	DRM-HATS	hits	note 41	score +5.17	rms -17.7
+20	3203	DRM-KICK	hits	note 45	score +1.87	rms -9.9
+21	2607	GND-PERC	hits	note 54	score +7.01	rms -32.1
+22	1365	DRM-KICK	hits	note 54	score +7.93	rms -25.1
+23	1851	DRM-SNAR	hits	note 56	score +5.79	rms -25.9
+24	4425	DRM-CYMB	hits	note 56	score +1.45	rms -23.4

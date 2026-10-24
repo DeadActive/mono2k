@@ -705,8 +705,8 @@ static int selftest(void)
     CHECK(wow_c > 25 && wow_c < 55 && flut_c < wow_c / 3,
           "tape: the wow drifts (25..55 c at TAPE 127), the flutter stays under a third of it");
     m2k_init(7);
-    CHECK(!strcmp(pat[0].name, "LUMEN") && !strcmp(pat[2].name, "LATTICE") && !strcmp(pat[16].name, "INIT"),
-          "factory: A01 LUMEN, A03 LATTICE, B01 INIT");
+    CHECK(!strcmp(pat[0].name, "CIRCUIT") && !strcmp(pat[2].name, "SUSPEND") && !strcmp(pat[4].name, "INIT") &&
+          !strcmp(pat[16].name, "INIT"), "factory: A01 CIRCUIT, A03 SUSPEND, A05 and B01 INIT");
     {                                                  /* the bank is written on today's pages: it packs and comes back */
         static m2k_pattern_t q;
         static uint8_t qb[BLOB_MAX];
@@ -1473,7 +1473,7 @@ static int selftest(void)
     project_load(1);
     CHECK(pat[5].kit[2][P_VOL] != 1, "load project discards unsaved work");
     project_load(0);
-    CHECK(!strcmp(pat[1].name, "PULSAR"), "load DEMO again");
+    CHECK(!strcmp(pat[1].name, "TIDE"), "load DEMO again");
     /* the store, out and back */
     pat[3].kit[1][P_PAN] = 17;
     int n = m2k_store_pack();
@@ -1684,18 +1684,18 @@ static int selftest(void)
         m2k_button(B_GLO, 1); m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);
         int cleared = 1;
         for (int t = 0; t < M2K_TRACKS; t++) for (int st = 0; st < M2K_STEPS; st++) cleared &= !(pat[0].step[t][st].flags & ST_TRIG);
-        int sounds = !strcmp(pat[0].name, "LUMEN") && pat[0].machine[2] == M_DHAT;
+        int sounds = !strcmp(pat[0].name, "CIRCUIT") && pat[0].machine[2] == M_DHAT;
         ui.now = 2000;
         m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);                  /* again: undone */
         int undone = !memcmp(&pat[0], &orig, sizeof orig);
         m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);                /* REDO: cleared again */
-        int redone = !(pat[0].step[0][0].flags & ST_TRIG) && !strcmp(pat[0].name, "LUMEN");
+        int redone = !(pat[0].step[0][0].flags & ST_TRIG) && !strcmp(pat[0].name, "CIRCUIT");
         m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);                /* UNDO */
         int undo2 = !memcmp(&pat[0], &orig, sizeof orig);
         ui.now = 9000;
         m2k_button(B_SEQ, 1);                                        /* held: the ring, then INIT */
         ui.now = 9600; ring_tick();
-        int half = !strcmp(pat[0].name, "LUMEN");
+        int half = !strcmp(pat[0].name, "CIRCUIT");
         ui.now = 10100; ring_tick();
         m2k_button(B_SEQ, 0);
         int init = !memcmp(&pat[0], &blank, sizeof blank);
@@ -1737,7 +1737,7 @@ static int selftest(void)
         for (int k = 0; k < 4; k++) { int c = knob_param(PG_GLO, 3, k); if (c == SETTING(22)) wk = k; if (c == SETTING(23)) dk = k; }
         edit(wk, 1);
         m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);             /* NO */
-        int first = !strcmp(pat[0].name, "LUMEN") && !ask.kind;
+        int first = !strcmp(pat[0].name, "CIRCUIT") && !ask.kind;
         ui.now = 3500;
         edit(wk, 1);
         m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);             /* YES */
@@ -1747,7 +1747,7 @@ static int selftest(void)
         int demos = 1;
         if (dk >= 0) {
             ui.now = 6000; edit(dk, 1); m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
-            demos = !strcmp(pat[0].name, "LUMEN") && !strcmp(pat[15].name, "EMBERS") && !strcmp(pat[16].name, "INIT");
+            demos = !strcmp(pat[0].name, "CIRCUIT") && !strcmp(pat[3].name, "LANTERN") && !strcmp(pat[16].name, "INIT");
         }
         CHECK(wk >= 0 && first && wiped && kept && demos, "GLO > SET: WIPE asks (OCT- NO, OCT+ YES: every pattern INIT, the sounds kept); DEMO, bank A back");
         /* HOME held: the white keys pick patterns, SEQ clears them (held: INIT), REC copies, PLAY pastes, the black
@@ -1764,7 +1764,7 @@ static int selftest(void)
         for (int t = 0; t < M2K_TRACKS; t++) for (int st = 0; st < M2K_STEPS; st++) clr &= !(pat[1].step[t][st].flags & ST_TRIG) && !(pat[4].step[t][st].flags & ST_TRIG);
         int others = 0;
         for (int st = 0; st < M2K_STEPS; st++) others += pat[0].step[0][st].flags & ST_TRIG ? 1 : 0;
-        int sounds = !strcmp(pat[1].name, "PULSAR");
+        int sounds = !strcmp(pat[1].name, "TIDE");
         ui.now = 1500;
         m2k_button(B_SEQ, 1);                         /* held a second: INIT */
         ui.now = 2600; ring_tick();
@@ -1780,7 +1780,7 @@ static int selftest(void)
         m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0);
         m2k_button(B_HOME, 0);
         int pasted = 0;
-        for (int i = 16; i < 32; i++) pasted += !strcmp(pat[i].name, "LUMEN");
+        for (int i = 16; i < 32; i++) pasted += !strcmp(pat[i].name, "CIRCUIT");
         CHECK(picked && clr && others && sounds && init && pasted == 2 && sq.playing == 0,
               "HOME held: keys pick patterns, SEQ clears them (sounds kept), held INIT; REC copies, black 2 bank B, PLAY pastes");
         m2k_init(40);

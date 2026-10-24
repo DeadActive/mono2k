@@ -564,8 +564,9 @@ uint8_t *m2k_store_buf(int *max)
  * RIVETS, ORCHARD, SPLINTR), and HAZE, SPLICE and RIBBON set to sound on the per-machine DIST as they did; 5: A04
  * TENFOUR and A16 FOUNDRY, after Radiohead and Boards of Canada; 6: A06 CAROM, A07 VESPER, A12 CUTUP, A13 GRISTLE;
  * 7: A09 MAMMOTH (direction v5) for PYLONS; 8: the bank reordered by energy, MAMMOTH first; 9: CUTUP to A02,
- * RIVETS to A11; 10: a new bank, LO-BIT CLUB, whole (docs/bank-a.md) */
-#define FACTORY_REV 10
+ * RIVETS to A11; 10: a new bank, LO-BIT CLUB, whole; 11: four parts from the owner's sound sheets (CIRCUIT, TIDE,
+ * SUSPEND, LANTERN), the rest of the bank blank (docs/bank-a.md) */
+#define FACTORY_REV 11
 static const char *const OLD_DEMO[FACTORY_REV][16] = {
     {"LATEX", "PVC", "SPU RM", "ELECTRO", "GLITCH", "CHROME", "ACID", "2STEP", "GROOVE", "HYPRPOP", "DUB", "CHIP",
      "HARDGRV", "IDM", "DUBSTEP", "INIT"},
@@ -587,6 +588,8 @@ static const char *const OLD_DEMO[FACTORY_REV][16] = {
      "RIBBON", "MOTEL", "FOUNDRY", "SPLICE"},
     {"MAMMOTH", "RIVETS", "HAZE", "GRISTLE", "CAROM", "TENFOUR", "VESPER", "ORCHARD", "SPLINTR", "SMOKE", "CUTUP", "SYRUP",
      "RIBBON", "MOTEL", "FOUNDRY", "SPLICE"},
+    {"LUMEN", "PULSAR", "LATTICE", "SPUDUB", "PROCESS", "SQUELCH", "GROWL", "BREAKS", "SPRITES", "OPLL", "JUKE", "CHIPJNG",
+     "VIOLET", "DUSKLIT", "FLUTE", "EMBERS"},
 };
 
 static int name_is(const char *a, const char *b)

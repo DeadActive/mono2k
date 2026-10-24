@@ -1,0 +1,236 @@
+bpm 126
+glob 1 10
+orig 0 3203 14=64 69=0 35=0
+clear 0
+trig 0 0 33
+trig 0 7 33
+trig 0 10 33
+trig 0 16 33
+trig 0 23 33
+trig 0 26 33
+trig 0 32 33
+trig 0 39 33
+trig 0 42 33
+trig 0 48 33
+trig 0 55 33
+trig 0 58 33
+trig 0 61 33
+cond 0 61 14
+orig 1 1851 0=16 1=0 2=0 3=100 4=80 5=64 6=0 7=6 8=0 9=0 10=28 11=14 12=64 14=64 16=8 17=52 35=24 69=0 32=0 22=64 23=64
+clear 1
+trig 1 4 47
+cond 1 4 16
+trig 1 12 47
+cond 1 12 16
+trig 1 20 47
+cond 1 20 16
+trig 1 28 47
+cond 1 28 16
+trig 1 36 47
+cond 1 36 16
+trig 1 44 47
+cond 1 44 16
+trig 1 52 47
+cond 1 52 16
+trig 1 60 47
+cond 1 60 16
+trig 1 63 47
+cond 1 63 7
+lock 1 63 13 36
+trig 1 62 47
+cond 1 62 14
+lock 1 62 13 44
+orig 2 2324 5=117 2=10 4=100 6=12 7=0 12=64 16=50 17=40 19=0 69=0 28=64 32=0
+clear 2
+trig 2 2 57
+cond 2 2 16
+trig 2 6 57
+cond 2 6 16
+trig 2 10 57
+cond 2 10 16
+trig 2 14 57
+cond 2 14 16
+trig 2 18 57
+cond 2 18 16
+trig 2 22 57
+cond 2 22 16
+trig 2 26 57
+cond 2 26 16
+trig 2 29 57
+cond 2 29 2
+lock 2 29 13 34
+trig 2 30 57
+cond 2 30 16
+trig 2 34 57
+cond 2 34 16
+trig 2 38 57
+cond 2 38 16
+trig 2 42 57
+cond 2 42 16
+trig 2 46 57
+cond 2 46 16
+trig 2 50 57
+cond 2 50 16
+trig 2 54 57
+cond 2 54 16
+trig 2 56 57
+cond 2 56 2
+lock 2 56 13 34
+trig 2 58 57
+cond 2 58 16
+trig 2 62 57
+cond 2 62 14
+lock 2 62 7 30
+ptrack 3 0
+kit 3 0 18
+kit 3 6 50
+kit 3 8 0
+kit 3 9 10
+kit 3 10 60
+kit 3 11 30
+kit 3 41 30
+kit 3 9 24
+kit 3 10 90
+kit 3 41 127
+trig 3 2 33
+lock 3 2 9 40
+lock 3 2 10 90
+trig 3 8 33
+lock 3 8 9 5
+lock 3 8 10 44
+trig 3 11 40
+lock 3 11 9 5
+lock 3 11 10 44
+trig 3 14 43
+lock 3 14 9 5
+lock 3 14 10 44
+trig 3 18 33
+lock 3 18 9 40
+lock 3 18 10 90
+trig 3 24 33
+lock 3 24 9 5
+lock 3 24 10 44
+trig 3 27 36
+lock 3 27 9 5
+lock 3 27 10 44
+trig 3 30 31
+lock 3 30 9 12
+lock 3 30 10 44
+trig 3 34 29
+lock 3 34 9 40
+lock 3 34 10 90
+trig 3 40 29
+lock 3 40 9 5
+lock 3 40 10 44
+trig 3 43 36
+lock 3 43 9 5
+lock 3 43 10 44
+trig 3 46 33
+lock 3 46 9 12
+lock 3 46 10 44
+trig 3 50 31
+lock 3 50 9 40
+lock 3 50 10 90
+trig 3 56 31
+lock 3 56 9 5
+lock 3 56 10 44
+trig 3 59 38
+lock 3 59 9 5
+lock 3 59 10 44
+trig 3 62 35
+lock 3 62 9 12
+lock 3 62 10 44
+trig 3 60 43
+cond 3 60 14
+lock 3 60 9 5
+lock 3 60 10 44
+orig 4 3419 25=64 32=0 18=20 16=12 17=50
+clear 4
+trig 4 6 60
+ens 4 6 -3 7 11
+trig 4 29 60
+cond 4 29 6
+ens 4 29 -3 7 11
+trig 4 31 60
+cond 4 31 7
+ens 4 31 -3 7 11
+trig 4 38 64
+ens 4 38 -7 1 8
+trig 4 57 62
+cond 4 57 16
+ens 4 57 -7 2 9
+trig 4 61 62
+ens 4 61 -7 2 9
+kit 4 59 18
+kit 4 60 9
+kit 4 61 12
+kit 4 62 8
+kit 4 63 4
+kit 4 64 0
+kit 4 65 86
+mtrack 5 2 2073 26=0
+clear 5
+trig 5 0 60
+cond 5 0 7
+trig 5 3 71
+cond 5 3 7
+trig 5 7 67
+cond 5 7 7
+trig 5 10 69
+cond 5 10 7
+trig 5 5 71
+cond 5 5 13
+trig 5 13 60
+cond 5 13 13
+trig 5 16 60
+cond 5 16 7
+trig 5 19 71
+cond 5 19 7
+trig 5 23 67
+cond 5 23 7
+trig 5 26 69
+cond 5 26 7
+trig 5 21 71
+cond 5 21 13
+trig 5 29 60
+cond 5 29 13
+trig 5 32 64
+cond 5 32 7
+trig 5 35 72
+cond 5 35 7
+trig 5 39 65
+cond 5 39 7
+trig 5 42 69
+cond 5 42 7
+trig 5 37 72
+cond 5 37 13
+trig 5 45 64
+cond 5 45 13
+trig 5 48 62
+cond 5 48 7
+trig 5 51 71
+cond 5 51 7
+trig 5 55 64
+cond 5 55 7
+trig 5 58 67
+cond 5 58 7
+trig 5 53 71
+cond 5 53 13
+trig 5 61 62
+cond 5 61 13
+kit 5 59 6
+kit 5 60 9
+kit 5 61 12
+kit 5 62 8
+kit 5 63 8
+kit 5 64 0
+kit 5 65 78
+sync
+kit 0 37 72
+kit 1 37 127
+kit 2 37 127
+kit 3 37 82
+kit 4 37 127
+kit 5 37 87
+kit 2 13 100
+kit 4 13 94

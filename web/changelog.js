@@ -7,6 +7,14 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-10-24", title: "A new bank A: four parts, every sound picked by ear",
+    items: [
+      ["patterns", "A new bank A, four parts: CIRCUIT (electro, A minor, 126), TIDE (Em7 and A9, E dorian, 122), SUSPEND (sus2 chords moved whole, D, 110) and LANTERN (add9 chord hits, A, 100). Each 4-bar pattern plays as a 16-bar form: what comes in after the first pass, what alternates, what arrives on the third and fourth, filters moving over 16 bars."],
+      ["patterns", "Every sound in them was picked by ear from sheets of random settings, then the parts were written to rules from research on Elektron pattern craft, IDM harmony and groovebox mixing, and fixed by measurement until each track sat on the tempo and in the harmony."],
+      ["patterns", "LO-BIT CLUB is gone, and A05 to A16 are blank for your own. A saved store takes the new parts where LO-BIT CLUB's still stand, and its other slots go blank the same way; anything you changed is kept."],
+    ],
+  },
+  {
     date: "2026-10-23", title: "A new bank A, four drums, undo, PERFORM, a speed per track, four banks on the FM-1, a sound library",
     items: [
       ["patterns", "A new bank A, LO-BIT CLUB: a live set in sixteen parts after the Elektron-and-handhelds club music of Berlin and Sweden (Dataline, Auvrel, Sqein, sm0hm, random_meteor) and LØSTLVLS's Monomachine sounds, the drums on the DRM- machines: LUMEN, PULSAR, LATTICE, SPUDUB (it opens), PROCESS, SQUELCH, GROWL, BREAKS (it peaks), SPRITES, OPLL, JUKE, CHIPJNG (it runs fast), VIOLET, DUSKLIT, FLUTE, EMBERS (it comes down). The bank before is gone; a saved store takes the new parts where the old still stand, and the sound library starts from the new ones."],
