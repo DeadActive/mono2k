@@ -78,6 +78,24 @@ static uint8_t tune_v5(int v)
     return (uint8_t)(v < 0 ? 0 : v > 127 ? 127 : v);
 }
 
+/* a pattern's values in their ranges, as the knobs keep them: a damaged or hand-made store reaches past no table
+ * (the kit and the locks 0..127, the notes too, ratchets 0..4, each global to its own: the tempo to 255, the length
+ * 1..64). Before the conversions (they index by the old values) and after them */
+static void pat_clamp(m2k_pattern_t *p)
+{
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        for (int k = 0; k < P_COUNT; k++) if (p->kit[t][k] > 127) p->kit[t][k] = 127;
+        for (int s = 0; s < M2K_STEPS; s++) {
+            m2k_step_t *st = &p->step[t][s];
+            st->note &= 127;
+            if (st->rtrg > 4) st->rtrg = 4;
+        }
+    }
+    for (int g = 0; g < G_COUNT; g++) if (g != G_TMPO && p->glob[g] > 127) p->glob[g] = 127;
+    p->glob[G_LEN] = (uint8_t)CLAMP(p->glob[G_LEN], 1, 64);
+    for (int i = 0; i < M2K_LOCKS; i++) if (p->lock[i].val > 127) p->lock[i].val = 127;
+}
+
 static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
@@ -123,6 +141,7 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
         if (p->lock[i].trk >= M2K_TRACKS || p->lock[i].step >= M2K_STEPS || p->lock[i].param >= P_COUNT) p->lock[i].trk = 0xFF;
         n += 4;
     }
+    pat_clamp(p);
     if (ver == 1) amp_v1(p);
     if (ver < 4)                       /* SWAV-SAW took the Monomachine's page: carry the old one over as near as it goes */
         for (int t = 0; t < M2K_TRACKS; t++) {
@@ -158,6 +177,7 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
     if (ver < 12) gsin_v11(p);        /* and GND-SIN's: TUNE on its eighth knob */
     if (ver < 13) hold_v12(p);        /* HOLD went from 14.6 ms a step to 1 / 32 beat */
     if (ver < 14) vox_v13(p);         /* VOX-6 took VO-6's page */
+    pat_clamp(p);
     return 1;
 }
 
@@ -228,30 +248,40 @@ static int img_put_pat(m2k_img_t *im, int i, const m2k_pattern_t *p) { int n = p
 
 #if PAT_CACHE
 /* the cache: two patterns unpacked (pat_idx), the rest packed in the working image. A slot is taken for another
- * pattern only from one not playing (written back first); the image keeps room for the playing one to grow to the
- * most a pattern packs to (pat_can_open), so writing it back always fits */
-static void pat_flush(int v) { if (pat_idx[v] >= 0) img_put_pat(&work_img, pat_idx[v], &store_.p[v]); }
+ * pattern only from one not playing (written back first); the image keeps room for both held to be written back and
+ * the playing one to grow to the most a pattern packs to (pat_can_open, pat_room), so writing back always fits. Should
+ * it not (a store from elsewhere filled the image), what is held stays held: nothing is dropped unwritten */
+static int pat_flush(int v) { return pat_idx[v] < 0 || img_put_pat(&work_img, pat_idx[v], &store_.p[v]); }   /* 0: no room */
 static void pat_drop(void) { pat_idx[0] = pat_idx[1] = -1; }       /* the working image replaced: nothing held */
 
 static m2k_pattern_t *pat_load(int i)
 {
-    int v = pat_idx[0] == cur_pat ? 1 : pat_idx[1] == cur_pat ? 0 : pat_idx[1] == (int)sq.queued ? 0 : 1;
-    pat_flush(v);
-    int n;
+    int v = pat_idx[0] == cur_pat ? 1 : pat_idx[1] == cur_pat ? 0 : pat_idx[1] == (int)sq.queued ? 0 : 1, n;
+    m2k_pattern_t *p = &store_.p[v];
+    if (!pat_flush(v)) p = &pat_tmp;               /* the slot's pattern does not fit back: kept; i read, not held */
+    else pat_idx[v] = (int16_t)i;
     const uint8_t *b = img_get(&work_img, i, &n);
-    if (!n || !pat_unpack(&store_.p[v], b, n)) pattern_init_blank(&store_.p[v]);
-    pat_idx[v] = (int16_t)i;
-    return &store_.p[v];
+    if (!n || !pat_unpack(p, b, n)) pattern_init_blank(p);
+    return p;
 }
 
-/* may pattern j play next: the others as they pack now, and room for j to grow to the largest a pattern packs to */
-static int pat_can_open(int j)
+/* the working image's bytes once what is held is written back, each held pattern as it packs now (or as it stands,
+ * if more), all but pattern j's (-1: none left out) */
+static uint32_t work_used(int j)
 {
-    if (j == cur_pat) return 1;
-    uint32_t used = work_img.used - work_img.len[j];
-    if (pat_idx[0] == cur_pat || pat_idx[1] == cur_pat) used = used - work_img.len[cur_pat] + (uint32_t)pat_pack_img(PAT(cur_pat));
-    return used + BLOB_MAX <= IMG_DATA;
+    uint32_t used = work_img.used - (j >= 0 ? work_img.len[j] : 0u);
+    for (int v = 0; v < 2; v++) {
+        int h = pat_idx[v];
+        if (h < 0 || h == j) continue;
+        uint32_t now = (uint32_t)pat_pack_img(&store_.p[v]);
+        if (now > work_img.len[h]) used += now - work_img.len[h];
+    }
+    return used;
 }
+
+/* may pattern j play next: the others as they pack now (both held among them), and room for j to grow to the largest a
+ * pattern packs to */
+static int pat_can_open(int j) { return j == cur_pat || work_used(j) + BLOB_MAX <= IMG_DATA; }
 #else
 static int pat_can_open(int j) { (void)j; return 1; }
 #endif
@@ -277,7 +307,7 @@ static const char *pat_name(int i)
 static int pat_room(int add)
 {
 #if PAT_CACHE
-    return (int)work_img.used + add + BLOB_MAX <= IMG_DATA;
+    return work_used(cur_pat) + (uint32_t)add + BLOB_MAX <= IMG_DATA;
 #else
     (void)add;
     return 1;
@@ -289,8 +319,9 @@ static int pat_room(int add)
 static int img_pack_work(const char *name)
 {
 #if PAT_CACHE
-    pat_flush(0);
-    pat_flush(1);
+    int a = pat_flush(0), b = pat_flush(1);
+    if (!a) a = pat_flush(0);                      /* (the second may have made room) */
+    if (!a || !b) return 0;
     m_set(work_img.name, 0, sizeof work_img.name);
     for (int i = 0; i < 7 && name[i]; i++) work_img.name[i] = name[i];
     return 1;
@@ -446,7 +477,12 @@ static void project_load(int slot)
     work_reset_current();
 }
 
-/* the factory: project 1 is DEMO (bank A the demos, B-D blank), projects 2-4 blank */
+/* the settings are the store's too: one turned is saved once it has stood a while (a knob turned is many detents) */
+static uint32_t set_at;                          /* the sample of the last change */
+static uint8_t set_wait;                         /* 1: one waits to be saved */
+
+/* the factory: project 1 is DEMO (bank A the demos, the rest blank), projects 2-4 blank */
+#define FACTORY_DEMOS 4                          /* bank A's slots with a demo, A01-A04: factory() writes those alone */
 static void projects_factory(void)
 {
     blank_set();                                 /* the blank, packed: what an image keeps as nothing */
@@ -455,9 +491,10 @@ static void projects_factory(void)
     img_clear(&work_img, "WORK");                /* every pattern blank (INIT) until the factory writes bank A */
 #endif
     factory();
+    for (int i = FACTORY_DEMOS; i < M2K_PATTERNS; i++) pattern_init_blank(PAT(i));
     sounds_factory();
-    for (int i = 16; i < M2K_PATTERNS; i++) pattern_init_blank(PAT(i));
     img_pack_all(&proj[0], "DEMO");
+    set_wait = 0;
     for (int k = 1; k < M2K_PROJECTS; k++) {     /* the blank projects: every pattern INIT */
         char nm[8] = {'P', (char)('1' + k), 0};
         img_clear(&proj[k], nm);
@@ -550,6 +587,37 @@ static int deser_img(m2k_img_t *im, uint32_t len, int direct, int n)
     return 1;
 }
 
+/* an image in the stream checked and passed over, nothing taken: its lengths add up to its length, and when it is
+ * kept, the patterns this build keeps fit an image, each no more than a pattern packs to */
+static int img_check(uint32_t len, int n, int kept)
+{
+    uint8_t h[12], l[2];
+    uint32_t used, keep = 0, sum = 0;
+    if (!st_get(h, 12, len)) return 0;
+    used = (uint32_t)h[8] | ((uint32_t)h[9] << 8) | ((uint32_t)h[10] << 16) | ((uint32_t)h[11] << 24);
+    for (int i = 0; i < n; i++) {
+        if (!st_get(l, 2, len)) return 0;
+        uint32_t v = (uint32_t)(l[0] | (l[1] << 8));
+        sum += v;
+        if (i < M2K_PATTERNS) { keep += v; if (kept && v > BLOB_MAX) return 0; }
+    }
+    if (sum != used || (kept && keep > IMG_DATA) || st_at + used > len) return 0;
+    st_at += used;
+    return 1;
+}
+
+/* the sound library after the images, whole when it is there: 'S', its count, the slots, then 'C', its count, the
+ * categories (an older store has no 'C', or neither) */
+static int snd_check(uint32_t len)
+{
+    uint8_t sh[2];
+    if (st_at >= len) return 1;
+    if (!st_get(sh, 2, len) || sh[0] != 'S' || st_at + sh[1] * (uint32_t)sizeof(m2k_sound_t) > len) return 0;
+    st_at += sh[1] * (uint32_t)sizeof(m2k_sound_t);
+    if (st_at >= len) return 1;
+    return st_get(sh, 2, len) && sh[0] == 'C' && st_at + sh[1] <= len;
+}
+
 #ifndef M2K_FW
 uint8_t *m2k_store_buf(int *max)
 {
@@ -586,7 +654,7 @@ static const char *const OLD_DEMO[FACTORY_REV][16] = {
      "GRISTLE", "ORCHARD", "SPLINTR", "FOUNDRY"},
     {"MAMMOTH", "RIVETS", "HAZE", "GRISTLE", "CAROM", "TENFOUR", "VESPER", "ORCHARD", "SPLINTR", "SMOKE", "CUTUP", "SYRUP",
      "RIBBON", "MOTEL", "FOUNDRY", "SPLICE"},
-    {"MAMMOTH", "RIVETS", "HAZE", "GRISTLE", "CAROM", "TENFOUR", "VESPER", "ORCHARD", "SPLINTR", "SMOKE", "CUTUP", "SYRUP",
+    {"MAMMOTH", "CUTUP", "HAZE", "GRISTLE", "CAROM", "TENFOUR", "VESPER", "ORCHARD", "SPLINTR", "SMOKE", "RIVETS", "SYRUP",
      "RIBBON", "MOTEL", "FOUNDRY", "SPLICE"},
     {"LUMEN", "PULSAR", "LATTICE", "SPUDUB", "PROCESS", "SQUELCH", "GROWL", "BREAKS", "SPRITES", "OPLL", "JUKE", "CHIPJNG",
      "VIOLET", "DUSKLIT", "FLUTE", "EMBERS"},
@@ -598,20 +666,46 @@ static int name_is(const char *a, const char *b)
     return 1;
 }
 
-/* a saved image of the DEMO project: a bank-A slot still holding the demo the store's revision shipped (by its name;
- * an INIT only while it is blank) takes today's demo, built in pat[] by the caller. Anything else is the owner's: kept */
+/* the demos of the revisions whose stores keep them as shipped (10 on): each bank-A slot's packed length and FNV-1a.
+ * A slot takes today's demo only while it is byte for byte the one its revision shipped (a demo edited under its name
+ * is the owner's). The row for FACTORY_REV is today's bank, held by the self-test (it prints the row it wants): a
+ * batch that replaces demos bumps FACTORY_REV and adds it. Before 10 no packed demo survives: by name */
+static const struct { uint8_t rev; uint16_t len[16]; uint32_t fnv[16]; } OLD_PACKED[] = {
+    {10, {1131, 1083, 919, 1011, 1171, 1203, 1091, 1015, 1307, 1131, 1111, 1175, 767, 847, 839, 759},
+     {0x4b103010u, 0x82293976u, 0xe0cfe4cau, 0x4296493eu, 0x3cf1a5d6u, 0x6ded61d3u, 0xb1e2d6b1u, 0xb50ef844u,
+      0xc3f1ae57u, 0x68a1d2c2u, 0xe71862c7u, 0x3e87034cu, 0x37721b15u, 0x91e00738u, 0xb7030f9du, 0xbefb958fu}},
+    {11, {1091, 935, 879, 911},
+     {0x73cc380fu, 0x0f86d30bu, 0xd0488ca5u, 0x507c3f8cu, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u,
+      0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u}},
+};
+
+static uint32_t fnv(const uint8_t *b, uint32_t n)
+{
+    uint32_t h = 2166136261u;
+    while (n--) h = (h ^ *b++) * 16777619u;
+    return h;
+}
+
+/* bank-A slot i of a saved image still holds the demo its store's revision shipped */
+static int demo_shipped(const m2k_img_t *im, int i, int rev)
+{
+    const uint8_t *b = im->data + img_off(im, i);
+    int n = im->len[i];
+    for (unsigned k = 0; k < sizeof OLD_PACKED / sizeof OLD_PACKED[0]; k++)
+        if (OLD_PACKED[k].rev == rev) return n == OLD_PACKED[k].len[i] && fnv(b, (uint32_t)n) == OLD_PACKED[k].fnv[i];
+    if (!n) return name_is(OLD_DEMO[rev][i], "INIT");             /* by name: an INIT only while it is blank */
+    m2k_pattern_t *const o = &pat_tmp;
+    if (!pat_unpack(o, b, n) || !name_is(o->name, OLD_DEMO[rev][i])) return 0;
+    if (name_is(OLD_DEMO[rev][i], "INIT"))
+        for (int t = 0; t < M2K_TRACKS; t++) for (int s = 0; s < M2K_STEPS; s++) if (o->step[t][s].flags & ST_TRIG) return 0;
+    return 1;
+}
+
+/* a saved image of the DEMO project: a slot of today's demos still holding what its revision shipped takes today's,
+ * built in pat[] by the caller. Anything else is the owner's, and a slot with no demo now (A05-A16) is never blanked */
 static void refresh_demos(m2k_img_t *im, int rev)
 {
-    m2k_pattern_t *const o = &pat_tmp;
-    for (int i = 0; i < 16; i++) {
-        if (!im->len[i] || !pat_unpack(o, im->data + img_off(im, i), im->len[i]) || !name_is(o->name, OLD_DEMO[rev][i])) continue;
-        if (name_is(OLD_DEMO[rev][i], "INIT")) {
-            int trigs = 0;
-            for (int t = 0; t < M2K_TRACKS; t++) for (int s = 0; s < M2K_STEPS; s++) trigs += o->step[t][s].flags & ST_TRIG;
-            if (trigs) continue;
-        }
-        img_put_pat(im, i, PAT(i));
-    }
+    for (int i = 0; i < FACTORY_DEMOS; i++) if (demo_shipped(im, i, rev)) img_put_pat(im, i, PAT(i));
 }
 
 /* the store, version 3: "M2K2" 3, the open project and pattern, the factory's revision, how many patterns a project and
@@ -659,12 +753,17 @@ int m2k_store_unpack(int len)
     int np = ver >= 3 ? o[8] : M2K_PATTERNS, nk = ver >= 3 ? o[9] : M2K_PROJECTS;   /* before 3: this build's own */
     if (np < 1 || np > 64 || nk < 1 || nk > 16) return 0;
     if (!st_get(set, S_COUNT, n)) return 0;
+    /* the whole stream first, nothing taken: a store cut short or damaged leaves the instrument as it was (and the
+     * FM-1's link writes that back). The working image, the projects (those past this build's passed over), the sounds */
+    uint32_t body = st_at;
+    for (int i = 0; i <= nk; i++) if (!img_check(n, np, i <= M2K_PROJECTS)) return 0;
+    if (ver >= 3 && !snd_check(n)) return 0;
+    st_at = body;
+    /* then taken whole. (A read failing now is the flash's: the factory, rather than half of each) */
 #if PAT_CACHE
     pat_drop();                                             /* the working image is about to be replaced */
-    if (!deser_img(&work_img, n, 1, np)) { projects_factory(); return 0; }
-#else
-    if (!deser_img(&work_img, n, 1, np)) return 0;          /* the working patterns, in the scratch image */
 #endif
+    if (!deser_img(&work_img, n, 1, np)) { projects_factory(); return 0; }   /* (the browser's: the scratch image) */
     for (int i = 0; i < nk; i++)
         if (!deser_img(i < M2K_PROJECTS ? &proj[i] : 0, n, 1, np)) { projects_factory(); return 0; }
     for (int i = nk; i < M2K_PROJECTS; i++) {               /* projects the store has not: blank ones */
@@ -678,7 +777,11 @@ int m2k_store_unpack(int len)
         for (int i = 0; i < sh[1]; i++) {
             m2k_sound_t tmp;
             if (!st_get(&tmp, sizeof tmp, n)) break;
-            if (i < M2K_SOUNDS) { snd[i] = tmp; snd[i].name[7] = 0; if (snd[i].machine >= M_COUNT) snd[i].name[0] = 0; }
+            if (i >= M2K_SOUNDS) continue;
+            snd[i] = tmp;
+            snd[i].name[7] = 0;
+            if (snd[i].machine >= M_COUNT) snd[i].name[0] = 0;
+            for (int k = 0; k < P_COUNT; k++) if (snd[i].kit[k] > 127) snd[i].kit[k] = 127;
         }
         if (st_get(sh, 2, n) && sh[0] == 'C')           /* the categories (a store before them: guessed) */
             for (int i = 0; i < sh[1]; i++) { uint8_t c; if (!st_get(&c, 1, n)) break; if (i < M2K_SOUNDS) snd_cat[i] = c < CAT_COUNT ? c : 0; }
@@ -693,7 +796,8 @@ int m2k_store_unpack(int len)
         if (o[5] == 0) refresh_demos(&work_img, rev);
     }
     img_unpack_all(&work_img);
-    m_cpy(store_.set, set, S_COUNT);
+    for (int i = 0; i < S_COUNT; i++) store_.set[i] = set[i] > 127 ? 127 : set[i];
+    set_wait = 0;                                           /* (a setting turned before: replaced) */
     cur_proj = o[5] < M2K_PROJECTS ? o[5] : 0;
     cur_pat = o[6] < M2K_PATTERNS ? o[6] : 0;
     sq.queued = (uint8_t)cur_pat;

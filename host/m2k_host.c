@@ -696,6 +696,30 @@ static void (*par_pending)(void);
 static int par_test_begin(void (*job)(void)) { if (par_mode == 1) job(); else par_pending = job; return 1; }
 static void par_test_end(void) { if (par_mode == 2 && par_pending) par_pending(); par_pending = 0; }
 
+static uint32_t fuzz_r = 12345;                 /* the fuzz's numbers */
+static uint32_t fuzz_rnd(void) { fuzz_r = fuzz_r * 1664525u + 1013904223u; return fuzz_r >> 8; }
+
+/* revision 10's A03 LATTICE (LO-BIT CLUB, 3d10b96) as its stores keep it, packed: a demo of that revision untouched */
+static const char LATTICE_R10[] =
+    "500f4c415454494345000f09110406105a00403c001400006e60105852406452525200103c1e1a0a4c000e000624084e644000007f00"
+    "0000204040404000404020007f00000000402d0040000e0a000000002000400a000000002000400a0000000020004000284000007864"
+    "585a7d6e64400000140a40322800007f000000204040404000405032007f0000005a402d0040000e2000000000200040200000000020"
+    "00402000000000200040002840000048503c7f640d050000005a40407f5000347f000000204040404000404020007f00000000403300"
+    "40000e35000000002000403500000000200040350000000020004000284000004040244a4028144000142c104e7f4000007f00000020"
+    "4040404000404020007f0000000040390040001e4a031b0c181800504a000000002000404a00000000200040002840000064417d2840"
+    "506440467f7f50400c4000001e000000204040404000404020007f00000064402d0040007f6000000000200040600000000020004060"
+    "000000002000400028400000303c105a5a28000600001e0c40414000007f000000204040404000404020007f0000006e402d0040000e"
+    "750000000020004075000000002000407500000000200040002840000049494909494949512112211221122112dde6dde6dde6dde601"
+    "09010101091101010000000100000000010081000100111a0100001a0100001a0100001a0100001a0100001a0100001a0100001a0100"
+    "001a0100001a0100001a0100001a0100001a0100001a0100001a0100001a0100001a0100001a0100001a0100001a0100001a0100001a"
+    "0100001a0100003e0100003e0100003f010000390100003e0100003e0100003f010000390100003e0100003e0100003f010000390100"
+    "003e0100003e0100003f010000390100003c0100003c0100003c0102003c0100003c0102003c0100003c0100003c0102003c0100003c"
+    "0102003c0100003c0100003c0100003c0102003c0100003c0102003c0100003c0100003c0102003c0100003c0102003c0100003c0100"
+    "003c0100003c0102003c0100003c0102003c0100003c0100003c0102003c0100003c0102003c0100003c0100003c0100003c0102003c"
+    "0100003c0102003c0100003c0100003c0102003c0100003c0102003c0100001a0100001a0100001b0500001a0100001a0100001a0100"
+    "001a0100001b0500001a0100001a01000026010000320100003201000030030000300300003001040030030000300300003001040000"
+    "00";
+
 static int selftest(void)
 {
     int fails = 0;
@@ -1494,15 +1518,16 @@ static int selftest(void)
     }
     CHECK(project_save(2) == 0, "a project too big for an image is refused, not corrupted");
     CHECK(!strcmp(m2k_project_name(2), "P3"), "the refused slot is untouched");
-    /* a store saved before today's demos: the slots still holding the ones its revision shipped take today's, the
-     * owner's stay. Revision 0 (before the store kept one: A16 was INIT, the owner's once written in), 1 to 8 (7: the
-     * bank before its reorder, every part in another slot; 8: before CUTUP and RIVETS swapped) */
+    /* a store saved before today's demos: a slot of today's (A01-A04) still holding the one its revision shipped takes
+     * today's, the owner's stay, and A05-A16 have no demo now: whatever they hold stays, never blanked. Revision 0
+     * (before the store kept one: A16 was INIT, the owner's once written in), 1 to 9, by name (7: the bank before its
+     * reorder, every part in another slot; 8: before CUTUP and RIVETS swapped) */
     for (int rev = 0; rev < 10; rev++) {
         static const char *const OLDN[10] = {"SPU RM", "DAYDRM", "GLITCH", "DREXC", "FACETS", "TORQUE", "PYLONS", "HAZE", "RIVETS",
                                              "MAMMOTH"};
         int sl = rev == 2 ? 4 : rev == 3 || rev == 6 ? 8 : rev == 4 ? 3 : rev == 5 ? 5 : rev == 7 || rev == 9 ? 0 : rev == 8 ? 1 : 2;   /* a slot the next revision replaced */
         m2k_init(11);
-        m2k_pattern_t keep2 = pat[sl], keep15 = pat[15], keep0 = pat[0], keep6 = pat[6];
+        m2k_pattern_t keep2 = pat[sl], keep0 = pat[0], keep6 = pat[6];
         s_cpy(pat[sl].name, OLDN[rev]);                      /* an old demo, as shipped */
         if (rev == 3) { s_cpy(pat[0].name, "HAZE"); pat[0].kit[5][P_DIST] = 74; }   /* A01 as revision 3 shipped it: HAZE's lead at DIST 74 */
         if (rev == 7) { s_cpy(pat[6].name, "VESPER"); pat[6].kit[5][P_DIST] = 74; }   /* A07 VESPER, in its slot before and after the reorder */
@@ -1529,16 +1554,201 @@ static int selftest(void)
         }
         m2k_init(12);
         CHECK(m2k_store_unpack(n) == 1, rev ? "store: one saved at an earlier factory revision loads" : "store: one saved before today's demos loads");
-        CHECK(!strcmp(pat[sl].name, keep2.name) && !memcmp(pat[sl].kit, keep2.kit, sizeof keep2.kit),
-              "store: an old demo left in its slot becomes today's");
-        int a16 = rev ? !strcmp(pat[15].name, keep15.name) && !memcmp(pat[15].kit, keep15.kit, sizeof keep15.kit)
+        if (sl < FACTORY_DEMOS)
+            CHECK(!strcmp(pat[sl].name, keep2.name) && !memcmp(pat[sl].kit, keep2.kit, sizeof keep2.kit),
+                  "store: an old demo left in A01-A04 becomes today's");
+        else
+            CHECK(!strcmp(pat[sl].name, OLDN[rev]) && pat_pack_img(&pat[sl]), "store: an old demo in A05-A16 stays (no demo there now)");
+        int a16 = rev ? !strcmp(pat[15].name, rev >= 8 ? "SPLICE" : rev >= 5 ? "FOUNDRY" : "SHARDS")
                       : !strcmp(pat[15].name, "INIT") && (pat[15].step[0][0].flags & ST_TRIG);
-        CHECK(!strcmp(pat[7].name, "MYSONG") && a16, rev ? "store: the owner's kept, an earlier revision's A16 today's"
+        CHECK(!strcmp(pat[7].name, "MYSONG") && a16, rev ? "store: the owner's kept, an earlier revision's A16 too (never blanked)"
                                                          : "store: the owner's patterns are kept");
         if (rev == 3)
             CHECK(!memcmp(pat[0].kit, keep0.kit, sizeof keep0.kit), "store: A01 as revision 3 shipped it (HAZE) takes today's");
         if (rev == 7)
-            CHECK(!memcmp(pat[6].kit, keep6.kit, sizeof keep6.kit), "store: a demo kept by its name (VESPER) takes today's settings");
+            CHECK(!strcmp(pat[6].name, "VESPER") && pat[6].kit[5][P_DIST] == 74 && memcmp(pat[6].kit, keep6.kit, sizeof keep6.kit),
+                  "store: A07 VESPER as it was (A05-A16 have no demo now)");
+    }
+    /* revision 9 moved CUTUP to A02 and RIVETS to A11 (host/m2k_bank_rev9.c): its A02 CUTUP takes today's, a RIVETS
+     * there is not what it shipped (revision 8's was): the owner's; its A11 RIVETS stays */
+    CHECK(name_is(OLD_DEMO[9][1], "CUTUP") && name_is(OLD_DEMO[9][10], "RIVETS") && name_is(OLD_DEMO[8][1], "RIVETS") &&
+          name_is(OLD_DEMO[8][10], "CUTUP"), "store: revision 9's demos, CUTUP at A02 and RIVETS at A11");
+    for (int k = 0; k < 2; k++) {
+        m2k_init(13);
+        m2k_pattern_t today = pat[1];
+        s_cpy(pat[1].name, k ? "RIVETS" : "CUTUP");
+        s_cpy(pat[10].name, "RIVETS");
+        project_save(0);
+        int n = m2k_store_pack();
+        store_buf[7] = 9;
+        m2k_init(14);
+        int ok = m2k_store_unpack(n) == 1 && !strcmp(pat[10].name, "RIVETS");
+        if (!k) CHECK(ok && !memcmp(&pat[1], &today, sizeof today), "store: revision 9's A02 CUTUP becomes today's TIDE, its A11 RIVETS stays");
+        else CHECK(ok && !strcmp(pat[1].name, "RIVETS"), "store: a RIVETS at A02 in revision 9's store is the owner's: kept");
+    }
+    /* revision 10 (LO-BIT CLUB) on: a slot takes today's only while it is byte for byte what its revision shipped. A03
+     * LATTICE as it shipped becomes today's SUSPEND, in the work and in P1; with a knob turned under its name it is the
+     * owner's; A05 PROCESS under the owner's work and A06-A16 untouched all stay (no demo there now) */
+    {
+        static uint8_t lb[BLOB_MAX], rb[BLOB_MAX];
+        int ln = 0;
+        for (const char *h = LATTICE_R10; h[0] && h[1]; h += 2) { unsigned v; sscanf(h, "%2x", &v); lb[ln++] = (uint8_t)v; }
+        for (int k = 0; k < 2; k++) {
+            m2k_init(15);
+            m2k_pattern_t today = pat[2];
+            for (int i = 0; i < 16; i++) { memset(pat[i].name, 0, 8); s_cpy(pat[i].name, OLD_DEMO[10][i]); }
+            int same = pat_unpack(&pat[2], lb, ln) && pat_pack(&pat[2], rb) == ln && !memcmp(rb, lb, (size_t)ln);
+            if (k) pat[2].kit[3][P_VOL] ^= 1;         /* a knob turned a detent, the name kept */
+            int vol = pat[2].kit[3][P_VOL], mine = 0;
+            for (int s = 0; s < 64; s++) { pat[4].step[0][s].flags = ST_TRIG; pat[4].step[0][s].note = (uint8_t)(36 + s % 12); }
+            project_save(0);
+            int n = m2k_store_pack(), len;
+            store_buf[7] = 10;
+            m2k_init(16);
+            int ok = m2k_store_unpack(n) == 1;
+            const uint8_t *b = img_get(&proj[0], 2, &len);
+            for (int s = 0; s < 64; s++) mine += pat[4].step[0][s].flags & ST_TRIG;
+            int rest = !strcmp(pat[4].name, "PROCESS") && mine == 64;
+            for (int i = 5; i < 16; i++) rest &= !strcmp(pat[i].name, OLD_DEMO[10][i]) && proj[0].len[i] > 0;
+            if (!k)
+                CHECK(ok && same && !memcmp(&pat[2], &today, sizeof today) && len == pat_pack(&today, rb) && !memcmp(b, rb, (size_t)len),
+                      "store: revision 10's A03 LATTICE as it shipped becomes today's, in the work and in P1");
+            else
+                CHECK(ok && !strcmp(pat[2].name, "LATTICE") && pat[2].kit[3][P_VOL] == vol && len == ln,
+                      "store: revision 10's LATTICE with a knob turned under its name is the owner's: kept");
+            CHECK(ok && rest, "store: revision 10's A05 PROCESS with the owner's work and A06-A16 stay, none blanked");
+        }
+    }
+    {   /* OLD_PACKED's row for this revision is today's bank A packed: a bank changed is a new revision */
+        int row = -1, same = 1;
+        for (unsigned k = 0; k < sizeof OLD_PACKED / sizeof OLD_PACKED[0]; k++) if (OLD_PACKED[k].rev == FACTORY_REV) row = (int)k;
+        m2k_init(17);
+        for (int i = 0; i < 16; i++) {
+            int n = pat_pack_img(&pat[i]);
+            same &= row >= 0 && n == OLD_PACKED[row].len[i] && fnv(blob, (uint32_t)n) == OLD_PACKED[row].fnv[i];
+        }
+        if (!same) {
+            printf("     OLD_PACKED wants: {%d, {", FACTORY_REV);
+            for (int i = 0; i < 16; i++) printf("%d%s", pat_pack_img(&pat[i]), i < 15 ? ", " : "}, {");
+            for (int i = 0; i < 16; i++) { int n = pat_pack_img(&pat[i]); printf("0x%08xu%s", fnv(blob, (uint32_t)n), i < 15 ? ", " : "}},\n"); }
+        }
+        CHECK(same, "store: OLD_PACKED holds today's bank A, packed, as this revision's");
+    }
+    {   /* the Patch Editor keeps a pattern's most free in a store for the FM-1 (web/editor.js BLOB_MAX) */
+        FILE *f = fopen("web/editor.js", "rb");
+        static char js[1 << 17];
+        size_t jn = f ? fread(js, 1, sizeof js - 1, f) : 0;
+        if (f) fclose(f);
+        js[jn] = 0;
+        char want[40];
+        snprintf(want, sizeof want, "const BLOB_MAX = %d;", (int)BLOB_MAX);
+        CHECK(!f || strstr(js, want), "store: the most a pattern packs to is the Patch Editor's BLOB_MAX");
+    }
+    /* a store that does not read whole leaves everything as it was: cut in the second project, an image's length one
+     * more than its patterns', a pattern longer than any packs to, the sounds cut short */
+    {
+        static uint8_t good[STORE_MAX];
+        m2k_init(18);
+        s_cpy(pat[0].name, "MYWORK");
+        for (int s = 0; s < 64; s++) pat[0].step[1][s].flags = ST_TRIG;
+        project_save(1);
+        s_cpy(pat[5].name, "UNSAVED");
+        int n = m2k_store_pack(), whole = 1;
+        memcpy(good, store_buf, (size_t)n);
+        uint32_t w0 = 10 + S_COUNT;                                           /* the working image, then P1, P2 */
+        uint32_t p1 = w0 + 12 + 2 * M2K_PATTERNS + (uint32_t)(good[w0 + 8] | good[w0 + 9] << 8 | good[w0 + 10] << 16);
+        uint32_t p2 = p1 + 12 + 2 * M2K_PATTERNS + (uint32_t)(good[p1 + 8] | good[p1 + 9] << 8 | good[p1 + 10] << 16);
+        int a4 = 0;                                                           /* P1's A01-A04, together */
+        for (int i = 0; i < 4; i++) a4 += good[p1 + 12 + 2 * i] | good[p1 + 13 + 2 * i] << 8;
+        for (int c = 0; c < 4; c++) {
+            memcpy(store_buf, good, (size_t)n);
+            int len = n;
+            if (c == 0) len = (int)p2 + 40;                                   /* cut in P2 */
+            if (c == 1) store_buf[w0 + 8]++;                                  /* the working image's length one more */
+            if (c == 2) {                                                     /* P1's A01 longer than a pattern packs to */
+                int l[4] = {BLOB_MAX + 1, 0, 0, a4 - BLOB_MAX - 1};
+                for (int i = 0; i < 4; i++) { store_buf[p1 + 12 + 2 * i] = (uint8_t)l[i]; store_buf[p1 + 13 + 2 * i] = (uint8_t)(l[i] >> 8); }
+            }
+            if (c == 3) len = n - 100;                                        /* in the sounds */
+            whole &= m2k_store_unpack(len) == 0 && !strcmp(pat[0].name, "MYWORK") && !strcmp(pat[5].name, "UNSAVED") && cur_proj == 1;
+        }
+        memcpy(store_buf, good, (size_t)n);
+        CHECK(whole && m2k_store_unpack(n) == 1, "store: one cut short or damaged is refused whole, what was open stays");
+    }
+    /* a setting turned (GLO > MIDI's channel) is the store's: saved once it has stood 3 s, not once a detent; one set to
+     * what it was is no change */
+    {
+        static int16_t sb[2 * 128];
+        m2k_init(19);
+        m2k_dirty();
+        ui.page = PG_GLO; ui.sub = 4;
+        int early = 0;
+        for (int d = 0; d < 5; d++) {                 /* five detents, a second apart */
+            edit(0, 1);
+            for (int f = 0; f < M2K_SR; f += 128) m2k_render(sb, 128);
+            early |= m2k_dirty();
+        }
+        for (int f = 0; f < 2 * M2K_SR + M2K_SR / 10; f += 128) m2k_render(sb, 128);
+        int due = m2k_dirty(), once = !m2k_dirty(), v = store_.set[S_MCH];
+        m2k_setting(S_MCH, v);
+        for (int f = 0; f < 4 * M2K_SR; f += 128) m2k_render(sb, 128);
+        int same = !m2k_dirty();
+        int n = m2k_store_pack();
+        m2k_init(20);
+        CHECK(!early && due && once && same && v > 0 && m2k_store_unpack(n) == 1 && store_.set[S_MCH] == v,
+              "settings: a turn saved 3 s after its last detent, once; set alike, nothing; it comes back with the store");
+    }
+    /* damaged stores (bytes flipped, cut short) and patterns of every layout (bytes flipped): each refused, or loaded
+     * with its values in range, then played and drawn (under the sanitizers: nothing reaches past a table) */
+    {
+        static uint8_t good[STORE_MAX], bl[BLOB_MAX];
+        static int16_t sb[2 * 128];
+        static m2k_pattern_t src[16];
+        m2k_init(21);
+        for (int i = 16; i < 20; i++) for (int s = 0; s < 64; s += 3) { pat[i].step[i % 6][s].flags = ST_TRIG; pat[i].step[i % 6][s].note = 40; }
+        project_save(0);
+        int n = m2k_store_pack(), loaded = 0, ranged = 1;
+        memcpy(good, store_buf, (size_t)n);
+        for (int it = 0; it < 300; it++) {
+            memcpy(store_buf, good, (size_t)n);
+            int len = n, k = 1 + (int)(fuzz_rnd() % 8);
+            for (int j = 0; j < k; j++) store_buf[fuzz_rnd() % (uint32_t)n] ^= (uint8_t)(1u << (fuzz_rnd() % 8));
+            if (fuzz_rnd() % 4 == 0) len = (int)(fuzz_rnd() % (uint32_t)n);
+            m2k_init(22);
+            if (!m2k_store_unpack(len)) continue;
+            loaded++;
+            for (int i = 0; i < M2K_PATTERNS; i++) {
+                for (int t = 0; t < M2K_TRACKS; t++) for (int q = 0; q < P_COUNT; q++) ranged &= pat[i].kit[t][q] <= 127;
+                ranged &= pat[i].glob[G_LEN] >= 1 && pat[i].glob[G_LEN] <= 64 && pat[i].glob[G_SPD1] <= 127 && pat[i].glob[G_GLCH] <= 127;
+            }
+            cur_pat = (int)(fuzz_rnd() % 20);
+            work_reset_current();
+            seq_play(1);
+            for (int f = 0; f < 128 * 6; f += 128) m2k_render(sb, 128);
+            m2k_frame(500 + 40u * (uint32_t)it);
+            seq_play(0);
+        }
+        m2k_init(23);
+        factory_rev9();                                   /* real parts on every old machine */
+        memcpy(src, pat, sizeof src);
+        int unpacked = 0;
+        for (int it = 0; it < 650; it++) {
+            int ver = 3 + it % 13, bn = pat_pack_v(&src[it % 16], bl, ver), k = 1 + (int)(fuzz_rnd() % 6);
+            for (int j = 0; j < k; j++) bl[fuzz_rnd() % (uint32_t)bn] ^= (uint8_t)(1u << (fuzz_rnd() % 8));
+            m2k_init(24);                                 /* (each as it would boot: no track's last machine left) */
+            if (!pat_unpack(&pat[0], bl, bn)) continue;
+            unpacked++;
+            for (int t = 0; t < M2K_TRACKS; t++) for (int q = 0; q < P_COUNT; q++) ranged &= pat[0].kit[t][q] <= 127;
+            for (int i = 0; i < M2K_LOCKS; i++) ranged &= pat[0].lock[i].val <= 127;
+            cur_pat = 0;
+            work_reset_current();
+            seq_play(1);
+            for (int f = 0; f < 128 * 4; f += 128) m2k_render(sb, 128);
+            m2k_frame(9000 + 40u * (uint32_t)it);
+            seq_play(0);
+        }
+        printf("     damaged: %d of 300 stores loaded, %d of 650 patterns\n", loaded, unpacked);
+        CHECK(loaded > 30 && unpacked > 300 && ranged, "damaged stores and patterns: refused or in range, played and drawn");
     }
     /* GLO > MIDI: the clock out (24 a beat at the tempo, start first, stop last), the clock in (a step every sixth
      * pulse, the tempo from them), the notes out, the channel */
@@ -1750,6 +1960,24 @@ static int selftest(void)
             demos = !strcmp(pat[0].name, "CIRCUIT") && !strcmp(pat[3].name, "LANTERN") && !strcmp(pat[16].name, "INIT");
         }
         CHECK(wk >= 0 && first && wiped && kept && demos, "GLO > SET: WIPE asks (OCT- NO, OCT+ YES: every pattern INIT, the sounds kept); DEMO, bank A back");
+        /* DEMO (the FM-1's GLO > SET) brings back the slots with a demo, A01-A04, and says so on the screen: A05 the
+         * player's since, kept */
+        {
+            m2k_init(40);
+            for (uint32_t ms = 0; ms <= 3000; ms += 500) m2k_frame(ms);
+            for (int i = 0; i < 4; i++) { s_cpy(pat[i].name, "WIPED"); pat[i].kit[0][P_VOL] = 3; }
+            s_cpy(pat[4].name, "MINE");
+            for (int s = 0; s < 64; s++) pat[4].step[0][s].flags = ST_TRIG;
+            int mine = 0, before = ta_found;
+            ask.kind = ASK_DEMO;
+            ask_answer(1);
+            m2k_frame(3500);
+            ta_check(3500);
+            for (int s = 0; s < 64; s++) mine += pat[4].step[0][s].flags & ST_TRIG;
+            CHECK(!strcmp(pat[0].name, "CIRCUIT") && !strcmp(pat[3].name, "LANTERN") && pat[3].kit[0][P_VOL] != 3 &&
+                  !strcmp(pat[4].name, "MINE") && mine == 64 && !strcmp(ui.toast2, "A01-A04, THE REST KEPT") && ta_found == before,
+                  "DEMO: A01-A04 back, the slots with a demo; A05 the player's, kept; the message says so and fits");
+        }
         /* HOME held: the white keys pick patterns, SEQ clears them (held: INIT), REC copies, PLAY pastes, the black
          * keys 1-4 the bank; EDIT held: SEQ INITs the sound, SAVE keeps it in the first INIT slot */
         {

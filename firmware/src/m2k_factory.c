@@ -68,12 +68,13 @@ static int v5_base(int pos, int note) { return pos <= 0 ? 0 : CLAMP(16 + (pos - 
 
 static uint8_t v5_val(int prm, int v, const uint8_t *k, int note)
 {
+    v &= 127;                          /* (the tables' reach, whatever a store held) */
     switch (prm) {
     case P_DIST: return T_V5_DIST[v];
     case P_VOL: return T_V5_VOL[v];
     case P_BASE: return (uint8_t)(v ? v5_base(T_V5_FPOS[v], note) : 0);
     case P_WDTH: {
-        int b = k[P_BASE], lp = b + v;
+        int b = k[P_BASE] & 127, lp = b + v;
         if (lp >= 127 && k[P_LPQ] == 0) return 127;
         int nb = b ? v5_base(T_V5_FPOS[b], note) : 0;
         return (uint8_t)CLAMP(v5_base(T_V5_FPOS[CLAMP(lp, 0, 127)], note) - nb, 0, 127);
@@ -91,7 +92,7 @@ static uint8_t v5_val(int prm, int v, const uint8_t *k, int note)
     case P_DFB: return (uint8_t)((v * 270 * 64 + 16384) >> 15);
     case P_DBAS: return T_V5_DHP[v];
     case P_DWID: {
-        int nb = T_V5_DHP[k[P_DBAS]];
+        int nb = T_V5_DHP[k[P_DBAS] & 127];
         return (uint8_t)CLAMP(T_V5_DLP[CLAMP(k[P_DBAS] + v, 0, 127)] - nb, 0, 127);
     }
     default: return (uint8_t)v;
@@ -143,7 +144,7 @@ static int ens_lock(m2k_pattern_t *p, int t, int st, int prm, int v)
     return 1;
 }
 
-static int ens_target(int trck) { return (trck * M2K_TRACKS) >> 7; }        /* the track an LFO reaches */
+static int ens_target(int trck) { return ((trck & 127) * M2K_TRACKS) >> 7; }        /* the track an LFO reaches */
 
 static void ens_v6(m2k_pattern_t *p)
 {
@@ -249,6 +250,7 @@ static const int8_t FM_TO[2][8] = {{0, 2, -1, 4, 5, -1, 3, -1}, {0, 2, -1, 4, 5,
 
 static int fm_val(int dyn, int prm, int v, const uint8_t *old)
 {
+    v &= 127;                         /* (the tables' reach, whatever a store held; old[] is masked by the caller) */
     switch (prm) {
     case 0: return dyn ? (T_RATIO[(v * 32) >> 7] >= 512 ? 127 : (T_RATIO[(v * 32) >> 7] + 2) >> 2)
                        : fms_ratio(T_RATIO[(v * 32) >> 7], 0);
@@ -278,6 +280,7 @@ static void fm_v9(m2k_pattern_t *p)
         if (m != M_FMS && m != M_FMD) continue;
         uint8_t *k = &p->kit[t][P_SYN], o[8];
         m_cpy(o, k, 8);
+        for (int i = 0; i < 8; i++) o[i] &= 127;
         for (int i = 0; i < M2K_LOCKS; i++) {
             m2k_lock_t *l = &p->lock[i];
             if (l->trk != t || l->param >= P_SYN + 8) continue;   /* P_SYN is 0: none under it */
@@ -349,11 +352,13 @@ static void vox_v13(m2k_pattern_t *p)
         if (p->machine[t] != M_VOX) continue;
         uint8_t *k = &p->kit[t][P_SYN], o[8];
         m_cpy(o, k, 8);
+        for (int i = 0; i < 8; i++) o[i] &= 127;
         k[0] = T_VOX14[o[0]][0]; k[1] = T_VOX14[o[0]][1]; k[2] = 0; k[3] = T_VOX14_BR[o[4]];
         k[4] = 0; k[5] = 64; k[6] = 64; k[7] = 64;
         for (int i = 0; i < M2K_LOCKS; i++) {
             m2k_lock_t *l = &p->lock[i];
             if (l->trk != t || l->param < P_SYN || l->param >= P_SYN + 8) continue;
+            l->val &= 127;
             if (l->param == P_SYN) l->val = T_VOX14[l->val][0];
             else if (l->param == P_SYN + 4) { l->param = P_SYN + 3; l->val = T_VOX14_BR[l->val]; }
             else l->trk = 0xFF;
@@ -800,6 +805,5 @@ static void factory(void)
         0,48,2,100, 0,54,0,50, 0,54,1,93, 0,54,2,100, 5,8,13,40, 5,24,13,40, 5,40,13,40, 5,56,13,40,
     };
     locks(p, A04_LOCKS, sizeof A04_LOCKS);
-
-    for (int i = 4; i < 16; i++) pattern_init_blank(PAT(i));
+    /* (A05-A16 have none: blank at the factory, the player's after; DEMO brings these four back alone) */
 }

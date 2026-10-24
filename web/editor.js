@@ -383,11 +383,14 @@
     }
     return out;
   }
+  /* the most one pattern packs to (m2k_proj.c's BLOB_MAX): the FM-1 keeps that much free in its image, for the
+   * pattern playing to grow into (its patterns open only so), so a store must leave it */
+  const BLOB_MAX = 3596;
   function packed(m) {
     if (m.why === "send") {
       const big = Math.max(0, ...imageSizes(m.bytes));
-      if (fm1 && fm1.room && big > fm1.room)
-        return linkSay(`These patterns take ${(big / 1024).toFixed(1)} KB; the FM-1 keeps ${(fm1.room / 1024).toFixed(1)} KB. Clear or INIT some patterns first.`, "err");
+      if (fm1 && fm1.room && big + BLOB_MAX > fm1.room)
+        return linkSay(`These patterns take ${(big / 1024).toFixed(1)} KB; the FM-1 keeps ${((fm1.room - BLOB_MAX) / 1024).toFixed(1)} KB, room for the pattern playing to grow kept. Clear or INIT some patterns first.`, "err");
       fm1Write(m.bytes);
       return;
     }
