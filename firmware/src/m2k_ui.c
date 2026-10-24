@@ -783,7 +783,7 @@ static void edit(int k, int d)
             dirty = 1;
         }
     } else if (code >= 0xC0) {
-        store_.set[code & 0x3F] = (uint8_t)nv;
+        m2k_setting(code & 0x3F, nv);             /* (kept with the store: saved once it stands) */
     } else if (code >= 0x80) {
         p->glob[code & 0x7F] = (uint8_t)nv;
     } else if (ui.grid && ui.nheld) {
@@ -1475,9 +1475,9 @@ static void ask_answer(int yes)
         undo.ok = 0;
         break;
     case ASK_DEMO:
-        factory();
+        factory();                                /* A01-A04, the slots with a demo (FACTORY_DEMOS) */
         work_reset_current();
-        toast("DEMOS BACK", "A01-A16, THE REST KEPT");
+        toast("DEMOS BACK", "A01-A04, THE REST KEPT");
         start_glitch(5);
         dirty = 1;
         undo.ok = 0;

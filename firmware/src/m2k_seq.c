@@ -758,12 +758,16 @@ static uint8_t dirty;
 
 void m2k_setting(int i, int v)
 {
-    if (i >= 0 && i < S_COUNT) store_.set[i] = (uint8_t)CLAMP(v, 0, 127);
+    if (i < 0 || i >= S_COUNT || store_.set[i] == (uint8_t)CLAMP(v, 0, 127)) return;
+    store_.set[i] = (uint8_t)CLAMP(v, 0, 127);
+    set_at = mx.now;                              /* saved 3 s after the last change (m2k_proj.c) */
+    set_wait = 1;
 }
 
 int m2k_dirty(void)
 {
     int d = dirty;
+    if (set_wait && mx.now - set_at >= 3u * M2K_SR) { set_wait = 0; d = 1; }
     dirty = 0;
     return d;
 }
