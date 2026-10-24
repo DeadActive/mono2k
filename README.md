@@ -6,7 +6,8 @@ beautifully. A 1-bit screen: dithered type and machine marks, Swiss grid, PS1-er
 
 > **Status: prototype (v0.1).** The core (sound, sequencer, screen) runs in the browser and on a computer. The FM-1
 > build (`firmware/fm1/`: the open FM-1 platform around this core) makes an installable package that keeps one
-> project of 64 patterns (bank A the demos, B–D blank); it is being tried on an FM-1 before a release.
+> project of 64 patterns (bank A the demos, B–D blank). MONO2K 0.1 for the FM-1 installs from the
+> [installer](https://inigohernandez.github.io/mono2k/installer.html).
 
 **Try it in your browser:** <https://inigohernandez.github.io/mono2k/> (the firmware's own core, compiled to
 WebAssembly, with sound).
