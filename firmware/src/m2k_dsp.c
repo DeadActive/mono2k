@@ -1167,11 +1167,12 @@ static void lfo_block(int ti)
         uint32_t p = t->lph[l];
         if (!t->ldone[l]) {
             t->lph[l] += inc;
-            if (t->lph[l] < p) {
-                t->lrnd[l] = (int32_t)(rnd32() >> 16) - 32768;
-                if (trig == 3) { t->ldone[l] = 1; t->lph[l] = 0xFFFFFFFFu; }
+            if (t->lph[l] < p) t->lrnd[l] = (int32_t)(rnd32() >> 16) - 32768;
+            if (trig >= 3) {               /* ONE, HALF: a cycle or half of one from the trig's phase (PHAS), then held */
+                uint32_t s = (uint32_t)t->eff[b + L_PHAS] << 25, a = p - s, z = t->lph[l] - s;
+                if (trig == 3 && z < a) { t->ldone[l] = 1; t->lph[l] = s - 1u; }
+                if (trig == 4 && z >= 0x80000000u && a < 0x80000000u) { t->ldone[l] = 1; t->lph[l] = s + 0x80000000u; }
             }
-            if (trig == 4 && t->lph[l] >= 0x80000000u && p < 0x80000000u) { t->ldone[l] = 1; t->lph[l] = 0x80000000u; }
         }
         int32_t depth = PB8(t, b + L_DPTH) >> 8;    /* -64..63 */
         if (!depth && ti != mon.lfo_view) { t->lval[l] = 0; mon.lfo[ti][l] = 0; continue; }   /* its phase runs on; no
@@ -1264,12 +1265,15 @@ static void voice_trig(int ti, int note, int vel, int slide, unsigned skip)
 
 static void voice_on(int ti, int note, int vel, int slide) { voice_trig(ti, note, vel, slide, 0); }
 
+static void mx_note_off(int t);        /* (the sequencer's: NOTES out) */
+
 static void voice_off(int ti)
 {
     trk_t *t = &trk[ti];
     t->gate = 0;
     t->gate_left = -1;
     t->let_go = 1;
+    mx_note_off(ti);                   /* its note out ends with it (no gate end comes to send it) */
 }
 
 /* the modulation effect, one sample: a chorus (7..17 ms, swept), a flanger (0.5..5 ms, fed back) or a phaser (four
@@ -1325,7 +1329,7 @@ static void track_block(int ti, int32_t *L, int32_t *R, int32_t *dsend, int32_t 
     const m2k_pattern_t *pp = PAT(cur_pat);
     int m = pp->machine[ti];
     if (t->gate_left > 0 && --t->gate_left == 0) { t->gate = 0; t->gate_left = -1; mx_gate_end(ti); }   /* the step's gate:
-                                                                                         * hold and decay go on */
+                                                          * hold and decay go on; its note out marked, sent after */
     env_block(t);
     m_set(tout[ti], 0, sizeof tout[ti]);
     m_set(tvol[ti], 0, sizeof tvol[ti]);

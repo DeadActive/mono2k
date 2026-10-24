@@ -690,11 +690,63 @@ static void trig_probe(unsigned skip, double *amp_db, double *bright_db, int *lf
     free(b);
 }
 
-/* the second core, played in turn: its job run when started (1) or when waited for (2) */
-static int par_mode;
+/* the second core, played in turn: its job run when started (1) or when waited for (2); par_queued: a job that put
+ * MIDI in the queue (the first core's alone) */
+static int par_mode, par_queued;
 static void (*par_pending)(void);
-static int par_test_begin(void (*job)(void)) { if (par_mode == 1) job(); else par_pending = job; return 1; }
-static void par_test_end(void) { if (par_mode == 2 && par_pending) par_pending(); par_pending = 0; }
+static void par_run(void (*job)(void)) { uint8_t w = mx.qw; job(); par_queued |= mx.qw != w; }
+static int par_test_begin(void (*job)(void)) { if (par_mode == 1) par_run(job); else par_pending = job; return 1; }
+static void par_test_end(void) { if (par_mode == 2 && par_pending) par_run(par_pending); par_pending = 0; }
+
+/* the sequencer's tests: pattern i bare and open (INIT: no trigs or locks, no swing, every track at 1x, 120 BPM, 16
+ * steps); one block rendered at a time, the tracks that trigged in it as a mask */
+static uint8_t sblk_last[M2K_TRACKS];
+static void sblk_sync(void) { for (int t = 0; t < M2K_TRACKS; t++) sblk_last[t] = (uint8_t)mon.trig[t]; }
+static int sblk(void)
+{
+    static int16_t b[2 * M2K_SUB];
+    m2k_render(b, M2K_SUB);
+    int m = 0;
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        if ((uint8_t)mon.trig[t] != sblk_last[t]) m |= 1 << t;
+        sblk_last[t] = (uint8_t)mon.trig[t];
+    }
+    return m;
+}
+static m2k_pattern_t *bare(int i)
+{
+    pat_init(&pat[i], "BARE");
+    cur_pat = i;
+    sq.queued = (uint8_t)i;
+    lockmap_build();
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[i].kit[t], P_COUNT);
+    return &pat[i];
+}
+/* the clock in at BPM, its pulses delivered before each block that reaches them (sblk_next: the next one's sample) */
+static double sblk_next, sblk_per;
+static int sblk_ext(void)
+{
+    while (m2k_samples() >= sblk_next) { m2k_midi(0xF8, 0, 0); sblk_next += sblk_per; }
+    return sblk();
+}
+static int sblk_by(int ext) { return ext ? sblk_ext() : sblk(); }
+/* the notes out, each note's balance on its channel (on +1, off -1) */
+static int mo_bal[16][128];
+static void mo_drain(void)
+{
+    uint8_t m[3];
+    int k;
+    while ((k = m2k_midi_out(m, m2k_samples())) > 0) {
+        if (k == 3 && (m[0] & 0xF0) == 0x90 && m[2]) mo_bal[m[0] & 15][m[1] & 127]++;
+        else if (k == 3 && (m[0] & 0xF0) == 0x80) mo_bal[m[0] & 15][m[1] & 127]--;
+    }
+}
+static int mo_hung(void)
+{
+    int n = 0;
+    for (int c = 0; c < 16; c++) for (int i = 0; i < 128; i++) n += mo_bal[c][i] != 0;
+    return n;
+}
 
 /* the panel as a hand plays it, for the controls' checks: a frame every 20 ms, a button tapped 40 ms, the sound
  * rendered between when asked */
@@ -2601,6 +2653,400 @@ static int selftest(void)
         }
         m2k_par_begin = 0; m2k_par_end = 0;
         CHECK(same && split_seen, "two cores: bank A the same sample for sample, the second core's tracks first or last");
+    }
+    /* NOTES OUT on two cores: six tracks' gates end in the same blocks on both; the second core's job queues no MIDI
+     * (a gate's end is marked on its core, its note-off sent by the first after both) and the notes come out as on
+     * one core, the same messages in the same order on the same samples */
+    {
+        static uint8_t ev[3][1024][3];
+        static uint32_t evt[3][1024];
+        int nev[3] = {0}, split = 0;
+        par_queued = 0;
+        for (int mode = 0; mode < 3; mode++) {
+            par_mode = mode;
+            m2k_par_begin = mode ? par_test_begin : 0;
+            m2k_par_end = mode ? par_test_end : 0;
+            m2k_init(22);
+            m2k_pattern_t *q = bare(16);
+            for (int t = 0; t < M2K_TRACKS; t++) {
+                kit_default(q, t, M_GSIN);
+                m_cpy(trk[t].eff, q->kit[t], P_COUNT);
+                for (int s = 0; s < 16; s++) q->step[t][s] = (m2k_step_t){.note = (uint8_t)(48 + t), .flags = ST_TRIG};
+            }
+            m2k_setting(S_NOTO, 127);
+            seq_play(1);
+            for (int i = 0; i < 2 * 44100 / M2K_SUB; i++) {
+                sblk();
+                uint8_t m[3];
+                while (nev[mode] < 1024 && m2k_midi_out(m, m2k_samples()) > 0) {
+                    m_cpy(ev[mode][nev[mode]], m, 3);
+                    evt[mode][nev[mode]++] = m2k_samples();
+                }
+                split |= par_from < M2K_TRACKS;
+            }
+        }
+        m2k_par_begin = 0; m2k_par_end = 0;
+        int same = nev[0] > 150 && nev[1] == nev[0] && nev[2] == nev[0];
+        for (int mode = 1; mode < 3 && same; mode++)
+            same = !memcmp(ev[mode], ev[0], (size_t)nev[0] * 3) && !memcmp(evt[mode], evt[0], (size_t)nev[0] * 4);
+        CHECK(same && split && !par_queued, "two cores: NOTES OUT queued by the first core alone, as on one core (the second's gates marked, sent after)");
+    }
+    /* a pattern queued comes in at the bar's end: the last step before it plays on its own pattern (machine, kit and
+     * locks), and a note recorded in it is written there; the new pattern's first step, its tracks off 1x with it,
+     * at the step it comes in on, not one early */
+    {
+        m2k_init(23);
+        m2k_pattern_t *b = bare(17), *a = bare(16);
+        kit_default(b, 0, M_SAW);
+        for (int p = 16; p < 18; p++) {
+            for (int t = 0; t < 3; t++) pat[p].step[t][0].flags = ST_TRIG;
+            pat[p].glob[G_SPD1 + 1] = enc(6, 7);              /* T2 2x */
+            pat[p].glob[G_SPD1 + 2] = enc(2, 7);              /* T3 1/2x */
+        }
+        a->step[0][15] = (m2k_step_t){.note = 72, .flags = ST_TRIG};
+        lock_set(0, 15, P_PTCH, 100);
+        seq_play(1);
+        sblk_sync();
+        int own = 1, rec = 0, early = 0, with = 0, at = -1;
+        uint32_t t15 = 0;
+        for (int i = 0; i < 3 * 44100 / M2K_SUB && at < 0; i++) {
+            if (i == 100) sq.queued = 17;
+            int pc = cur_pat, m = sblk();
+            if (cur_pat != pc) { at = (int)m2k_samples(); with = (m & 7) == 7; break; }
+            if (t15 && (m & 6)) early = 1;
+            if ((m & 1) && trk[0].note == 72) t15 = m2k_samples();
+            if (t15) own &= trk[0].eff[P_PTCH] == 100 && PAT(cur_pat)->machine[0] == M_GSIN;
+            if (t15 && !rec && m2k_samples() - t15 > 400) {      /* 10 ms into the last step */
+                sq.ktrk = 3; sq.rec = 1;
+                live_on(65, 100); live_off(65);
+                sq.rec = 0; rec = 1;
+            }
+        }
+        int wrote = rec && pat[16].step[3][15].note == 65 && (pat[16].step[3][15].flags & ST_TRIG);
+        for (int s = 0; s < M2K_STEPS; s++) wrote &= !(pat[17].step[3][s].flags & ST_TRIG);
+        CHECK(t15 && own && wrote && !early && with && abs(at - (int)(16 * 5512.5)) <= 2 * M2K_SUB,
+              "sequencer: a pattern queued comes in on the bar's end, its last step on its own kit and locks (a note recorded there), the tracks off 1x with it");
+    }
+    /* a length made shorter while playing: nothing past the new end plays, the pattern starts over */
+    {
+        m2k_init(24);
+        m2k_pattern_t *q = bare(16);
+        q->glob[G_LEN] = 32;
+        q->step[0][0].flags = ST_TRIG;
+        q->step[0][19] = (m2k_step_t){.note = 77, .flags = ST_TRIG};
+        seq_play(1);
+        while (sq.step != 19) sblk();
+        q->glob[G_LEN] = 16;
+        sblk_sync();
+        int past = 0, first = 0;
+        for (int i = 0; i < 2000; i++) {
+            int m = sblk();
+            if ((m & 1) && trk[0].note == 77) past++;
+            else if ((m & 1) && !first) first = sq.step;
+        }
+        CHECK(!past && first == 1, "sequencer: a length made shorter while playing: nothing past the new end, the first step next");
+    }
+    /* A:B and 1ST count each track's own loops (off 1x too) from the pattern's start: 2:2 plays every second pass of a
+     * track at 1x, 1/2x, 2x and 1/4x; A for a loop, then B: B's 1ST plays in its first loop, its 1:2 there too */
+    {
+        m2k_init(25);
+        m2k_pattern_t *q = bare(16);
+        q->glob[G_TMPO] = 255;
+        q->glob[G_LEN] = 4;
+        for (int t = 0; t < 4; t++) q->step[t][0] = (m2k_step_t){.note = 60, .flags = ST_TRIG, .cond = C_2_2};
+        q->glob[G_SPD1 + 1] = enc(2, 7);              /* T2 1/2x */
+        q->glob[G_SPD1 + 2] = enc(6, 7);              /* T3 2x */
+        q->glob[G_SPD1 + 3] = enc(1, 7);              /* T4 1/4x */
+        seq_play(1);
+        sblk_sync();
+        int n[4] = {0}, even = 1;
+        uint32_t last3 = 0, gap3 = 0;
+        for (int i = 0; i < (169344000 / 285 >> 8) * 4 * 32 / M2K_SUB - 4; i++) {   /* 32 loops of the pattern */
+            int m = sblk();
+            for (int t = 0; t < 4; t++) n[t] += m >> t & 1;
+            if (m & 4) {
+                uint32_t g = m2k_samples() - last3;
+                if (last3 && gap3 && (g + 2 * M2K_SUB < gap3 || g > gap3 + 2 * M2K_SUB)) even = 0;
+                if (last3) gap3 = g;
+                last3 = m2k_samples();
+            }
+        }
+        m2k_init(26);
+        m2k_pattern_t *b = bare(17);
+        b->step[0][0] = (m2k_step_t){.note = 60, .flags = ST_TRIG, .cond = C_1ST};
+        b->step[1][0] = (m2k_step_t){.note = 60, .flags = ST_TRIG, .cond = C_1_2};
+        b->step[2][0] = (m2k_step_t){.note = 60, .flags = ST_TRIG};
+        bare(16);
+        for (int p = 16; p < 18; p++) { pat[p].glob[G_TMPO] = 255; pat[p].glob[G_LEN] = 4; }
+        sq.queued = 17;
+        seq_play(1);
+        sblk_sync();
+        char s1[9] = {0}, s2[9] = {0};
+        for (int nb = 0; nb < 8;) {
+            int m = sblk();
+            if (m & 4) { s1[nb] = m & 1 ? 'X' : '.'; s2[nb] = m & 2 ? 'X' : '.'; nb++; }
+        }
+        printf("     2:2 in 32 loops: 1x %d, 1/2x %d, 2x %d, 1/4x %d; B's 1ST %s, 1:2 %s\n", n[0], n[1], n[2], n[3], s1, s2);
+        CHECK(n[0] == 16 && n[1] == 8 && n[2] == 32 && n[3] == 4 && even && !strcmp(s1, "X.......") && !strcmp(s2, "X.X.X.X."),
+              "sequencer: A:B and 1ST on each track's own loops (1x, 1/2x, 2x, 1/4x), counted again when a pattern comes in");
+    }
+    /* SYNC IN: the tracks off 1x keep to the pattern's steps on the clock's tempo, through a tempo change (a step of
+     * theirs that starts with one of the pattern's plays with it); a start sets them going again, a continue from a
+     * song position puts them where it is. The first pulse after boot only starts the timing */
+    {
+        m2k_init(27);
+        for (int i = 0; i < 10; i++) sblk();
+        m2k_setting(S_SYNI, 127);
+        m2k_midi(0xF8, 0, 0);
+        int boot = mx.per_q8 == 0;
+        m2k_pattern_t *q = bare(16);
+        for (int t = 0; t < 3; t++) q->step[t][0].flags = ST_TRIG;
+        q->step[0][8].flags = ST_TRIG;
+        q->glob[G_SPD1 + 1] = enc(6, 7);              /* T2 2x: its first step on the pattern's 0 and 8 */
+        q->glob[G_SPD1 + 2] = enc(2, 7);              /* T3 1/2x: on the pattern's 0 every second loop */
+        q->glob[G_SPD1 + 3] = enc(0, 7);              /* T4 1/8x, every step: each on the pattern's 0 or 8 (the
+                                                       * continue lands mid-step: none till the 8) */
+        q->glob[G_SPD1 + 4] = enc(3, 7);              /* T5 3/4x, every step; T6 1x, every step */
+        for (int s = 0; s < 16; s++) q->step[3][s].flags = q->step[4][s].flags = q->step[5][s].flags = ST_TRIG;
+        sblk_per = 44100.0 * 60 / (100 * 24);
+        sblk_next = m2k_samples();
+        int bad = 0, n1 = 0, ta = 0, tb = 0, pre5 = 0;
+        for (int part = 0; part < 4; part++) {
+            if (part == 0) m2k_midi(0xFA, 0, 0);
+            if (part == 2) { m2k_midi(0xFC, 0, 0); for (int i = 0; i < 400; i++) sblk_ext(); m2k_midi(0xFA, 0, 0); }
+            if (part == 3) {
+                m2k_midi(0xFC, 0, 0);
+                for (int i = 0; i < 400; i++) sblk_ext();
+                m2k_midi(0xF2, 21, 0);                    /* the song at step 21: the pattern's 5, T5 a quarter into its 15 */
+                m2k_midi(0xFB, 0, 0);
+            }
+            if (part == 1) sblk_per = 44100.0 * 60 / (137 * 24);
+            sblk_sync();
+            for (int i = 0; i < 10 * 44100 / M2K_SUB; i++) {
+                int m = (i & 7) ? sblk() : sblk_ext();     /* (the pulses come in every 128 samples) */
+                n1 += m & 1;
+                if (!(m & 1) != !(m & 2) || !(m & 1) != !(m & 8) || ((m & 4) && !(m & 1))) bad++;
+                if (part == 3 && !ta && (m & 16)) pre5 = 1;
+                if (part == 3 && !ta && (m & 32)) ta = (int)m2k_samples();
+                if (part == 3 && ta && !tb && (m & 16)) tb = (int)m2k_samples();
+            }
+        }
+        m2k_setting(S_SYNI, 0);
+        printf("     the clock in: %d of T1's trigs, %d blocks where T2, T3 or T4 missed it\n", n1, bad);
+        int third = !pre5 && ta && abs(tb - ta - (int)(44100.0 * 60 / (137 * 4) / 3)) <= 2 * M2K_SUB;   /* its 16 */
+        CHECK(boot && n1 > 35 && !bad && third, "SYNC IN: the tracks off 1x on the pattern's steps (a tempo change, a start again, a continue); the first pulse only times");
+    }
+    /* a GATE lock: the step's gate its own, the kit's on the next */
+    {
+        m2k_init(28);
+        m2k_pattern_t *q = bare(16);
+        q->step[0][0].flags = ST_TRIG;
+        q->step[0][4].flags = ST_TRIG;
+        lock_set(0, 0, P_GATE, 127);
+        seq_play(1);
+        sblk();
+        int32_t g0 = trk[0].gate_left;
+        while (sq.step != 5) sblk();
+        int32_t g4 = trk[0].gate_left;
+        seq_play(0);
+        CHECK(g4 > 0 && g0 > 8 * g4, "sequencer: a GATE lock is its step's gate (127: eight steps), the kit's on the next trig");
+    }
+    /* NOTES OUT: a note's end goes out on the channel its start did (CHAN turned meanwhile); a note played over a
+     * step's (MIDI in on its track, the keys) ends the step's as it starts; so does a MIDI note-off of the step's
+     * note, and STOP: none left hanging, none waiting for the next trig */
+    {
+        int hung = 0;
+        for (int c = 0; c < 5; c++) {
+            m2k_init(29);
+            m_set(mo_bal, 0, sizeof mo_bal);
+            m2k_pattern_t *q = bare(16);
+            q->step[1][0] = (m2k_step_t){.note = 50, .flags = ST_TRIG};
+            q->kit[1][P_GATE] = 64;                       /* four steps */
+            m2k_setting(S_NOTO, 127);
+            sq.ktrk = c == 2 ? 1 : 0;
+            seq_play(1);
+            for (int i = 0; i < 10; i++) sblk();
+            if (c == 0) m2k_setting(S_MCH, 4 * 8 + 4);   /* CHAN 1 -> 5 */
+            if (c == 1 || c == 2) {
+                if (c == 1) m2k_midi(0x91, 64, 100); else live_on(64, 100);
+                for (int i = 0; i < 20; i++) sblk();
+                mo_drain();
+                hung += mo_bal[1][50] != 0;               /* the step's ended with it */
+                if (c == 1) m2k_midi(0x81, 64, 0); else live_off(64);
+            }
+            if (c == 3) m2k_midi(0x81, 50, 0);           /* its own note let go by MIDI in */
+            if (c == 4) seq_play(0);
+            for (int i = 0; i < 8 * 5512 / M2K_SUB; i++) sblk();    /* past the gate, before the next bar */
+            mo_drain();
+            hung += mo_hung();
+        }
+        CHECK(!hung, "NOTES OUT: a note ends on its own channel (CHAN turned), as a note is played over it (MIDI in, keys), let go by MIDI, at STOP");
+    }
+    /* a ratchet's hits stop with STOP and in a track muted; a start keeps nothing of the last play (a step recorded
+     * ahead, a fill, a jump queued, PRE) */
+    {
+        m2k_init(30);
+        m2k_pattern_t *q = bare(16);
+        q->glob[G_TMPO] = 0;                              /* 30 BPM: a step half a second */
+        q->step[0][0] = (m2k_step_t){.note = 60, .flags = ST_TRIG, .rtrg = 4};
+        seq_play(1);
+        sblk_sync();
+        int first = sblk() & 1, after = 0, muted = 0;
+        for (int i = 0; i < 100; i++) sblk();
+        seq_play(0);
+        for (int i = 0; i < 44100 / M2K_SUB; i++) after += sblk() & 1;
+        seq_play(1);
+        sblk();
+        q->mute = 1;
+        for (int i = 0; i < 1300; i++) muted += sblk() & 1;
+        seq_play(0);
+        q->mute = 0;
+        bare(17);
+        bare(16)->step[0][0].flags = ST_TRIG;
+        q->step[1][0] = (m2k_step_t){.note = 60, .flags = ST_TRIG, .cond = C_PRE};
+        sq.rec_skip[0] = 0; sq.fill = 1; sq.fill_auto = 1; sq.pre[1] = 1;
+        sq.queued = 17; sq.jump = 1;
+        seq_play(1);
+        int m = sblk();
+        int fresh = (m & 1) && !(m & 2) && !sq.fill && sq.rec_skip[0] == -1 && cur_pat == 16;
+        for (int i = 0; i < 2000; i++) sblk();
+        fresh &= cur_pat == 16;                           /* (the queued one at the bar's end) */
+        seq_play(0);
+        CHECK(first && !after && !muted && fresh, "sequencer: a ratchet stops with STOP and muted; a start clears a step recorded ahead, a fill, a jump, PRE");
+    }
+    /* MIDI: the clock in's stop passed on with its start and pulses; the clock out six pulses to a step exactly, so a
+     * step's note still goes out with its pulse after a minute (at a tempo whose step is no whole number of sixths) */
+    {
+        m2k_init(31);
+        bare(16);
+        m2k_setting(S_SYNI, 127); m2k_setting(S_SYNO, 127);
+        m2k_midi(0xFA, 0, 0);
+        for (int i = 0; i < 12; i++) { m2k_midi(0xF8, 0, 0); for (int k = 0; k < 69; k++) sblk(); }
+        m2k_midi(0xFC, 0, 0);
+        int fa = 0, f8 = 0, fc = 0, k;
+        uint8_t m[3];
+        while (m2k_midi_out(m, m2k_samples()) > 0) { fa += m[0] == 0xFA; f8 += m[0] == 0xF8; fc += m[0] == 0xFC; }
+        m2k_init(32);
+        m2k_pattern_t *q = bare(16);
+        int v = 255;
+        while (v > 200 && (169344000u / (30u + (unsigned)v)) % 6u != 5u) v--;
+        q->glob[G_TMPO] = (uint8_t)v;
+        for (int s = 0; s < 16; s++) q->step[0][s].flags = ST_TRIG;
+        m2k_setting(S_SYNO, 127); m2k_setting(S_NOTO, 127);
+        seq_play(1);
+        static uint32_t nt[2048], pt[2048];
+        int nn = 0, np = 0;
+        long pulses = 0;
+        for (int i = 0; i < 60 * 44100 / M2K_SUB; i++) {
+            sblk();
+            while ((k = m2k_midi_out(m, m2k_samples())) > 0) {
+                if (m[0] == 0xF8 && pulses++ % 6 == 0 && np < 2048) pt[np++] = m2k_samples();
+                if (k == 3 && (m[0] & 0xF0) == 0x90 && nn < 2048) nt[nn++] = m2k_samples();
+            }
+        }
+        seq_play(0);
+        int with = nn > 1000 && np >= nn - 1;
+        for (int i = 0; i < nn && i < np; i++) with &= nt[i] == pt[i];
+        CHECK(fa == 1 && f8 == 12 && fc == 1 && with, "MIDI: the clock in's stop passed on; the clock out six pulses to a step exactly (a step's note with its pulse)");
+    }
+    /* REC: a note played just after a step is written to it, under the clock in too (on the step expected), and on a
+     * track off 1x to its own step; one played just before the next, to the next (not played twice) */
+    {
+        int at[3] = {-1, -1, -1}, skip[3] = {0, 0, 0};
+        for (int c = 0; c < 3; c++) {
+            int ext = c != 1;
+            m2k_init(33);
+            m2k_pattern_t *q = bare(16);
+            if (c == 1) q->glob[G_SPD1] = enc(2, 7);      /* T1 1/2x: the pattern's step 4 is its 2 */
+            sq.ktrk = 0;
+            sblk_per = 44100.0 * 60 / (120 * 24);
+            sblk_next = m2k_samples();
+            if (ext) {
+                m2k_setting(S_SYNI, 127);
+                for (int i = 0; i < 400; i++) sblk_ext();
+                m2k_midi(0xFA, 0, 0);
+            } else seq_play(1);
+            sq.rec = 1;
+            while (sq.step != 5) sblk_by(ext);            /* the pattern's step 4 just played */
+            for (int i = 0; i < (c == 2 ? 300 : 28); i++) sblk_by(ext);   /* 10 ms, or 109 of its 125 */
+            live_on(62, 100);
+            for (int s = 0; s < M2K_STEPS; s++) if (q->step[0][s].flags & ST_TRIG) at[c] = s;
+            skip[c] = sq.rec_skip[0];
+            live_off(62);
+            sq.rec = 0;
+            seq_play(0);
+            m2k_setting(S_SYNI, 0);
+        }
+        CHECK(at[0] == 4 && skip[0] == -1 && at[1] == 2 && skip[1] == -1 && at[2] == 5 && skip[2] == 5,
+              "REC: a note just after a step written to it, under the clock in and off 1x on the track's own step; just before, the next");
+    }
+    /* the arp: its notes as far apart as ASPD shows (1/32: half a step), and a cycle of three keeps its order past its
+     * 256th note */
+    {
+        m2k_init(35);
+        m2k_pattern_t *q = bare(16);
+        q->kit[0][P_AMOD] = enc(1, 6);                    /* UP */
+        q->kit[0][P_ASPD] = enc(0, 4);                    /* 1/32 */
+        sq.ktrk = 0;
+        sblk();
+        live_on(60, 100); live_on(64, 100); live_on(67, 100);
+        sblk_sync();
+        uint32_t first = 0, last = 0;
+        int n = 0, twice = 0, prev = -1;
+        while (n < 300) {
+            if (!(sblk() & 1)) continue;
+            if (!n) first = m2k_samples();
+            last = m2k_samples();
+            twice += trk[0].note == prev;
+            prev = trk[0].note;
+            n++;
+        }
+        live_off(60); live_off(64); live_off(67);
+        double per = (double)(last - first) / (n - 1);
+        printf("     the arp at 1/32, 120 BPM: a note every %.1f samples (2756.25 a 1/32)\n", per);
+        CHECK(fabs(per - 2756.25) < 2 && !twice, "arp: ASPD's rate as shown (1/32 at 120: 62.5 ms), and three notes in order past the 256th");
+    }
+    /* a speed turned while playing: the track goes on from where the pattern is (T2 turned from 1x to 2x on step 6:
+     * its first step again on the pattern's 8, then with T1's 16) */
+    {
+        m2k_init(36);
+        m2k_pattern_t *q = bare(16);
+        q->step[0][0].flags = ST_TRIG;
+        q->step[1][0].flags = ST_TRIG;
+        seq_play(1);
+        sblk_sync();
+        uint32_t t2[4] = {0};
+        int n2 = 0, with = 0;
+        for (int i = 0; i < 5 * 44100 / M2K_SUB && n2 < 4; i++) {
+            int m = sblk();
+            if (sq.step == 7 && q->glob[G_SPD1 + 1] == SPD_1X) q->glob[G_SPD1 + 1] = enc(6, 7);
+            if (m & 2) t2[n2++] = m2k_samples();
+            with += (m & 3) == 3;
+        }
+        seq_play(0);
+        CHECK(n2 == 4 && abs((int)t2[1] - (int)(8 * 5512.5)) <= 2 * M2K_SUB && abs((int)t2[2] - (int)(16 * 5512.5)) <= 2 * M2K_SUB && with == 2,
+              "speeds: a track's speed turned while playing goes on from where the pattern is");
+    }
+    /* LFO ONE and HALF: a whole cycle and half of one from the trig's phase (PHAS), whatever it is */
+    {
+        int ok = 1;
+        for (int mode = 3; mode <= 4; mode++)
+            for (int ph = 0; ph <= 96; ph += 32) {
+                m2k_init(37);
+                trk_t *t = &trk[0];
+                m_set(t->eff, 0, P_COUNT);
+                t->eff[P_LFO + L_DEST] = 1;
+                t->eff[P_LFO + L_TRIG] = enc(mode, 5);
+                t->eff[P_LFO + L_SPD] = 64;
+                t->eff[P_LFO + L_PHAS] = (uint8_t)ph;
+                t->eff[P_LFO + L_DPTH] = 127;
+                lfo_trig(t);
+                double inc = 64.0 * bpm10 * 10 / 4294967296.0, want = mode == 3 ? 1.0 : 0.5;
+                int n = 0;
+                while (!t->ldone[0] && n < 100000) { lfo_block(0); modn = 0; n++; }
+                ok &= n * inc >= want && n * inc < want + inc * 1.01;
+            }
+        CHECK(ok, "LFO: ONE runs a cycle, HALF half of one, from the trig's phase (PHAS)");
     }
     printf("%s (%d failed)\n", fails ? "SELFTEST FAILED" : "selftest passed", fails);
     return fails != 0;
