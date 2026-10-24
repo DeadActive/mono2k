@@ -435,10 +435,12 @@ static int project_save(int slot)
 }
 
 static void seq_play(int on);
+static void undo_forget(void);                   /* (m2k_ui.c) the undo's copy is of patterns about to go */
 
 static void project_load(int slot)
 {
     seq_play(0);
+    undo_forget();
     img_unpack_all(&proj[slot]);
     cur_proj = slot;
     cur_pat = 0;
@@ -659,6 +661,7 @@ int m2k_store_unpack(int len)
     int np = ver >= 3 ? o[8] : M2K_PATTERNS, nk = ver >= 3 ? o[9] : M2K_PROJECTS;   /* before 3: this build's own */
     if (np < 1 || np > 64 || nk < 1 || nk > 16) return 0;
     if (!st_get(set, S_COUNT, n)) return 0;
+    undo_forget();
 #if PAT_CACHE
     pat_drop();                                             /* the working image is about to be replaced */
     if (!deser_img(&work_img, n, 1, np)) { projects_factory(); return 0; }

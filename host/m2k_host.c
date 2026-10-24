@@ -696,6 +696,34 @@ static void (*par_pending)(void);
 static int par_test_begin(void (*job)(void)) { if (par_mode == 1) job(); else par_pending = job; return 1; }
 static void par_test_end(void) { if (par_mode == 2 && par_pending) par_pending(); par_pending = 0; }
 
+/* the panel as a hand plays it, for the controls' checks: a frame every 20 ms, a button tapped 40 ms, the sound
+ * rendered between when asked */
+static uint32_t ux_now;
+static void ux_ms(int ms) { for (int i = 0; i < ms; i += 20) m2k_frame(ux_now += 20); }
+static void ux_tap(int b) { m2k_button(b, 1); ux_ms(40); m2k_button(b, 0); ux_ms(40); }
+static void ux_init(uint32_t seed) { m2k_init(seed); ux_now = 100000; m2k_frame(ux_now); ux_ms(2000); }
+static int ux_white(int w) { for (int k = 0; k < M2K_KEYS; k++) if (ui.kw[k] == w) return k; return -1; }
+static int ux_black(int b) { for (int k = 0; k < M2K_KEYS; k++) if (ui.kb[k] == b) return k; return -1; }
+static void ux_audio(int n) { static int16_t b[2 * 1024]; for (n &= ~15; n > 0; n -= 1024) m2k_render(b, n < 1024 ? n : 1024); }
+static int ux_trigs(int t) { int n = 0; for (int s = 0; s < M2K_STEPS; s++) n += PAT(cur_pat)->step[t][s].flags & ST_TRIG; return n; }
+static int ux_locks(int t, int s0, int s1)
+{
+    int n = 0;
+    for (int k = 0; k < M2K_LOCKS; k++) n += PAT(cur_pat)->lock[k].trk == t && PAT(cur_pat)->lock[k].step >= s0 && PAT(cur_pat)->lock[k].step < s1;
+    return n;
+}
+/* a pixel as px() sets it, on a copy of the screen: the byte-wise drawing held to it */
+static uint8_t ux_ref[M2K_FB_BYTES];
+static void ux_px(int x, int y, int c)
+{
+    if (x < clip_x0 || y < clip_y0 || x >= clip_x1 || y >= clip_y1 || (unsigned)x >= M2K_W || (unsigned)y >= M2K_H) return;
+    uint8_t *b = &ux_ref[y * ROWB + (x >> 3)], m = (uint8_t)(0x80u >> (x & 7));
+    if (c == 1) *b |= m;
+    else if (c == 0) *b &= (uint8_t)~m;
+    else *b ^= m;
+}
+static void ux_rect(int x, int y, int w, int h, int c) { for (int j = y; j < y + h; j++) for (int i = x; i < x + w; i++) ux_px(i, j, c); }
+
 static int selftest(void)
 {
     int fails = 0;
@@ -2174,6 +2202,383 @@ static int selftest(void)
         int oct = ui.oct == -1;
         CHECK(tt && cd && locked && unlocked && home && oct,
               "a held step: black 1-5 its trig type, 6-11 its condition; OCT- + knob: the lock away, else the value home; OCT- alone the octave");
+    }
+    /* a key's release lets go of the note its press started, whatever is held by then (OCT+ tapped meanwhile, SEQ or
+     * GLO held), and the keys let go of their notes when they become steps (SEQ tapped) or pads (GLO + ARP), or their
+     * track changes in GRID (a note from MIDI held): no note drones, and the track's sequence plays on */
+    {
+        ux_init(7);
+        int k0 = ux_white(0);
+        m2k_key(k0, 1); ux_tap(B_OCTU); m2k_key(k0, 0);
+        int oct = sq.nheld == 0;
+        ux_init(7); m2k_key(k0, 1); m2k_button(B_SEQ, 1); m2k_key(k0, 0); m2k_button(B_SEQ, 0);
+        int seq = sq.nheld == 0;
+        ux_init(7); m2k_key(k0, 1); m2k_button(B_GLO, 1); m2k_key(k0, 0); m2k_button(B_GLO, 0);
+        int glo = sq.nheld == 0;
+        ux_init(7); m2k_key(k0, 1); m2k_button(B_GLO, 1); ux_tap(B_ARP); m2k_button(B_GLO, 0); m2k_key(k0, 0);
+        int pads = ui.pads && sq.nheld == 0;
+        ux_init(7); ux_tap(B_SEQ); m2k_midi(0x90, 60, 100); m2k_key(ux_black(2), 1); m2k_key(ux_black(2), 0);
+        m2k_midi(0x80, 60, 0);
+        int trk3 = ui.grid && sq.ktrk == 2 && sq.nheld == 0;
+        ux_init(7); m2k_key(k0, 1); ux_tap(B_SEQ);
+        int grid = ui.grid;
+        m2k_key(k0, 0);
+        grid &= sq.nheld == 0;
+        uint8_t t0 = mon.trig[0];
+        seq_play(1); ux_audio(44100 * 2); seq_play(0);
+        CHECK(oct && seq && glo && pads && trk3 && grid && (uint8_t)(mon.trig[0] - t0) > 0,
+              "keys: a key let go after OCT+, under SEQ or GLO, into GRID or PADS, or a track picked in GRID: no note held on, the track plays");
+    }
+    /* what a press held is let go on its release under any layer: GRID, a step held, SEQ pressed (its locks cleared),
+     * the step let go first; GLO + white 9 (solo T1), GLO let go first; a page key tapped and let go under SEQ (its
+     * hold would have made the pattern 32 steps long) */
+    {
+        ux_init(7);
+        ux_tap(B_SEQ);
+        m2k_key(ux_white(0), 1); m2k_button(B_SEQ, 1); m2k_key(ux_white(0), 0); m2k_button(B_SEQ, 0);
+        int nostep = ui.nheld == 0;
+        ux_init(7);
+        m2k_button(B_GLO, 1); m2k_key(ux_white(8), 1); m2k_button(B_GLO, 0); m2k_key(ux_white(8), 0);
+        int nosolo = sq.solo == 0;
+        ux_init(7);
+        m2k_pattern(16); ux_ms(40); ux_tap(B_SEQ);
+        int l0 = seq_len();
+        m2k_key(ux_black(7), 1); ux_ms(100); m2k_button(B_SEQ, 1); m2k_key(ux_black(7), 0); ux_ms(900); m2k_button(B_SEQ, 0);
+        CHECK(nostep && nosolo && seq_len() == l0 && l0 == 16,
+              "layers: a step, a solo, a page key pressed before a layer and let go under it are let go (no step held, no solo, no length)");
+    }
+    /* GLO + SEQ held for INIT while a queued pattern opens: the ring stops, the pattern that opened is not made INIT;
+     * the clear stays undoable on the pattern it cleared */
+    {
+        ux_init(7);
+        PAT(0)->glob[G_LEN] = 16;
+        int n0 = ux_trigs(0);
+        seq_play(1); ux_audio(44100);
+        select_pattern(1);
+        char nm[8];
+        memcpy(nm, PAT(1)->name, 8);
+        m2k_button(B_GLO, 1); m2k_button(B_SEQ, 1);
+        int sw = 0;
+        for (int i = 0; i < 12; i++) { ux_audio(4410); ux_ms(100); sw |= cur_pat == 1; }
+        m2k_button(B_SEQ, 0); m2k_button(B_GLO, 0);
+        seq_play(0);
+        int kept = !memcmp(PAT(1)->name, nm, 8) && strcmp(nm, "INIT");
+        select_pattern(0); ux_ms(40);
+        int cleared = ux_trigs(0) == 0;
+        m2k_button(B_GLO, 1); m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0); m2k_button(B_GLO, 0);
+        CHECK(sw && kept && cleared && ux_trigs(0) == n0 && n0 > 0,
+              "INIT ring: a queued pattern opening during the hold stops it (A02 not made INIT); A01's clear undone on A01");
+    }
+    /* GRID: a trig held two seconds (its card read) and let go without an edit keeps the trig and its locks; a quick
+     * tap still removes it */
+    {
+        ux_init(7);
+        ux_tap(B_SEQ);
+        m2k_pattern_t *q = PAT(cur_pat);
+        int t = ui.trk, s = -1;
+        for (int i = 0; i < 16 && s < 0; i++) if (q->step[t][i].flags & ST_TRIG) s = i;
+        lock_set(t, s, P_DEC, 99);
+        m2k_key(ux_white(s), 1); ux_ms(2000); m2k_key(ux_white(s), 0);
+        int kept = (q->step[t][s].flags & ST_TRIG) && lock_find(t, s, P_DEC) >= 0;
+        m2k_key(ux_white(s), 1); ux_ms(100); m2k_key(ux_white(s), 0);
+        int tapped = !(q->step[t][s].flags & ST_TRIG) && lock_find(t, s, P_DEC) < 0;
+        CHECK(s >= 0 && kept && tapped, "GRID: a trig held 2 s and let go keeps itself and its locks; a quick tap removes it");
+    }
+    /* a question does what it asked: REPLACE S001 answered YES after SLOT moved on saves the track's sound into S001,
+     * S002 untouched; LOAD P2 answered YES after PROJ moved on loads P2 */
+    {
+        ux_init(7);
+        ui.page = PG_SYN; ui.sub = (uint8_t)(nsub(PG_SYN) - 1); ui.snd_sel = 0; ui.snd_cat = 0;
+        m2k_sound_t s1 = snd[1];
+        PAT(cur_pat)->kit[ui.trk][P_DEC] ^= 21;
+        m2k_encoder(E_K3, 1);                                  /* SAVE over S001: asked */
+        m2k_encoder(E_K1, 1);                                  /* SLOT on to S002 */
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);          /* YES */
+        int sok = !memcmp(&snd[1], &s1, sizeof s1) && snd[0].kit[P_DEC] == PAT(cur_pat)->kit[ui.trk][P_DEC];
+        ux_init(7);
+        ui.page = PG_GLO; ui.sub = 3; ui.proj_sel = 1;
+        m2k_encoder(E_K3, 1);                                  /* LOAD P2: asked */
+        m2k_encoder(E_K2, 1);                                  /* PROJ on to P3 */
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
+        CHECK(sok && cur_proj == 1, "ask: YES does what was asked (S001 replaced after SLOT moved, S002 kept; P2 loaded after PROJ moved)");
+    }
+    /* again within 3 s undoes only on the same thing: a step pasted onto step 5 then onto step 9; a track's steps pasted
+     * onto T2 then T3; REC + SEQ on T1 then T2; EDIT + SEQ on T1 then T2: each done, none undone */
+    {
+        ux_init(7);
+        ux_tap(B_SEQ);
+        m2k_pattern_t *q = PAT(cur_pat);
+        int t = ui.trk;
+        for (int i = 0; i < 16; i++) q->step[t][i].flags = 0;
+        lockmap_build();
+        q->step[t][0] = (m2k_step_t){.note = 70, .flags = ST_TRIG | ST_ACC};
+        m2k_key(ux_white(0), 1); ux_tap(B_REC); m2k_key(ux_white(0), 0); ux_ms(200);
+        m2k_key(ux_white(4), 1); ux_tap(B_PLAY); m2k_key(ux_white(4), 0); ux_ms(500);
+        m2k_key(ux_white(8), 1); ux_tap(B_PLAY); m2k_key(ux_white(8), 0);
+        int steps = q->step[t][4].note == 70 && q->step[t][8].note == 70 && (q->step[t][8].flags & ST_ACC);
+        ux_init(7);
+        q = PAT(cur_pat);
+        m2k_track(0); m2k_button(B_SEQ, 1); ux_tap(B_REC); m2k_button(B_SEQ, 0); ux_ms(100);
+        m2k_track(1); m2k_button(B_SEQ, 1); ux_tap(B_PLAY); m2k_button(B_SEQ, 0); ux_ms(500);
+        m2k_track(2); m2k_button(B_SEQ, 1); ux_tap(B_PLAY); m2k_button(B_SEQ, 0);
+        int tracks = !memcmp(q->step[1], q->step[0], sizeof q->step[0]) && !memcmp(q->step[2], q->step[0], sizeof q->step[0]);
+        ux_init(7);
+        int n1 = ux_trigs(0), n2 = ux_trigs(1);
+        m2k_button(B_REC, 1); ux_tap(B_SEQ); m2k_button(B_REC, 0); ux_ms(200);
+        m2k_encoder(E_SELECT, 1); ux_ms(200);
+        m2k_button(B_REC, 1); ux_tap(B_SEQ); m2k_button(B_REC, 0);
+        int recs = n1 > 0 && n2 > 0 && ux_trigs(0) == 0 && ux_trigs(1) == 0;
+        ux_init(7);
+        q = PAT(cur_pat);
+        uint8_t k1[P_COUNT], k2[P_COUNT];
+        memcpy(k1, q->kit[0], P_COUNT); memcpy(k2, q->kit[1], P_COUNT);
+        m2k_button(B_EDIT, 1); ux_tap(B_SEQ); m2k_button(B_EDIT, 0); ux_ms(200);
+        m2k_encoder(E_SELECT, 1); ux_ms(200);
+        m2k_button(B_EDIT, 1); ux_tap(B_SEQ); m2k_button(B_EDIT, 0);
+        int snds = memcmp(k1, q->kit[0], P_COUNT) && memcmp(k2, q->kit[1], P_COUNT);
+        CHECK(steps && tracks && recs && snds,
+              "again on another step or track is done, not an undo (step paste 5 then 9; SEQ + PLAY T2, T3; REC + SEQ, EDIT + SEQ T1, T2)");
+    }
+    /* a message's lines are cut to their buffers: HOME + a bank key's line (32 letters once) and one far too long no
+     * longer run into the lanes' state (they flashed, the text garbled) */
+    {
+        ux_init(7);
+        int same = !memcmp(ui.seen_trig, mon.trig, sizeof ui.seen_trig);
+        m2k_button(B_HOME, 1); m2k_key(ux_black(1), 1); m2k_key(ux_black(1), 0);
+        int bank = !memcmp(ui.seen_trig, mon.trig, sizeof ui.seen_trig) && strlen(ui.toast2) < sizeof ui.toast2;
+        m2k_button(B_HOME, 0);
+        toast("A MESSAGE FAR TOO LONG FOR ITS LINE", "AND ITS SECOND LINE TOO LONG AS WELL");
+        int cut = !memcmp(ui.seen_trig, mon.trig, sizeof ui.seen_trig) && strlen(ui.toast) == sizeof ui.toast - 1 &&
+                  strlen(ui.toast2) == sizeof ui.toast2 - 1;
+        ux_ms(40);
+        CHECK(same && bank && cut, "toast: its lines cut to fit (HOME + a bank key's, one far too long): the lanes' state intact");
+    }
+    /* a knob a layer gave and the page has not (DIGI-WAV's BANK page has no KNOB 3; PERFORM's is ADPC) is no focus once
+     * the layer is let go: the page shows its own, not a setting read past the settings (SCREEN, out of bounds) */
+    {
+        ux_init(7);
+        ui.trk = 0; set_machine(M_WAV); ui.page = PG_SYN; ui.sub = 2;
+        ux_ms(2000); m2k_button(B_FX, 1); ux_ms(500);
+        m2k_encoder(E_K3, 1);                                  /* PERFORM's ADPC */
+        m2k_button(B_FX, 0);
+        m2k_frame(ux_now += 20);
+        int other = 0;
+        for (int i = 0; i < ta_n; i++) if (!strcmp(ta[i].s, "SCREEN") || !strcmp(ta[i].s, "LIGHT") || !strcmp(ta[i].s, "DARK")) other = 1;
+        CHECK(knob_at(2) == NONE && !other && knob_value(NONE) == 0,
+              "focus: a knob the page has not (after PERFORM's) is not shown, nor read past the settings");
+    }
+    /* LFO held: a knob turned snaps back on the pattern it was turned on, though the queued one opened meanwhile */
+    {
+        ux_init(7);
+        PAT(0)->glob[G_LEN] = 16; PAT(1)->glob[G_LEN] = 16;
+        ui.page = PG_AMP; ui.sub = 0; ui.trk = 0;
+        int a0 = PAT(0)->kit[0][P_ATK], b0 = PAT(1)->kit[0][P_ATK];
+        seq_play(1); ux_audio(4410);
+        select_pattern(1);
+        m2k_button(B_LFO, 1); ux_ms(40);
+        m2k_encoder(E_K1, 30);
+        int moved = PAT(0)->kit[0][P_ATK] != a0;
+        for (int i = 0; i < 50 && cur_pat != 1; i++) { ux_audio(4410); ux_ms(100); }
+        int opened = cur_pat == 1;
+        m2k_button(B_LFO, 0);
+        seq_play(0);
+        CHECK(moved && opened && PAT(0)->kit[0][P_ATK] == a0 && PAT(1)->kit[0][P_ATK] == b0,
+              "LFO held: the knob snaps back on the pattern it was turned on, the one queued meanwhile untouched");
+    }
+    /* the undo stays with its project: a clear, then another project loaded (the web's picker) or the store, and
+     * GLO + OCT- has nothing to undo (it brought the other project's pattern in) */
+    {
+        ux_init(7);
+        m2k_button(B_GLO, 1); m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0); m2k_button(B_GLO, 0);
+        m2k_project(1, 0);
+        m2k_button(B_GLO, 1); m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0); m2k_button(B_GLO, 0);
+        int proj = !strcmp(PAT(0)->name, "INIT") && !strcmp(ui.toast, "NOTHING TO UNDO");
+        ux_init(7);
+        m2k_button(B_GLO, 1); m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0); m2k_button(B_GLO, 0);
+        int n = m2k_store_pack();
+        int loaded = m2k_store_unpack(n) == 1;
+        m2k_button(B_GLO, 1); m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0); m2k_button(B_GLO, 0);
+        CHECK(proj && loaded && !strcmp(ui.toast, "NOTHING TO UNDO") && ux_trigs(0) == 0,
+              "undo: nothing to undo after another project or the store is loaded");
+    }
+    /* a fresh start (m2k_init: the web's reset) keeps no undo of the patterns before it, nor a question */
+    {
+        ux_init(7);
+        m2k_button(B_GLO, 1); m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0); m2k_button(B_GLO, 0);
+        ui.page = PG_GLO; ui.sub = 3; ui.proj_sel = 1;
+        m2k_encoder(E_K3, 1);                                  /* LOAD P2: asked */
+        ux_init(7);
+        int noask = ask.kind == ASK_NONE;
+        m2k_button(B_GLO, 1); m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0); m2k_button(B_GLO, 0);
+        CHECK(noask && !strcmp(ui.toast, "NOTHING TO UNDO"), "init: no undo, no question left from before it");
+    }
+    /* GLO + OCT- (undo), GLO let go first: OCT-'s own release does nothing (it turned the octave) */
+    {
+        ux_init(7);
+        int o0 = ui.oct;
+        m2k_button(B_GLO, 1); m2k_button(B_OCTD, 1); m2k_button(B_GLO, 0); m2k_button(B_OCTD, 0);
+        CHECK(ui.oct == o0, "GLO + OCT-, GLO let go first: the octave stays");
+    }
+    /* the drawing's byte-wise fills and type (rect, frame, a glyph a byte at a time) as a pixel at a time draws them:
+     * random boxes and texts, in ink, paper and inverted, in each size, cut by random clips and the screen's edges */
+    {
+        uint32_t r = 12345u;
+        int same = 1;
+        #define RN(n) ((int)(((r = r * 1103515245u + 12345u) >> 8) % (uint32_t)(n)))
+        static const m2k_font_t *const FT[4] = {&F_S, &F_M, &F_L, &F_V};
+        static const char *const TX[4] = {"WAVE 12", "S&H -3 X", "#%/;", "AW MQ"};
+        for (int i = 0; i < 3000 && same; i++) {
+            for (int b = 0; b < M2K_FB_BYTES; b++) fb[b] = ux_ref[b] = (uint8_t)RN(256);
+            int cx = RN(240) / 2, cy = RN(240) / 2, cw = RN(241 - cx), ch = RN(241 - cy);
+            clip(cx, cy, cw, ch);
+            int x = RN(280) - 20, y = RN(280) - 20;
+            int c = RN(3);
+            if (i & 1) {
+                int w = RN(90) - 4, h = RN(70) - 4;
+                if (i & 2) {                                   /* (a frame: its four sides as frame() puts them) */
+                    frame(x, y, w, h, c);
+                    ux_rect(x, y, w, 1, c); ux_rect(x, y + h - 1, w, 1, c);
+                    ux_rect(x, y + 1, 1, h - 2, c); ux_rect(x + w - 1, y + 1, 1, h - 2, c);
+                } else { rect(x, y, w, h, c); ux_rect(x, y, w, h, c); }
+            } else {
+                const m2k_font_t *f = FT[RN(4)];
+                const char *s = TX[RN(4)];
+                int tr = RN(3) - 1, xx = x;
+                text(f, x, y, s, c, tr);
+                for (const char *p = s; *p; p++) {
+                    int g = glyph_of(f, (unsigned char)*p);
+                    for (int gy = 0; gy < f->h; gy++)
+                        for (int gx = 0; gx < f->w[g]; gx++) if (glyph_bit(f, g, gx, gy)) ux_px(xx + gx, y + gy, c);
+                    xx += f->w[g] + f->track + tr;
+                }
+            }
+            if (memcmp(fb, ux_ref, M2K_FB_BYTES)) { same = 0; printf("     differs: case %d\n", i); }
+        }
+        #undef RN
+        noclip();
+        CHECK(same, "drawing: rects, frames and type a byte at a time are what a pixel at a time draws, clipped alike");
+    }
+    /* the drawing's cost: GLO's map held over the AMP page, and HOME's 96 cells, set few pixels one at a time (a
+     * window's fill, the type and the empty cells were each a pixel at a time: 1.5 M instructions a GLO frame) */
+    {
+        ux_init(7);
+        ui.page = PG_AMP; ui.sub = 0;
+        m2k_button(B_GLO, 1); ux_ms(600);
+        px_calls = 0; m2k_frame(ux_now += 20);
+        uint32_t glo = px_calls;
+        m2k_button(B_GLO, 0);
+        ui.page = PG_HOME; ux_ms(600);
+        px_calls = 0; m2k_frame(ux_now += 20);
+        uint32_t home = px_calls;
+        printf("     pixels drawn one at a time: a GLO frame %u, HOME %u\n", (unsigned)glo, (unsigned)home);
+        CHECK(glo < 6000 && home < 6000, "drawing: a GLO frame and HOME draw their fills and type a byte at a time");
+    }
+    /* live recording: a knob turned on a track at 1/2x locks the track's own step, not the pattern's */
+    {
+        ux_init(7);
+        m2k_pattern(16); ux_ms(40);
+        m2k_pattern_t *q = PAT(16);
+        q->glob[G_SPD1] = enc(2, 7);
+        for (int s = 0; s < 16; s++) { q->step[0][s].flags = ST_TRIG; q->step[0][s].note = 60; }
+        lockmap_build();
+        ui.trk = 0; sq.ktrk = 0; ui.page = PG_AMP; ui.sub = 0;
+        seq_play(1); sq.rec = 1;
+        while (sq.step < 9) ux_audio(16);
+        int tp = track_pos(0), ps = sq.step - 1;
+        m2k_encoder(E_K1, 5);
+        seq_play(0); sq.rec = 0;
+        CHECK(tp != ps && lock_find(0, tp, P_ATK) >= 0 && lock_find(0, ps, P_ATK) < 0,
+              "REC: a knob on a 1/2x track locks the track's own step");
+    }
+    /* SYN's pages follow the machine: ALGO off DIGI-WAV on its SND page, SELECT from it onto a track without BANK, a
+     * DIGI-WAV sound loaded on SND: the library stays in view, never a page past the last; one turn of SAVE into an
+     * INIT slot saves once (its next detent does not ask to replace what it just saved) */
+    {
+        ux_init(7);
+        ui.trk = 0; set_machine(M_WAV); ui.page = PG_SYN; ui.sub = 3;
+        m2k_encoder(E_ALGO, 1);
+        int algo = PAT(cur_pat)->machine[0] != M_WAV && ui.sub < nsub(PG_SYN) && snd_page();
+        PAT(cur_pat)->machine[1] = M_GSIN;
+        set_machine(M_WAV); ui.page = PG_SYN; ui.sub = 3;
+        m2k_encoder(E_SELECT, 1);
+        int sel = ui.trk == 1 && ui.sub < nsub(PG_SYN) && snd_page();
+        ux_init(7);
+        ui.page = PG_SYN; ui.sub = (uint8_t)(nsub(PG_SYN) - 1); ui.snd_cat = 0; ui.snd_sel = M2K_SOUNDS - 1;
+        int init = !snd[M2K_SOUNDS - 1].name[0];
+        m2k_encoder(E_K3, 1); ux_ms(40); m2k_encoder(E_K3, 1);
+        int once = init && snd[M2K_SOUNDS - 1].name[0] && ask.kind == ASK_NONE;
+        ask.kind = ASK_NONE;
+        CHECK(algo && sel && once, "SYN: the SND page stays SND as the machine or the track changes; SAVE into INIT saves once a turn");
+    }
+    /* GLO held two seconds alone (its map read) and let go: the page stays; EDIT held as a modifier (+ REC) flips no
+     * page, tapped it is SYN; GRID: OCT+ stops at the pattern's last page; PADS: a black key picks the keys' track too;
+     * GRID's step LEDs and the view follow the track's own step (1/2x) */
+    {
+        ux_init(7);
+        ui.page = PG_AMP; ui.sub = 0;
+        m2k_button(B_GLO, 1); ux_ms(2000); m2k_button(B_GLO, 0);
+        int glo = ui.page == PG_AMP;
+        m2k_button(B_EDIT, 1); ux_tap(B_REC); m2k_button(B_EDIT, 0);
+        int edit_amp = ui.page == PG_AMP;
+        ux_tap(B_EDIT);
+        int s0 = ui.sub, edit_syn = ui.page == PG_SYN;
+        m2k_button(B_EDIT, 1); ux_tap(B_REC); m2k_button(B_EDIT, 0);
+        int edit_mod = ui.page == PG_SYN && ui.sub == s0;
+        m2k_pattern(16); ux_ms(40);
+        ux_tap(B_SEQ);
+        ux_tap(B_OCTU); ux_tap(B_OCTU);
+        int pages = ui.spage == 0;
+        PAT(16)->glob[G_LEN] = 32;
+        ux_tap(B_OCTU); ux_tap(B_OCTU); ux_tap(B_OCTU);
+        pages &= ui.spage == 1;
+        ux_init(7);
+        m2k_button(B_GLO, 1); ux_tap(B_ARP); m2k_button(B_GLO, 0);
+        m2k_key(ux_black(2), 1); m2k_key(ux_black(2), 0);
+        int pads = ui.pads && ui.trk == 2 && sq.ktrk == 2;
+        ux_init(7);
+        m2k_pattern(16); ux_ms(40);
+        PAT(16)->glob[G_LEN] = 32; PAT(16)->glob[G_SPD1] = enc(2, 7);
+        ux_tap(B_SEQ);
+        seq_play(1);
+        while (sq.step < 20) ux_audio(16);
+        m2k_frame(ux_now += 20);
+        int tp = track_pos(0), ps = sq.step - 1;
+        const uint8_t *L = m2k_leds();
+        int follow = tp / 16 != ps / 16 && ui.spage == tp / 16 && L[ux_white(tp % 16)] == 255;
+        seq_play(0);
+        CHECK(glo && edit_amp && edit_syn && edit_mod && pages && pads && follow,
+              "GLO held long: no page; EDIT + REC: no page, EDIT tapped: SYN; GRID OCT+ to the last page; PADS track; GRID follows the track's step");
+    }
+    /* a track's steps copied and pasted keep every lock (256 on T1, back onto itself); a paste the locks' pool cannot
+     * hold says so; eight steps with ten locks each (80) copied and pasted keep them all */
+    {
+        ux_init(7);
+        m2k_pattern_t *q = PAT(cur_pat);
+        for (int t = 0; t < M2K_TRACKS; t++) for (int s = 0; s < M2K_STEPS; s++) q->step[t][s].flags = 0;
+        for (int k = 0; k < M2K_LOCKS; k++) q->lock[k].trk = 0xFF;
+        q->glob[G_LEN] = 64;
+        for (int s = 0; s < 64; s++) { q->step[0][s].flags = ST_TRIG; for (int k = 0; k < 4; k++) lock_set(0, s, P_BASE + k, 10 + s); }
+        lockmap_build();
+        m2k_track(0); m2k_button(B_SEQ, 1); ux_tap(B_REC); m2k_button(B_SEQ, 0); ux_ms(100);
+        m2k_button(B_SEQ, 1); ux_tap(B_PLAY); m2k_button(B_SEQ, 0);
+        int back = ux_locks(0, 0, 64) == 256;
+        ux_ms(3100);
+        m2k_track(1); m2k_button(B_SEQ, 1); ux_tap(B_PLAY); m2k_button(B_SEQ, 0);
+        int full = !strcmp(ui.toast, "LOCKS FULL");
+        ux_init(7);
+        ux_tap(B_SEQ);
+        q = PAT(cur_pat);
+        for (int s = 0; s < M2K_STEPS; s++) q->step[0][s].flags = 0;
+        for (int k = 0; k < M2K_LOCKS; k++) q->lock[k].trk = 0xFF;
+        q->glob[G_LEN] = 32;
+        for (int s = 0; s < 8; s++) { q->step[0][s].flags = ST_TRIG; for (int k = 0; k < 10; k++) lock_set(0, s, P_BASE + k, 20 + k); }
+        lockmap_build();
+        for (int i = 0; i < 8; i++) m2k_key(ux_white(i), 1);
+        ux_tap(B_REC);
+        for (int i = 0; i < 8; i++) m2k_key(ux_white(i), 0);
+        m2k_key(ux_white(8), 1); ux_tap(B_PLAY); m2k_key(ux_white(8), 0);
+        int steps = ux_locks(0, 8, 16) == 80;
+        CHECK(back && full && steps, "copy, paste: a track's 256 locks kept, a full pool says LOCKS FULL, 8 steps' 80 locks kept");
     }
     /* the render on two cores (the FM-1's): the second core's tracks run before or after the first's (as they may,
      * at once) and every pattern of bank A sounds sample for sample as on one */
