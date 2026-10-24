@@ -11,7 +11,7 @@ window.M2K_CHANGES = [
     items: [
       ["patterns", "A new bank A, four parts: CIRCUIT (electro, A minor, 126), TIDE (Em7 and A9, E dorian, 122), SUSPEND (sus2 chords moved whole, D, 110) and LANTERN (add9 chord hits, A, 100). Each 4-bar pattern plays as a 16-bar form: what comes in after the first pass, what alternates, what arrives on the third and fourth, filters moving over 16 bars."],
       ["patterns", "Every sound in them was picked by ear from sheets of random settings, then the parts were written to rules from research on Elektron pattern craft, IDM harmony and groovebox mixing, and fixed by measurement until each track sat on the tempo and in the harmony."],
-      ["web", "The installer offers a test build of MONO2K for the FM-1 with the new bank: not yet tried on an FM-1, so back up what your FM-1 holds first; holding OCT− while switching on is the way back if it does not start."],
+      ["web", "The installer offers MONO2K 0.1 for the FM-1, with the new bank: one click, checked in your browser before it writes. Back up what your FM-1 holds first; holding OCT− while switching on is the way back if it does not start."],
       ["patterns", "LO-BIT CLUB is gone, and A05 to A16 are blank for your own. A saved store takes the new parts where LO-BIT CLUB's still stand, and its other slots go blank the same way; anything you changed is kept."],
     ],
   },
