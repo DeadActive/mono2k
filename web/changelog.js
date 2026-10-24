@@ -7,6 +7,31 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-10-25", title: "The fixes of a deep audit: the knobs, the keys, the sequencer, the store, the sound engine",
+    items: [
+      ["fixes", "On the FM-1 a knob, the preset knob among them, could start moving two steps a click and skip patterns: a slow turn that paused halfway through a click taught it a second resting point. It now learns only where the knob rests for half a second, as M-VAVE's own firmware does."],
+      ["fixes", "A key let go after the layer changed (GLO, SEQ, HOME, OCT+ pressed meanwhile) no longer leaves its note droning, its step held or its solo on; a trig held to read its card is no longer deleted when let go, only a tap removes it."],
+      ["fixes", "A question answers what it asked, even if SLOT or PROJ moved before YES; one turn of SAVE into an INIT slot saves once; the undo is forgotten when another project or the store loads; copy and paste keep every lock, or say LOCKS FULL."],
+      ["screen", "The screen draws up to thirty times faster on the FM-1 (GLO's map held took 60% of the audio's time in a frame, now 16%), every pixel the same."],
+      ["sequencer", "At a pattern's end its last step plays with its own sound and locks, and the queued pattern starts on the next; tracks off 1x start it on its first step, and a length made shorter never plays a step past its end."],
+      ["sequencer", "GATE locks work. Trig conditions (A:B, 1ST) count each track's own loops, so tracks at 1/2x or 2x play them as the screen says."],
+      ["sequencer", "The arp runs at the rate its screen shows: it ran twice as fast, so a saved pattern with the arp now plays it at half its old rate. It no longer doubles a note every 256."],
+      ["sequencer", "LFO ONE and HALF run one cycle and half of one from the trig's phase (PHAS)."],
+      ["sequencer", "Under an external clock, tracks off 1x stay with the pattern, and REC lands on the nearest step; the clock out no longer drifts, and a Stop from the clock in is passed on. A track's speed turned while playing goes on from where the pattern is."],
+      ["fixes", "MIDI notes out: each note-off goes on its note's channel, STOP and a note played over a step's end it at once, and none are lost when both of the FM-1's cores play. Ratchets stop with STOP and in muted tracks."],
+      ["fixes", "The store: a damaged or cut-short store is refused whole and what MONO2K holds is kept; a save that cannot fit says PROJECT FULL instead of PROJECT SAVED. A save rewrites only what changed, so saving an unchanged project writes nothing to the flash."],
+      ["workflow", "Settings (GLO > SET and MIDI) are saved by themselves 3 s after the last change; before, they were kept only when something else was saved."],
+      ["patterns", "GLO > SET > DEMO brings back A01 to A04 alone: A05 to A16 stay yours. An update takes new demos only into the slots you never changed. The sound library starts with the demos' 24 sounds and 104 INIT slots."],
+      ["web", "The Patch Editor refuses to send a store that would leave the FM-1 no room to edit a pattern."],
+      ["sound", "The sound engine takes less of the FM-1's time for the same sound, sample for sample: A04 LANTERN's busier core does 11% less, six SWAV-ENS dry 23% less, and the two cores share the tracks by what each costs now."],
+      ["sound", "Echoes and the reverb's tail die away to silence: an echo could hang for ever at DFB 32 to 61, the ping-pong delay leaked, and the reverb held an offset that clicked when VERB went to 0. DFB 62 and 63 with the band wide open can still hold an echo."],
+      ["fixes", "A slide up reaches its note (at PORT 0 it ended 30 cents flat; at PORT 110 an octave up never moved)."],
+      ["fixes", "A machine changed under a sounding track (SET MACHINE, a sound loaded, another pattern) starts from rest: it carried the old machine's state, with full-scale blocks or FX-DYNMX silent for seconds."],
+      ["fixes", "A held PERFORM repeat keeps repeating; an LFO or a lock moving DSND across 64 no longer wipes the delay; two SWAV-SAW tracks no longer share their drift; GND-PERC's METAL, DRM-SNAR and the phaser no longer overflow at their extremes."],
+      ["web", "The installer's MONO2K 0.1 package is rebuilt with every fix above."],
+    ],
+  },
+  {
     date: "2026-10-24", title: "A new bank A: four parts, every sound picked by ear",
     items: [
       ["patterns", "A new bank A, four parts: CIRCUIT (electro, A minor, 126), TIDE (Em7 and A9, E dorian, 122), SUSPEND (sus2 chords moved whole, D, 110) and LANTERN (add9 chord hits, A, 100). Each 4-bar pattern plays as a 16-bar form: what comes in after the first pass, what alternates, what arrives on the third and fourth, filters moving over 16 bars."],

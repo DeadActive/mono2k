@@ -57,7 +57,7 @@ To **zven@thefirmwarehub.com**, links only, no attachments. Fill in the USB port
 ## The package
 
 - **File:** MONO2K 0.1, the installer's `mono2k.fwsc` (596 KB, SHA-256
-  `ef393d0d51435522e018c081517955ee017c0a578e35ee0854d44a97e6970d5f`); the release attaches the same file as
+  `d01414549809e8b5ebeb42f357e91c324eec44b6686a4ffa323779c2cfdf4d4b`); the release attaches the same file as
   `mono2k-0.1.fwsc`.
 - **Release:** a GitHub release `v0.1` (under 1.0: the card says beta). The hub takes every later release by itself,
   within three hours.
