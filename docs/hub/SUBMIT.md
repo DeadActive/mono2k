@@ -10,8 +10,10 @@ What the hub asks for (<https://thefirmwarehub.com/submit/>, <https://thefirmwar
 - **Text** (`fmhub.json`, 262 characters): Six mono machines in the spirit of Elektron's Monomachine: FM,
   superwaves, wavetables, a SID, a voice and four drum synths, one per track. A 64-step sequencer with parameter
   locks, trig conditions and ratchets, a lofi bus, four demo parts and a web patch editor.
-- **Picture:** `docs/hub/screen.png` (the screen, 240 × 240), `docs/hub/screen-4x.png` (the same, 960 × 960),
-  `docs/hub/screens-wide.png` (three screens side by side).
+- **Picture:** `docs/hub/screen.png` (the screen, 240 × 240, in dark mode, from the engine while A01 plays),
+  `docs/hub/screen-4x.png` (the same, 960 × 960), `docs/hub/screens-wide.png` (HOME and the chord machine's page).
+- **Animation:** `docs/hub/mono2k.gif` (240 × 240) and `docs/hub/mono2k-2x.gif` (480 × 480): four bars of A01 on
+  HOME, then the chord machine's page, 12.5 s, looping; every frame the engine's own.
 - **Play in the browser:** <https://inigohernandez.github.io/mono2k/>
 - **Editor:** <https://inigohernandez.github.io/mono2k/editor.html>
 - **Manual:** <https://inigohernandez.github.io/mono2k/manual.html>
@@ -61,6 +63,7 @@ To zven@thefirmwarehub.com, links only, no attachments:
 > and restores the FM-1 over USB.
 >
 > - Picture: https://raw.githubusercontent.com/InigoHernandez/mono2k/main/docs/hub/screen-4x.png
+> - Animation (the screen while it plays): https://raw.githubusercontent.com/InigoHernandez/mono2k/main/docs/hub/mono2k-2x.gif
 > - Play in the browser: https://inigohernandez.github.io/mono2k/
 > - Editor: https://inigohernandez.github.io/mono2k/editor.html
 > - Manual: https://inigohernandez.github.io/mono2k/manual.html
