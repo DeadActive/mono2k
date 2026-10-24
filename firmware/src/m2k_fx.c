@@ -9,10 +9,10 @@ static uint8_t mulaw_enc(int32_t x)
     int sign = 0;
     if (x < 0) { sign = 0x80; x = -x; }
     if (x > 32635) x = 32635;
-    x += 0x84;
-    int exp = 7;
-    for (int mask = 0x4000; (x & mask) == 0 && exp > 0; exp--, mask >>= 1)
-        ;
+    x += 0x84;                         /* 0x84 .. 0x7FFF: the segment is the top bit's place over bit 7 */
+    int exp = x >= 0x800 ? 4 : 0;
+    if (x >= (0x200 << exp)) exp += 2;
+    if (x >= (0x100 << exp)) exp += 1;
     int man = (x >> (exp + 3)) & 0x0F;
     return (uint8_t)~(sign | (exp << 4) | man);
 }
@@ -20,12 +20,23 @@ static uint8_t mulaw_enc(int32_t x)
 static uint32_t sps_q8 = 1411200;      /* samples per sixteenth, Q8; the sequencer sets it */
 static uint8_t tape_rolling;           /* the sequencer runs or a voice sounds: the hiss and dust follow it */
 
-/* one line's sample at a fractional position, Q8 of a line sample */
-static inline int32_t dl_read(const uint8_t *b, uint32_t mask, int32_t pos)
+/* one line's sample at a fractional position, Q8 of a line sample (unsigned: it wraps, after minutes) */
+static inline int32_t dl_read(const uint8_t *b, uint32_t mask, uint32_t pos)
 {
-    uint32_t j = (uint32_t)(pos >> 8);
-    int32_t f = pos & 255;
+    uint32_t j = pos >> 8;
+    int32_t f = (int32_t)(pos & 255);
     return (T_MULAW[b[j & mask]] * (256 - f) + T_MULAW[b[(j + 1) & mask]] * f) >> 8;
+}
+
+/* a line's sample, encoded. Under GATE (a feedback under unity's dead band: rounded to the nearest mu-law step, an
+ * echo DFB / 64 as loud as the last can round back to it, a pass after a pass, for ever) it takes the step below
+ * it instead, so a tail ends in silence */
+static inline uint8_t mulaw_line(int32_t x, int32_t gate)
+{
+    uint8_t q = mulaw_enc(x);
+    int32_t a = x < 0 ? -x : x, d = T_MULAW[q];
+    if (a < gate && q != 0xFF && q != 0x7F && (d < 0 ? -d : d) >= a) q++;   /* (a code on is a step nearer silence) */
+    return q;
 }
 
 /* the track's delay, after the Monomachine's (measured): DTIM in 256ths of a note plus 7.6 ms; the send (d / 64)^2,
@@ -33,20 +44,26 @@ static inline int32_t dl_read(const uint8_t *b, uint32_t mask, int32_t pos)
  * echoes through a one-pole HP at DBAS and a one-pole LP at DBAS + DWID. The line runs at half rate in 8-bit mu-law;
  * a time longer than the line slows its clock instead, the echoes darker, as a tape or a BBD would. Ping-pong
  * keeps a sum and a difference line, each half the memory */
-static void delay_block(int ti, const int32_t *in, int32_t *L, int32_t *R)
+static void delay_block(int ti, const int32_t *restrict in, int32_t *restrict L, int32_t *restrict R)
 {
     trk_t *t = &trk[ti];
-    int dual = P7(t, P_DSND) > 64;
+    int sent = t->dsent;
+    t->dsent = 0;
+    if (t->dsleep && !sent) return;    /* quiet last block and nothing sent since: it would be again, as it stands */
+    /* the layout from the kit's DSND, not its locks' or LFOs' (each crossing of 64 wiped the lines), and only past 64
+     * by a step (a kit turned to 64 keeps the echoes it has) */
+    int kd = PAT(cur_pat)->kit[ti][P_DSND], dual = t->dmode ? kd >= 64 : kd > 64;
     if (dual != t->dmode) {            /* the lines change their layout: start them empty */
         m_set(t->dl, 0x7F, DL_LEN);
         t->dmode = (uint8_t)dual;
         t->dacc[0] = t->dacc[1] = t->dn = 0;
         t->dhp[0] = t->dhp[1] = t->dlp[0] = t->dlp[1] = 0;
+        t->dhr[0] = t->dhr[1] = t->dlr[0] = t->dlr[1] = 0;
         t->dquiet = DL_LEN;
     }
     uint32_t n = dual ? DL_LEN / 2 : DL_LEN, mask = n - 1;
-    /* nothing sent, every entry of the line written silent since, the filters settled (an integer one-pole can stall a
-     * step or two off zero): nothing to hear, nothing to work out (most tracks, most of the time; the FM-1's time) */
+    /* nothing sent, every entry of the line written silent since, the filters settled: nothing to hear, nothing to
+     * work out (most tracks, most of the time; the FM-1's time) */
     int quiet = t->dquiet >= n;
     for (int i = 0; quiet && i < M2K_SUB; i++) quiet = in[i] == 0;
     if (quiet) {
@@ -57,10 +74,13 @@ static void delay_block(int ti, const int32_t *in, int32_t *L, int32_t *R)
         }
         if (!s) {
             t->dhp[0] = t->dhp[1] = t->dlp[0] = t->dlp[1] = t->dprev[0] = t->dprev[1] = t->dacc[0] = t->dacc[1] = 0;
+            t->dhr[0] = t->dhr[1] = t->dlr[0] = t->dlr[1] = 0;
             mon.dly[ti] = 0;
+            t->dsleep = 1;
             return;
         }
     }
+    t->dsleep = 0;
     /* the time, half-rate samples Q8: whole samples once it settles (a read between two samples dulls the top) */
     int32_t target = ((int32_t)((uint32_t)P7(t, P_DTIM) * (sps_q8 >> 5)) + (167 << 8) + 128) & ~255;
     int32_t dd = target - t->dt_q8;
@@ -68,7 +88,10 @@ static void delay_block(int ti, const int32_t *in, int32_t *L, int32_t *R)
     uint32_t th = (uint32_t)t->dt_q8 >> 8, room = n - 4;
     uint32_t rate = th <= room ? 65536u : (room << 16) / th;                  /* the line's clock, Q16 */
     int32_t back = th <= room ? t->dt_q8 : (int32_t)(room << 8);               /* the delay in line samples, Q8 */
-    int32_t fb = P7(t, P_DFB) * 512;
+    int dfb = P7(t, P_DFB);
+    /* mulaw_line's gate: the dead band of mu-law's first segment is 256 / (64 - DFB), the next ones' to 4 x that (DFB 62
+     * and 63, a band wide open, can still hold an echo a little over it) */
+    int32_t fb = dfb * 512, gate = dfb < 64 ? 1024 / (64 - dfb) : 0;
     int dbas = P7(t, P_DBAS);
     int32_t ahp = T_DLY_HP[dbas], alp = T_DLY_LP[CLAMP(dbas + P7(t, P_DWID), 0, 127)];
     int pan = P7(t, P_PAN);
@@ -77,12 +100,18 @@ static void delay_block(int ti, const int32_t *in, int32_t *L, int32_t *R)
     int32_t pk = 0;
     for (int i = 0; i < M2K_SUB; i += 2) {
         int32_t x = (in[i] + in[i + 1]) >> 1;
-        int32_t pos = (int32_t)((t->dw << 8) + (t->dph >> 8)) - back;
+        uint32_t pos = (t->dw << 8) + (t->dph >> 8) - (uint32_t)back;
         int32_t e[2];
         for (int c = 0; c <= dual; c++) {
+            /* the one-poles carry their remainders (as zop_lp does): without, they stalled up to 252 off zero and the
+             * delay never went quiet */
             int32_t y = dl_read(b + c * n, mask, pos);
-            t->dhp[c] += ((y - t->dhp[c]) * ahp) >> 15;
-            t->dlp[c] += ((y - t->dhp[c] - t->dlp[c]) * alp) >> 15;
+            int32_t q = (y - t->dhp[c]) * ahp + t->dhr[c];
+            t->dhp[c] += q >> 15;
+            t->dhr[c] = q & 32767;
+            q = (y - t->dhp[c] - t->dlp[c]) * alp + t->dlr[c];
+            t->dlp[c] += q >> 15;
+            t->dlr[c] = q & 32767;
             e[c] = t->dlp[c];
         }
         int32_t l, r;
@@ -103,7 +132,7 @@ static void delay_block(int ti, const int32_t *in, int32_t *L, int32_t *R)
             t->dph -= 65536u;
             int loud = 0;
             for (int c = 0; c <= dual; c++) {
-                uint8_t q = mulaw_enc(t->dacc[c] / t->dn);
+                uint8_t q = mulaw_line(t->dacc[c] / t->dn, gate);
                 b[c * n + (t->dw & mask)] = q;
                 loud |= q != 0xFF && q != 0x7F;           /* mu-law's two silences */
             }
@@ -139,7 +168,7 @@ static const int8_t ADPCM_IDX[8] = {-1, -1, -1, -1, 2, 4, 6, 8};
 static struct {
     /* reverb */
     uint16_t cb_pos[4], ap_pos[4];
-    int32_t cb_lp[4];
+    int32_t cb_lp[4], cb_r[4];         /* the combs' damping and its remainders */
     int32_t rv_acc, rv_l, rv_r;
     /* glitch */
     uint32_t gw, g_start, g_len, g_left, g_pos, g_rate;   /* g_pos, g_rate: Q12 */
@@ -240,8 +269,14 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             for (int c = 0; c < 4; c++) {
                 int16_t *b = &cb_buf[off];
                 int32_t y = b[bus.cb_pos[c]];
-                bus.cb_lp[c] += ((y - bus.cb_lp[c]) * damp) >> 15;
-                b[bus.cb_pos[c]] = (int16_t)sat16(x + ((bus.cb_lp[c] * fb) >> 15));
+                /* the damping carries its remainder and the feedback rounds towards zero: both rounded down, the
+                 * combs ran negative and kept a DC for ever (VERB 127 DAMP 127: -9331); to the nearest, each could
+                 * still hold +-23 */
+                int32_t q = (y - bus.cb_lp[c]) * damp + bus.cb_r[c];
+                bus.cb_lp[c] += q >> 15;
+                bus.cb_r[c] = q & 32767;
+                int32_t v = bus.cb_lp[c] * fb;
+                b[bus.cb_pos[c]] = (int16_t)sat16(x + ((v + (v < 0 ? 32767 : 0)) >> 15));
                 if (++bus.cb_pos[c] >= CB_LEN[c]) bus.cb_pos[c] = 0;
                 sum += y;
                 off += CB_LEN[c];
@@ -271,12 +306,18 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
     int32_t mvol = T_MVOL[master_vol];
     int32_t ad_mix = adpc * 2 > 127 ? 127 : adpc * 2, ad_div = T_ADPC_DIV[adpc];
     uint32_t wow_inc = 54000, flut_inc = 620000;    /* 0.55 Hz, 6.3 Hz */
+    uint8_t g_phase = bus.g_phase;                  /* (a block's in locals: no byte stored a sample) */
+    int32_t hgain = bus.hgain, htgt = tape_rolling ? 32767 : 0;
     for (int i = 0; i < M2K_SUB; i++) {
         int32_t l = L[i], r = R[i];
         /* glitch: the ring is written at half rate; a repeat replaces the mix */
-        if (!(bus.g_phase ^= 1)) {
-            gl_buf[bus.gw & (GL_LEN - 1)][0] = (int16_t)sat16((bus.gacc_l + l) >> 1);
-            gl_buf[bus.gw & (GL_LEN - 1)][1] = (int16_t)sat16((bus.gacc_r + r) >> 1);
+        if (!(g_phase ^= 1)) {
+            /* never over the slice a repeat plays (a held PERFORM's comes round the ring after 0.74 s; the glitch's
+             * own end first) */
+            if (!bus.g_on || ((bus.gw - bus.g_start) & (GL_LEN - 1)) >= bus.g_len) {
+                gl_buf[bus.gw & (GL_LEN - 1)][0] = (int16_t)sat16((bus.gacc_l + l) >> 1);
+                gl_buf[bus.gw & (GL_LEN - 1)][1] = (int16_t)sat16((bus.gacc_r + r) >> 1);
+            }
             bus.gw++;
             if (bus.g_on) {
                 uint32_t p = bus.g_pos >> 12;
@@ -297,7 +338,6 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             bus.gacc_l = l;
             bus.gacc_r = r;
         }
-        mon.glitch = bus.g_on;
         if (bus.g_on || bus.g_fade > 0) {
             int32_t f = bus.g_on ? bus.g_fade : 0;
             l += ((bus.gout_l - l) * f) >> 5;
@@ -313,9 +353,9 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
              * of the wow's swing, so it wobbles about a quarter as far in pitch (at TAPE 127: wow ~+-40 c, flutter ~+-10 c) */
             int32_t m = (sinp(bus.wow) * 48 + sinp(bus.flut)) >> 6;           /* +-24600 */
             int32_t d = (420 << 8) + (int32_t)(((int64_t)m * tq * 3) >> 15);  /* Q8 samples */
-            int32_t pos = (int32_t)(bus.tw << 8) - d;
-            uint32_t j = (uint32_t)(pos >> 8);
-            int32_t f = pos & 255;
+            uint32_t pos = (bus.tw << 8) - (uint32_t)d;                       /* unsigned: it wraps after 3 minutes */
+            uint32_t j = pos >> 8;
+            int32_t f = (int32_t)(pos & 255);
             int32_t tl = (tp_buf[j & 2047][0] * (256 - f) + tp_buf[(j + 1) & 2047][0] * f) >> 8;
             int32_t tr = (tp_buf[j & 2047][1] * (256 - f) + tp_buf[(j + 1) & 2047][1] * f) >> 8;
             bus.tw++;
@@ -338,8 +378,8 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             r += ((bus.ad_hold[1] - r) * ad_mix) >> 7;
         }
         /* hiss and dust: only while the tape rolls, fading in and out with it */
-        bus.hgain += ((tape_rolling ? 32767 : 0) - bus.hgain) >> 13;
-        if (hiss && bus.hgain > 64) {
+        hgain += (htgt - hgain) >> 13;
+        if (hiss && hgain > 64) {
             int32_t n = (int32_t)noise_step(&bus.hs) >> 16;
             bus.hlp += ((n - bus.hlp) * 9000) >> 15;
             int32_t h = (bus.hlp * T_HISS_G[hiss]) >> 15;       /* the hiss and the dust on their own laws */
@@ -348,7 +388,7 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             uint32_t cr = ((bus.hs & 0x3FFFF) << 3) | ((bus.hs >> 18) & 7);
             if (cr < T_CRK_P[hiss] && !bus.crackle) bus.crackle = (int32_t)(1500 + (bus.hs >> 21)) * T_CRK_A[hiss] >> 10;
             if (bus.crackle) { h += (bus.hs & 0x100000) ? bus.crackle : -bus.crackle; bus.crackle = (bus.crackle * 5) >> 3; if (bus.crackle < 100) bus.crackle = 0; }
-            h = (h * bus.hgain) >> 15;
+            h = (h * hgain) >> 15;
             l += h;
             r += h;
         }
@@ -365,6 +405,9 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
         out[2 * i + 1] = (int16_t)r;
         if ((i & 7) == 0) mon.scope[mon.scope_w++] = (int16_t)((l + r) >> 1);
     }
+    bus.g_phase = g_phase;
+    bus.hgain = hgain;
+    mon.glitch = bus.g_on;
 }
 
 /* ------------------------------------------------------------------------------------------- the render */
@@ -393,16 +436,37 @@ static void par_job(void)
 }
 
 /* where the tracks split: an FX machine stays with the track it hears (the one before it, FX-RING's EXT the one before
- * that), and the sounding tracks are shared out, the first core keeping the bus (worth about two) */
+ * that), and the work is shared out as each track's last block weighed it (T_MCOST: its machine, chain and stages, its
+ * delay while it rings), the first core keeping the sequencer, the LFOs and the bus as their controls stand. In Mac
+ * instructions a sample, measured as T_MCOST is */
+#define C_CORE1 140                    /* the sequencer, the mix, the bus dry */
+#define C_LFO 8                        /* an LFO that moves something */
+#define C_VERB 72
+#define C_TAPE 97
+#define C_ADPC 129
+#define C_HISS 34
+#define C_IDLE 12                      /* a track that does not sound */
+#define C_DLY 92                       /* a delay that rings: one line, ping-pong */
+#define C_DLY2 116
+#define C_PAR 10                       /* the second core's sums */
 static int par_split(void)
 {
-    const uint8_t *mc = PAT(cur_pat)->machine;
-    int best = M2K_TRACKS, cost = 99, n[M2K_TRACKS + 1] = {0};
-    for (int t = 0; t < M2K_TRACKS; t++) n[t + 1] = n[t] + (trk[t].sounding ? 2 : 0) + 1;
+    const m2k_pattern_t *pp = PAT(cur_pat);
+    const uint8_t *mc = pp->machine, *g = pp->glob;
+    int32_t c[M2K_TRACKS], a = C_CORE1 + modpn * C_LFO + (g[G_VERB] ? C_VERB : 0) + (g[G_TAPE] || perf.on[PF_WOW] ? C_TAPE : 0)
+                                  + (g[G_ADPC] || perf.on[PF_CRSH] ? C_ADPC : 0) + (g[G_HISS] ? C_HISS : 0), b = C_PAR;
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        c[t] = (trk[t].sounding ? trk[t].ccost : C_IDLE) + (trk[t].dsleep ? 0 : trk[t].dmode ? C_DLY2 : C_DLY);
+        b += c[t];
+    }
+    int best = M2K_TRACKS;
+    int32_t cost = INT32_MAX;
     for (int s = 1; s < M2K_TRACKS; s++) {
+        a += c[s - 1];
+        b -= c[s - 1];
         if (mc[s] == M_FXC || mc[s] == M_FXR || mc[s] == M_FXD || (s + 1 < M2K_TRACKS && mc[s + 1] == M_FXR)) continue;
-        int a = n[s] + 4, b = n[M2K_TRACKS] - n[s], c = a > b ? a : b;
-        if (c < cost) { cost = c; best = s; }
+        int32_t w = a > b ? a : b;
+        if (w < cost) { cost = w; best = s; }
     }
     return best;
 }
