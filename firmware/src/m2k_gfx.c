@@ -29,8 +29,15 @@ static inline int pat_ink(int p, int x, int y)
     }
 }
 
+#ifdef M2K_TEXT_AUDIT
+static uint32_t px_calls;              /* (the host counts the pixels drawn one at a time: the drawing's cost) */
+#endif
+
 static inline void px(int x, int y, int c)
 {
+#ifdef M2K_TEXT_AUDIT
+    px_calls++;
+#endif
     if (x < clip_x0 || y < clip_y0 || x >= clip_x1 || y >= clip_y1) return;
     uint8_t *b = &fb[y * ROWB + (x >> 3)], m = (uint8_t)(0x80u >> (x & 7));
     if (c == 1) *b |= m;
@@ -74,15 +81,30 @@ static void cls(void)
 #endif
 }
 
-/* c: 0 paper, 1 ink, 2 invert */
+/* c: 0 paper, 1 ink, 2 invert. Clipped once (to the clip and the screen), then a byte at a time, the two end bytes
+ * masked: a window over the stage was half a million instructions a pixel at a time */
 static void rect(int x, int y, int w, int h, int c)
 {
 #ifdef M2K_TEXT_AUDIT
     if (c == 0 || (c == 1 && w * h >= 600)) ta_cover(x, y, w, h);
     if (c == 1 && w * h >= 600 && ta_nwin) ta_nwin--;   /* (an ink fill is no window) */
 #endif
-    for (int j = y; j < y + h; j++)
-        for (int i = x; i < x + w; i++) px(i, j, c);
+    int x0 = x > clip_x0 ? x : clip_x0, x1 = x + w < clip_x1 ? x + w : clip_x1;
+    int y0 = y > clip_y0 ? y : clip_y0, y1 = y + h < clip_y1 ? y + h : clip_y1;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > M2K_W) x1 = M2K_W;
+    if (y1 > M2K_H) y1 = M2K_H;
+    if (x0 >= x1 || y0 >= y1) return;
+    int b0 = x0 >> 3, b1 = (x1 - 1) >> 3;
+    uint8_t m0 = (uint8_t)(0xFFu >> (x0 & 7)), m1 = (uint8_t)(0xFF00u >> (((x1 - 1) & 7) + 1));
+    if (b0 == b1) m0 = m1 = (uint8_t)(m0 & m1);
+    for (uint8_t *r = &fb[y0 * ROWB], *e = &fb[y1 * ROWB]; r < e; r += ROWB) {
+        uint8_t *a = r + b0, *b = r + b1;
+        if (c == 1) { *a |= m0; *b |= m1; while (++a < b) *a = 0xFF; }
+        else if (c == 0) { *a &= (uint8_t)~m0; *b &= (uint8_t)~m1; while (++a < b) *a = 0; }
+        else { *a ^= m0; if (b > a) *b ^= m1; while (++a < b) *a ^= 0xFF; }   /* (one byte: inverted once) */
+    }
 }
 
 /* a pattern: ink where the pattern is, paper elsewhere (opaque) or untouched (transparent) */
@@ -198,6 +220,33 @@ static int text_w(const m2k_font_t *f, const char *s, int track)
     return n ? w - f->track - track : 0;
 }
 
+/* a glyph in one fill (1 ink, 0 paper, else inverted), a screen byte at a time: each byte's eight pixels gathered from
+ * the glyph's row, masked to the clip (a line of the small type was 30 000 instructions a pixel at a time) */
+static void glyph_solid(const m2k_font_t *f, int g, int x, int y, int fill)
+{
+    int w = f->w[g], bpr = (w + 7) >> 3;
+    int vx0 = x > clip_x0 ? x : clip_x0, vx1 = x + w < clip_x1 ? x + w : clip_x1;
+    int vy0 = y > clip_y0 ? y : clip_y0, vy1 = y + f->h < clip_y1 ? y + f->h : clip_y1;
+    if (vx0 < 0) vx0 = 0;
+    if (vy0 < 0) vy0 = 0;
+    if (vx1 > M2K_W) vx1 = M2K_W;
+    if (vy1 > M2K_H) vy1 = M2K_H;
+    if (vx0 >= vx1 || vy0 >= vy1) return;
+    const uint8_t *src = f->bits + f->off[g] + (vy0 - y) * bpr;
+    for (int j = vy0; j < vy1; j++, src += bpr) {
+        uint8_t *row = &fb[j * ROWB];
+        for (int d = vx0 >> 3; d <= (vx1 - 1) >> 3; d++) {
+            int p = 8 * d - x, s = p & 7, q = (p - s) / 8;     /* the glyph's column under the byte's first pixel */
+            unsigned a = q >= 0 && q < bpr ? src[q] : 0u, b = q + 1 >= 0 && q + 1 < bpr ? src[q + 1] : 0u;
+            int lo = vx0 > 8 * d ? vx0 - 8 * d : 0, hi = vx1 < 8 * d + 8 ? vx1 - 8 * d : 8;
+            uint8_t v = (uint8_t)(((a << s) | (b >> (8 - s))) & (0xFFu >> lo) & (0xFF00u >> hi));
+            if (fill == 1) row[d] |= v;
+            else if (fill == 0) row[d] &= (uint8_t)~v;
+            else row[d] ^= v;
+        }
+    }
+}
+
 /* fill: 1 ink, 0 paper, 2 invert, or 100 + pattern: an outline in ink, the inside in that pattern */
 static int text(const m2k_font_t *f, int x, int y, const char *s, int fill, int track)
 {
@@ -208,35 +257,32 @@ static int text(const m2k_font_t *f, int x, int y, const char *s, int fill, int 
 #endif
     for (; *s; s++) {
         int g = glyph_of(f, (unsigned char)*s), w = f->w[g];
+#ifdef M2K_TEXT_AUDIT
         for (int gy = 0; gy < f->h; gy++)
             for (int gx = 0; gx < w; gx++) {
                 if (!glyph_bit(f, g, gx, gy)) continue;
-#ifdef M2K_TEXT_AUDIT
-                {
-                    int ax = x + gx, ay = y + gy;
-                    if (ax < clip_x0 || ay < clip_y0 || ax >= clip_x1 || ay >= clip_y1) r.cut = 1;
-                    else {
-                        if (ax < r.x0) r.x0 = (int16_t)ax;
-                        if (ax > r.x1) r.x1 = (int16_t)ax;
-                        if (ay < r.y0) r.y0 = (int16_t)ay;
-                        if (ay > r.y1) r.y1 = (int16_t)ay;
-                    }
-                }
-#endif
-                if (fill == TX_GRAD) {
-                    int edge = !glyph_bit(f, g, gx - 1, gy) || !glyph_bit(f, g, gx + 1, gy) ||
-                               !glyph_bit(f, g, gx, gy - 1) || !glyph_bit(f, g, gx, gy + 1);
-                    int yy = y + gy - tg_y0, l = tg_l0 + ((tg_l1 - tg_l0) * CLAMP(yy, 0, tg_h)) / tg_h;
-                    px(x + gx, y + gy, edge || T_BAYER[(y + gy) & 7][(x + gx) & 7] < l);
-                } else if (fill >= 100) {
-                    int edge = !glyph_bit(f, g, gx - 1, gy) || !glyph_bit(f, g, gx + 1, gy) ||
-                               !glyph_bit(f, g, gx, gy - 1) || !glyph_bit(f, g, gx, gy + 1);
-                    if (edge || pat_ink(fill - 100, x + gx, y + gy)) px(x + gx, y + gy, 1);
-                    else px(x + gx, y + gy, 0);
-                } else {
-                    px(x + gx, y + gy, fill);
+                int ax = x + gx, ay = y + gy;
+                if (ax < clip_x0 || ay < clip_y0 || ax >= clip_x1 || ay >= clip_y1) r.cut = 1;
+                else {
+                    if (ax < r.x0) r.x0 = (int16_t)ax;
+                    if (ax > r.x1) r.x1 = (int16_t)ax;
+                    if (ay < r.y0) r.y0 = (int16_t)ay;
+                    if (ay > r.y1) r.y1 = (int16_t)ay;
                 }
             }
+#endif
+        if (fill != TX_GRAD && fill < 100) glyph_solid(f, g, x, y, fill);
+        else
+            for (int gy = 0; gy < f->h; gy++)          /* an outline and a fill: a pixel at a time */
+                for (int gx = 0; gx < w; gx++) {
+                    if (!glyph_bit(f, g, gx, gy)) continue;
+                    int edge = !glyph_bit(f, g, gx - 1, gy) || !glyph_bit(f, g, gx + 1, gy) ||
+                               !glyph_bit(f, g, gx, gy - 1) || !glyph_bit(f, g, gx, gy + 1);
+                    if (fill == TX_GRAD) {
+                        int yy = y + gy - tg_y0, l = tg_l0 + ((tg_l1 - tg_l0) * CLAMP(yy, 0, tg_h)) / tg_h;
+                        px(x + gx, y + gy, edge || T_BAYER[(y + gy) & 7][(x + gx) & 7] < l);
+                    } else px(x + gx, y + gy, edge || pat_ink(fill - 100, x + gx, y + gy));
+                }
         x += w + f->track + track;
     }
 #ifdef M2K_TEXT_AUDIT
