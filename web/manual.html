@@ -112,10 +112,10 @@
   <h1>Status and safety</h1>
   <p class="sub">What runs where today, and what installing will mean.</p>
   <h2>Today</h2>
-  <p>MONO2K is a prototype. Its C core runs in your browser on the <a href="./">emulator page</a> and, in the FM-1 build, on the FM-1 itself, on the open FM-1 platform (Felucca's, through CS-1): the same sound, sequencer and screen in both. The FM-1 build runs on its author's FM-1 and is being tried there before it is offered here. On the FM-1 it keeps one project of 64 patterns (bank A the demos, B–D INIT, with room for some 20 to 30 patterns of your own beside the demos; it says when it is full) and the 128 sounds; the emulator keeps four projects of 64.</p>
+  <p>MONO2K is a prototype. Its C core runs in your browser on the <a href="./">emulator page</a> and, in the FM-1 build, on the FM-1 itself, on the open FM-1 platform (Felucca's, through CS-1): the same sound, sequencer and screen in both. The FM-1 build, MONO2K 0.1, is on the <a href="installer.html">installer</a> page. On the FM-1 it keeps one project of 64 patterns (bank A the demos, B–D INIT, with room for some 20 to 30 patterns of your own beside the demos; it says when it is full) and the 128 sounds; the emulator keeps four projects of 64.</p>
   <p>Saves are kept in your browser and can be exported as files; the FM-1 keeps its own in its flash, and the <a href="editor.html">Patch Editor</a> reads them and sends them back (<a href="#fm1-link">The FM-1 and the Patch Editor</a>). The save format may still change; older saves are converted as they load.</p>
   <h2>Installing</h2>
-  <p>The FM-1 build installs from the <a href="installer.html">Installer</a> page, over USB, in Chrome or Edge, as Felucca does, once it is published there. Installing other firmware is at your own risk. M-VAVE's own updater, or the installer's return to the official firmware, takes the FM-1 back to how it shipped; holding OCT− while it powers on always reaches the installer.</p>
+  <p>The FM-1 build installs from the <a href="installer.html">Installer</a> page, over USB, in Chrome or Edge, as Felucca does. Back up what your FM-1 holds first; installing other firmware is at your own risk. M-VAVE's own updater, or the installer's return to the official firmware, takes the FM-1 back to how it shipped; holding OCT− while it powers on always reaches the installer.</p>
   <div class="callout"><b>Note</b><p>MONO2K is not affiliated with Elektron or M-VAVE. Monomachine is Elektron's; FM-1 is M-VAVE's. MONO2K's machines are written from scratch and measured against a Monomachine's output; none of Elektron's code or samples are in it.</p></div>
 </article>
 
@@ -296,7 +296,7 @@
     <tbody>
       <tr><td>SYN &gt; SND</td><td>SLOT LOAD SAVE CAT</td><td>The sound library (<a href="#projects">Saving and projects</a>). SAVE over a sound asks.</td></tr>
       <tr><td>GLO &gt; SET</td><td>WIPE</td><td>Asks, then every pattern INIT; the sound library kept.</td></tr>
-      <tr><td>GLO &gt; SET (FM-1)</td><td>DEMO</td><td>Asks, then bank A's demos back in A01–A16; banks B–D kept.</td></tr>
+      <tr><td>GLO &gt; SET (FM-1)</td><td>DEMO</td><td>Asks, then bank A's four demos back in A01–A04; A05–A16 and banks B–D kept.</td></tr>
       <tr><td>GLO &gt; SET (browser)</td><td>PROJ LOAD</td><td>Pick a project with PROJ; LOAD asks, then loads it.</td></tr>
     </tbody>
   </table>
@@ -668,7 +668,7 @@
   <div class="figs">
     <figure class="fig"><canvas data-scr="25_syn_snd"></canvas><figcaption>SYN &gt; SND: the library's slots, each with its machine; SLOT picks one.</figcaption></figure>
   </div>
-  <p>128 sounds, S001 to S128, kept apart from the patterns: a sound saved there can go onto any track of any pattern. A sound is a track's machine and every setting (the machine's knobs, the amp, the filter, the FX, the LFOs) and a category: KICK, SNARE, HATS, PERC, BASS, LEAD, PAD or FX. The library starts with bank A's 96 sounds, each in the category its part gives it, then 32 INIT slots; it is saved with the rest.</p>
+  <p>128 sounds, S001 to S128, kept apart from the patterns: a sound saved there can go onto any track of any pattern. A sound is a track's machine and every setting (the machine's knobs, the amp, the filter, the FX, the LFOs) and a category: KICK, SNARE, HATS, PERC, BASS, LEAD, PAD or FX. The library starts with the demos' 24 sounds, each in the category its part gives it, then 104 INIT slots; it is saved with the rest.</p>
   <p>Press EDIT until the header says SND (the page after SYN, and after BANK on DIGI-WAV), or GLO + EDIT from anywhere.</p>
   <table>
     <thead><tr><th>Knob</th><th>Does</th></tr></thead>

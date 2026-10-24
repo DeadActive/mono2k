@@ -1919,14 +1919,16 @@ static int selftest(void)
         CHECK(n > 0 && m2k_store_unpack(n) == 1 && !strcmp(m2k_project_name(0), "THIRD") && m2k_project_current() == 0,
               "store for the FM-1: the open project goes, whichever it is");
     }
-    /* SYN > SND: 128 slots, bank A's 96 sounds then 32 INIT; SAVE turned once keeps the track's sound in an INIT slot
+    /* SYN > SND: 128 slots, the demos' 24 sounds then 104 INIT; SAVE turned once keeps the track's sound in an INIT slot
      * (twice over a sound), LOAD once puts it on a track, an INIT slot loaded starts the machine afresh; CAT shows one
      * category (and the INIT slots), SLOT steps through those */
     {
         m2k_init(34);
         open_b01();
-        CHECK(snd[95].name[0] && !snd[96].name[0] && !snd[127].name[0] && snd_cat[0] && !snd_cat[100],
-              "sounds: 128 slots, bank A's 96 sounds (each with a category) and 32 INIT");
+        int cats = 1;
+        for (int i = 0; i < 24; i++) if (!snd[i].name[0] || !snd_cat[i]) cats = 0;
+        CHECK(cats && !snd[24].name[0] && !snd[127].name[0] && !snd_cat[24] && !snd_cat[100],
+              "sounds: 128 slots, the demos' 24 sounds (each with a category) and 104 INIT");
         ui.trk = 2;
         ui.page = PG_SYN; ui.sub = (uint8_t)(nsub(PG_SYN) - 1);
         ui.snd_sel = 100;
@@ -2096,7 +2098,7 @@ static int selftest(void)
         pat[0].kit[2][P_DEC] = 3;
         m2k_button(B_EDIT, 1);
         m2k_button(B_SAVE, 1); m2k_button(B_SAVE, 0);
-        int kept_snd = snd[96].name[0] && snd[96].kit[P_DEC] == 3;
+        int kept_snd = snd[24].name[0] && snd[24].kit[P_DEC] == 3;
         m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);
         m2k_button(B_EDIT, 0);
         m2k_pattern_t fr;

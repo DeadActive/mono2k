@@ -57,7 +57,7 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   (`~/.jieli/toolchain`, the AC79 SDK in `~/fw-AC79_AIoT_SDK`, colima with Rosetta, `DOCKER_CONFIG` ~/.jieli/docker).
   The platform (`firmware/fm1/{hal,loader,src}`) is CS-1's (Felucca, SLOOP, Dinghy, FM-106), GPL-3.0, its headers
   kept; `m2k_fm1.c` is the glue (the core in the main loop, the audio ISR copying a 17 ms ring), `m2k_link.c` the store
-  (a stream into the flash, 0xD0000..0xE0000, when the sequencer stands) and the Patch Editor's link to it (SysEx
+  (a stream into the flash, 0xC0000..0xE0000, when the sequencer stands; the update loader stages at 0xE0000) and the Patch Editor's link to it (SysEx
   `F0 7D 'M2K' cmd pack7(body) F7` through the platform's `APP_SYSEX` hook; `host/m2k_link_test.c` runs both on a NOR
   flash in memory, and `check.sh` with the browser's store for the FM-1, `m2k_host --web-store`, and the FM-1's read
   in the browser, `--fm1-store`). The core is its own unit there (`core.o`): reach it
@@ -110,9 +110,10 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   converted at build. The bank before it (MAMMOTH .. SPLICE, written on the old pages and
   turned at build) is kept only as a test fixture, `host/m2k_bank_rev9.c` (`factory_rev9()`), so the format tests
   and the conversions' mutants still run on real old parts; it is never built into the instrument. A batch that
-  replaces demos bumps `FACTORY_REV` and adds the names it replaced to `OLD_DEMO` (m2k_proj.c), so a saved store takes
-  the new parts where the old still stand (a demo whose name stays and whose settings change takes them the same
-  way). The reference renderer writes 32-bit float WAVs; `tools/ref/sweep.py`'s `load` reads
+  replaces demos bumps `FACTORY_REV`, adds the names it replaced to `OLD_DEMO` and the new revision's row to
+  `OLD_PACKED` (m2k_proj.c: each demo's packed length and FNV-1a; the self-test prints the row wanted), so a saved
+  store takes the new parts only in the slots whose bytes are still the ones that revision shipped: a demo the owner
+  edited, and A05 onwards, are kept. The reference renderer writes 32-bit float WAVs; `tools/ref/sweep.py`'s `load` reads
   both.
 - The FX machines: on the emulator an FX machine assigned by MIDI hears nothing until its track's KIT > EDIT KIT
   TRACK page has been opened and closed once (`mm_ref`'s loop mode does it after a `T` line with an FX machine).

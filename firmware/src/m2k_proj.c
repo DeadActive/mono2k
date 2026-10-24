@@ -402,11 +402,13 @@ static void sound_save(int slot, const m2k_pattern_t *p, int t, int cat)    /* c
     snd_cat[slot % M2K_SOUNDS] = (uint8_t)(cat ? cat : sound_guess(d->machine, d->kit, lo, hi));
 }
 
-static void sounds_factory(void)              /* bank A's tracks, A01 T1 first */
+#define FACTORY_DEMOS 4                          /* bank A's slots with a demo, A01-A04: factory() writes those alone */
+
+static void sounds_factory(void)              /* the demos' tracks, A01 T1 first; the rest empty (INIT) */
 {
     m_set(snd, 0, sizeof snd);
     m_set(snd_cat, 0, sizeof snd_cat);
-    for (int i = 0; i < M2K_SOUNDS - 32 && i / M2K_TRACKS < (M2K_PATTERNS < 16 ? M2K_PATTERNS : 16); i++)
+    for (int i = 0; i < M2K_SOUNDS && i / M2K_TRACKS < (M2K_PATTERNS < FACTORY_DEMOS ? M2K_PATTERNS : FACTORY_DEMOS); i++)
         sound_save(i, PAT(i / M2K_TRACKS), i % M2K_TRACKS, 0);
 }
 
@@ -484,7 +486,6 @@ static uint32_t set_at;                          /* the sample of the last chang
 static uint8_t set_wait;                         /* 1: one waits to be saved */
 
 /* the factory: project 1 is DEMO (bank A the demos, the rest blank), projects 2-4 blank */
-#define FACTORY_DEMOS 4                          /* bank A's slots with a demo, A01-A04: factory() writes those alone */
 static void projects_factory(void)
 {
     blank_set();                                 /* the blank, packed: what an image keeps as nothing */
