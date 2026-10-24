@@ -71,6 +71,7 @@ static inline int32_t sat_soft(int32_t x)
 /* the bus limiter: straight to 3/4 of full scale, then a knee; -131072..131072 in */
 static inline int32_t lim_soft(int32_t x)
 {
+    if ((uint32_t)x + 17407u <= 17407u + 16384u) return x;   /* the table is exactly x there (-17407 .. 16384) */
     if (x >= 131071) return 32767;
     if (x <= -131071) return -32767;
     int32_t u = x + 131072, i = u >> 10, f = u & 1023;

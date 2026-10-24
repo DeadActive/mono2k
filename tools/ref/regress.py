@@ -694,11 +694,9 @@ def cases():
         add("delay_fb", "chain_delay2", f"d2_fb_{v:03d}", "echoes", {"at": [132, 257]}, 0.5)
     add("delay_fb", "chain_delay2", "d2_fb_068", "echoes", {"at": [132, 257]}, 0.5)   # the "growth" was a control
                                                                                      # carried from the line before
-    for s in (0, 32):
+    # (ping-pong's leak to the wrong side at -32 dB, a known gap, was its one-poles stalled off zero: gone with them)
+    for s in (0, 32, 96, 127):
         add("delay_pan", "chain_delay2", f"d2_pan_s{s:03d}_f048", "echoes", {"at": [258, 515]}, 1.0)
-    for s in (96, 127):                                 # ping-pong: the sum and difference lines leak at -32 dB
-        add("delay_pan", "chain_delay2", f"d2_pan_s{s:03d}_f048", "echoes", {"at": [258, 515]}, 1.0,
-            xfail="ping-pong leaks ~-32 dB to the wrong side (the mu-law sum / difference lines)")
     for n in ("d2_bas_032", "d2_bas_064", "d2_bas_096", "d2_wid_032", "d2_wid_064", "d2_wid_096", "d2_bw_032_032", "d2_default"):
         add("delay_filter", "chain_delay2", n, "echo_bands", {"at": 0.379, "hz": [125, 250, 500, 1000, 2000, 4000]}, 3.0,
             xfail="375 ms ping-pong runs past MONO2K's half line: the slowed clock darkens 2-4 kHz" if n == "d2_bas_096" else None)

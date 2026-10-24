@@ -800,6 +800,50 @@ static const char LATTICE_R10[] =
     "001a0100001b0500001a0100001a01000026010000320100003201000030030000300300003001040030030000300300003001040000"
     "00";
 
+/* the sound engine's tests: pattern 40 bare (bare()), the drive off; eng_go takes its kits up and plays it, eng_run
+ * renders (the last block's output in eng_out) */
+static int16_t eng_out[2 * M2K_SUB];
+static m2k_pattern_t *eng_pat(uint32_t seed)
+{
+    m2k_init(seed);
+    m2k_pattern_t *q = bare(40);
+    q->glob[G_DRIV] = 0;
+    return q;
+}
+static void eng_go(m2k_pattern_t *q)
+{
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, q->kit[t], P_COUNT);
+    lockmap_build();
+    seq_play(1);
+}
+static void eng_run(double sec) { for (int i = 0; i < (int)(sec * M2K_SR) / M2K_SUB; i++) m2k_render(eng_out, M2K_SUB); }
+/* track 0's delay has nothing left, in its quiet test's terms: every entry of its line silent, its filters at rest */
+static int eng_dly_quiet(void)
+{
+    const trk_t *t = &trk[0];
+    if (t->dquiet < (t->dmode ? DL_LEN / 2 : DL_LEN)) return 0;
+    for (int c = 0; c < 2; c++) {
+        int32_t v[4] = {t->dhp[c], t->dlp[c], t->dprev[c], t->dacc[c]};
+        for (int k = 0; k < 4; k++) if (v[k] > 3 || v[k] < -3) return 0;
+    }
+    return 1;
+}
+/* the MOD effect's phaser (mod_tick, type 2) in 64 bits throughout, to hold it to */
+static int32_t eng_phaser(uint32_t *mph, int32_t *map, int32_t *mfb, int32_t x, uint32_t inc, int32_t dep, int32_t mix)
+{
+    *mph += inc;
+    int32_t tri = (int32_t)(*mph >> 16);
+    tri = tri < 32768 ? tri : 65535 - tri;
+    int64_t a = 3277 + (((int64_t)tri * dep * 206) >> 15), v = x + (*mfb >> 1);
+    for (int k = 0; k < 4; k++) {
+        int64_t u = v - ((a * map[k]) >> 15);
+        v = ((a * u) >> 15) + map[k];
+        map[k] = (int32_t)(u < -65536 ? -65536 : u > 65536 ? 65536 : u);
+    }
+    *mfb = (int32_t)(v < -65536 ? -65536 : v > 65536 ? 65536 : v);
+    return (int32_t)(x + (((v - x) * mix) >> 8));
+}
+
 static int selftest(void)
 {
     int fails = 0;
@@ -3277,6 +3321,265 @@ static int selftest(void)
                 ok &= n * inc >= want && n * inc < want + inc * 1.01;
             }
         CHECK(ok, "LFO: ONE runs a cycle, HALF half of one, from the trig's phase (PHAS)");
+    }
+    /* the sound engine: an audit's finds, each case failing before its fix */
+    {
+        /* glides: a slide at PORT 0 (glide 40) up a fifth lands on its note, as one down does; PORT 110 an octave up
+         * gets there (the step's size rounded down: the first stopped 30 cents flat, the second never moved) */
+        int land[2], oct;
+        for (int d = 0; d < 2; d++) {
+            m2k_pattern_t *q = eng_pat(60);
+            kit_default(q, 0, M_GSIN);
+            q->kit[0][P_HOLD] = 127; q->kit[0][P_GATE] = 127;
+            q->step[0][0] = (m2k_step_t){.note = (uint8_t)(d ? 55 : 48), .flags = ST_TRIG};
+            q->step[0][1] = (m2k_step_t){.note = (uint8_t)(d ? 48 : 55), .flags = ST_TRIG | ST_SLD};
+            eng_go(q);
+            eng_run(0.5);
+            land[d] = trk[0].pitch == (d ? 48 : 55) * 64;
+        }
+        {
+            m2k_pattern_t *q = eng_pat(61);
+            kit_default(q, 0, M_GSIN);
+            q->kit[0][P_HOLD] = 127; q->kit[0][P_GATE] = 127; q->kit[0][P_PORT] = 110;
+            q->step[0][0] = (m2k_step_t){.note = 48, .flags = ST_TRIG};
+            q->step[0][1] = (m2k_step_t){.note = 60, .flags = ST_TRIG};
+            eng_go(q);
+            eng_run(0.6);
+            oct = trk[0].pitch == 60 * 64;
+        }
+        CHECK(land[0] && land[1] && oct, "glide: a slide up a fifth lands on its note as one down does; PORT 110 goes an octave up");
+    }
+    {
+        /* another machine under a sounding track starts from rest, as a trig starts it: FM+PAR held on T2 (T1 a saw, the
+         * FX machines' input) turned to each machine as SET MACHINE does, its first blocks against the same turn with the
+         * state cleared by hand (it ran on the last machine's state: overflows, full-scale blocks) */
+        static int16_t o[2][4 * M2K_SUB];
+        int same = 1;
+        for (int b = 0; b < M_COUNT; b++) {
+            if (b == M_FMP) continue;
+            for (int k = 0; k < 2; k++) {
+                m2k_pattern_t *q = eng_pat(62);
+                kit_default(q, 0, M_SAW);
+                kit_default(q, 1, M_FMP);
+                q->kit[0][P_HOLD] = q->kit[1][P_HOLD] = 127; q->kit[0][P_GATE] = q->kit[1][P_GATE] = 127;
+                q->step[0][0] = (m2k_step_t){.note = 48, .flags = ST_TRIG};
+                q->step[1][0] = (m2k_step_t){.note = 60, .flags = ST_TRIG};
+                eng_go(q);
+                eng_run(0.3);
+                q->machine[1] = (uint8_t)b;
+                m_cpy(q->kit[1], MACH_DEF[b], 8);
+                m_cpy(trk[1].eff, q->kit[1], 8);
+                if (k) {
+                    trk_t *t = &trk[1];
+                    m_set(t->ph, 0, sizeof t->ph); m_set(t->ms, 0, sizeof t->ms); m_set(t->gn, 0, sizeof t->gn);
+                    m_set(t->vo, 0, sizeof t->vo); m_set(&t->vohp, 0, sizeof t->vohp); t->vo_pw = 0; t->vo_g = 0;
+                    m_set(ens_mem[1], 0, sizeof ens_mem[1]);
+                    mach_trig(t, b);
+                }
+                for (int j = 0; j < 4; j++) { m2k_render(eng_out, M2K_SUB); m_cpy(&o[k][j * M2K_SUB], blk[1], sizeof blk[1]); }
+            }
+            if (memcmp(o[0], o[1], sizeof o[0])) { same = 0; printf("     FM+PAR turned to machine %d under its sound runs on the old state\n", b); }
+        }
+        /* FM+STAT turned to FX-DYNMX: the FM's states read as its gain made a full-scale block, then seconds of silence */
+        m2k_pattern_t *q = eng_pat(63);
+        kit_default(q, 0, M_SAW);
+        kit_default(q, 1, M_FMS);
+        q->kit[0][P_HOLD] = q->kit[1][P_HOLD] = 127; q->kit[0][P_GATE] = q->kit[1][P_GATE] = 127;
+        q->step[0][0] = (m2k_step_t){.note = 48, .flags = ST_TRIG};
+        q->step[1][0] = (m2k_step_t){.note = 60, .flags = ST_TRIG};
+        eng_go(q);
+        eng_run(0.5);
+        q->machine[1] = M_FXD;
+        m_cpy(q->kit[1], MACH_DEF[M_FXD], 8);
+        m_cpy(trk[1].eff, q->kit[1], 8);
+        m2k_render(eng_out, M2K_SUB);
+        int pk = 0, in = 0, heard = 0;
+        for (int i = 0; i < M2K_SUB; i++) { pk = abs(blk[1][i]) > pk ? abs(blk[1][i]) : pk; in = abs(tout[0][i]) > in ? abs(tout[0][i]) : in; }
+        for (int j = 0; j < M2K_SR / 20 / M2K_SUB; j++) { m2k_render(eng_out, M2K_SUB); for (int i = 0; i < M2K_SUB; i++) heard |= abs(blk[1][i]) > 200; }
+        /* and at a pattern's change, before the new pattern's first trig: no full-scale hit (FM+STAT's states read as
+         * DRM-SNAR's, DRM-HATS's, DRM-CYMB's gains) */
+        static const uint8_t SW[3][2] = {{M_FMS, M_DSNR}, {M_FMS, M_DHAT}, {M_FMS, M_DCYM}};
+        int full = 0;
+        for (int j = 0; j < 3; j++) {
+            m2k_init(64);
+            for (int k = 0; k < 2; k++) {
+                m2k_pattern_t *x = &pat[41 + k];
+                pat_init(x, "SW");
+                kit_default(x, 0, SW[j][k]);
+                for (int s = 0; s < 16; s += 2) x->step[0][s] = (m2k_step_t){.note = 48, .flags = ST_TRIG};
+            }
+            m2k_pattern(41);
+            seq_play(1);
+            eng_run(1.0);
+            m2k_pattern(42);
+            for (int f = 0; f < M2K_SR * 3 / 2 / M2K_SUB; f++) {
+                m2k_render(eng_out, M2K_SUB);
+                if (cur_pat == 42 && sq.step < 1) for (int i = 0; i < M2K_SUB; i++) full += abs(blk[0][i]) >= 32767;
+            }
+        }
+        CHECK(same && pk <= 4 * in + 100 && heard && !full,
+              "machines: another one under a sounding track starts from rest (SET MACHINE, a pattern's change), as a trig starts it");
+    }
+    {
+        /* 64-bit products where a loud signal passes 2^31 (wrapped round: full-scale clicks): GND-PERC's METAL against a
+         * thinned noise (its mix never past the metal's 32400), DRM-SNAR's gain on its filtered noise (no jump from full
+         * scale to full scale), the phaser's allpasses on a loud track (held to the same in 64 bits throughout) */
+        m2k_pattern_t *q = eng_pat(65);
+        kit_default(q, 0, M_GPRC);
+        q->kit[0][P_SYN + 0] = 96; q->kit[0][P_SYN + 1] = 0; q->kit[0][P_SYN + 2] = 127;
+        q->kit[0][P_HOLD] = 127; q->kit[0][P_GATE] = 127;
+        for (int s = 0; s < 16; s += 4) q->step[0][s] = (m2k_step_t){.note = (uint8_t)(36 + 3 * s), .flags = ST_TRIG};
+        eng_go(q);
+        int gp = 0;
+        for (int f = 0; f < M2K_SR * 2 / M2K_SUB; f++) { m2k_render(eng_out, M2K_SUB); for (int i = 0; i < M2K_SUB; i++) gp = abs(blk[0][i]) > gp ? abs(blk[0][i]) : gp; }
+        int flips = 0;
+        for (int note = 36; note <= 72; note += 12) {
+            q = eng_pat(66);
+            kit_default(q, 0, M_DSNR);
+            q->kit[0][P_SYN + 3] = 16; q->kit[0][P_SYN + 4] = 127; q->kit[0][P_SYN + 5] = 96;
+            for (int s = 0; s < 16; s += 2) q->step[0][s] = (m2k_step_t){.note = (uint8_t)note, .flags = ST_TRIG};
+            eng_go(q);
+            int prev = 0;
+            for (int f = 0; f < M2K_SR * 2 / M2K_SUB; f++) {
+                m2k_render(eng_out, M2K_SUB);
+                for (int i = 0; i < M2K_SUB; i++) { flips += abs(blk[0][i] - prev) >= 65000; prev = blk[0][i]; }
+            }
+        }
+        static int16_t line[MOD_LEN];
+        m2k_init(67);
+        trk_t *t = &trk[0];
+        uint32_t mph = 0;
+        int32_t map[4] = {0}, mfb = 0, side;
+        int ph_same = 1;
+        for (int i = 0; i < M2K_SR; i++) {
+            int32_t x = ((i & 1) ? 90000 : -90000) * (((i / 3) & 1) ? -1 : 1);      /* near Nyquist, a driven track's 2.7 x full */
+            int32_t y = mod_tick(t, line, x, 2, T_MOD_INC[64], 127, 254, &side);
+            ph_same &= y == eng_phaser(&mph, map, &mfb, x, T_MOD_INC[64], 127, 254);
+        }
+        CHECK(gp <= 32401 && !flips && ph_same, "64-bit products: GND-PERC's METAL, DRM-SNAR's gain, the phaser's allpasses, on loud signals");
+    }
+    {
+        /* the delay goes quiet after a hit under unity feedback (its one-poles stalled up to 252 off zero, and mu-law's
+         * rounding gave an echo DFB / 64 as loud back the level it had, for ever): the band wide open, DFB 32, 48, 60 */
+        int quiet = 1;
+        static const uint8_t FB[3] = {32, 48, 60};
+        for (int j = 0; j < 3; j++) {
+            m2k_pattern_t *q = eng_pat(68);
+            kit_default(q, 0, M_SAW);
+            q->kit[0][P_DSND] = 0; q->kit[0][P_DFB] = FB[j]; q->kit[0][P_DBAS] = 0; q->kit[0][P_DWID] = 127;
+            q->kit[0][P_DTIM] = 16; q->kit[0][P_DEC] = 40;
+            q->step[0][0] = (m2k_step_t){.note = 48, .flags = ST_TRIG};
+            eng_go(q);
+            eng_run(0.5);
+            seq_play(0);
+            int k = 0;
+            for (; k < 20 * M2K_SR / M2K_SUB && !eng_dly_quiet(); k++) m2k_render(eng_out, M2K_SUB);
+            if (!eng_dly_quiet()) { quiet = 0; printf("     the delay at DFB %d still runs 20 s on\n", FB[j]); }
+        }
+        CHECK(quiet, "delay: a tail under unity feedback ends, its line silent and its filters at rest");
+    }
+    {
+        /* the reverb ends in silence: a GND-NOIS hit into VERB 127 DAMP 127 (its combs ran negative and kept -9331 for
+         * ever), and into VERB 60 DAMP 96 */
+        int dc = 0;
+        static const uint8_t VB[2][2] = {{127, 127}, {60, 96}};
+        for (int j = 0; j < 2; j++) {
+            m2k_pattern_t *q = eng_pat(69);
+            q->glob[G_VERB] = VB[j][0]; q->glob[G_DAMP] = VB[j][1];
+            kit_default(q, 0, M_GNOI);
+            q->kit[0][P_SPU] = 127; q->kit[0][P_DEC] = 40; q->kit[0][P_LEVL] = 127;
+            q->step[0][0] = (m2k_step_t){.note = 48, .flags = ST_TRIG};
+            eng_go(q);
+            eng_run(0.5);
+            seq_play(0);
+            eng_run(10);
+            dc |= eng_out[2 * M2K_SUB - 2] | eng_out[2 * M2K_SUB - 1];
+        }
+        CHECK(!dc, "reverb: its tail ends at zero (no DC left in the combs)");
+    }
+    {
+        /* a held PERFORM repeat keeps repeating (the ring went on being written, over its slice after 0.74 s): a
+         * quarter's repeat held over a line of notes, the bus dry, its output a slice's period apart the same from 1.2 s */
+        m2k_pattern_t *q = eng_pat(70);
+        q->glob[G_VERB] = q->glob[G_TAPE] = q->glob[G_ADPC] = q->glob[G_HISS] = q->glob[G_GLCH] = 0;
+        kit_default(q, 0, M_SAW);
+        for (int s = 0; s < 16; s++) q->step[0][s] = (m2k_step_t){.note = (uint8_t)(40 + (s * 5) % 17), .flags = ST_TRIG};
+        eng_go(q);
+        eng_run(0.5);
+        bus_perform(PF_R4, 1);
+        eng_run(0.7);
+        int per = 2 * (int)bus.g_len, n = M2K_SR / M2K_SUB * M2K_SUB, ok = per > 0 && per < n;
+        int16_t *rec = malloc((size_t)n * 4);
+        for (int f = 0; f < n; f += M2K_SUB) m2k_render(rec + 2 * f, M2K_SUB);
+        for (int i = per; ok && i < n; i++) ok = rec[2 * i] == rec[2 * (i - per)] && rec[2 * i + 1] == rec[2 * (i - per) + 1];
+        free(rec);
+        bus_perform(PF_R4, 0);
+        CHECK(ok, "PERFORM: a held repeat goes on repeating its slice");
+    }
+    {
+        /* DSND's LFO across 64 leaves the lines' layout (it followed the modulated value: a 16 KB line wiped at every
+         * crossing): a ping-pong kit swept from 0 to 127 by a fast square */
+        m2k_pattern_t *q = eng_pat(71);
+        kit_default(q, 0, M_SAW);
+        q->kit[0][P_HOLD] = 127; q->kit[0][P_GATE] = 127; q->kit[0][P_DSND] = 127; q->kit[0][P_DFB] = 50;
+        uint8_t *l = &q->kit[0][P_LFO];
+        l[L_DEST] = P_DSND + 1; l[L_DPTH] = 0; l[L_WAVE] = enc(2, 7); l[L_SPD] = 100; l[L_MULT] = enc(4, 8);
+        q->step[0][0] = (m2k_step_t){.note = 48, .flags = ST_TRIG};
+        eng_go(q);
+        eng_run(0.1);
+        int flipped = 0, was = trk[0].dmode;
+        for (int f = 0; f < 2 * M2K_SR / M2K_SUB; f++) { m2k_render(eng_out, M2K_SUB); flipped += trk[0].dmode != was; was = trk[0].dmode; }
+        CHECK(was == 1 && !flipped, "delay: the lines' layout follows the kit's DSND, not an LFO's or a lock's");
+    }
+    {
+        /* SWAV-SAW's drift draws on its own generator: two drifting saws, one on either core, render on two cores as on
+         * one (the shared one drew in the cores' order, and from both at once) */
+        static int16_t o[2][2 * (M2K_SR / 2 + M2K_SUB)];          /* (whole blocks past the half second) */
+        for (int mode = 0; mode < 2; mode++) {
+            par_mode = mode;
+            m2k_par_begin = mode ? par_test_begin : 0;
+            m2k_par_end = mode ? par_test_end : 0;
+            m2k_pattern_t *q = eng_pat(72);
+            for (int t = 0; t < M2K_TRACKS; t += 5) {
+                kit_default(q, t, M_SAW);
+                q->kit[t][P_SYN + 3] = 127; q->kit[t][P_HOLD] = 127; q->kit[t][P_GATE] = 127;
+                q->step[t][0] = (m2k_step_t){.note = (uint8_t)(48 + t), .flags = ST_TRIG};
+            }
+            eng_go(q);
+            for (int f = 0; f < M2K_SR / 2; f += M2K_SUB) m2k_render(o[mode] + 2 * f, M2K_SUB);
+        }
+        m2k_par_begin = 0; m2k_par_end = 0;
+        CHECK(!memcmp(o[0], o[1], sizeof o[0]), "SWAV-SAW: its drift the same on two cores as on one");
+    }
+    {
+        /* past 2^23 in unsigned arithmetic, as the rest wraps (signed, they overflowed): the EXP LFO's square of 65535 - x
+         * (from its phase 0); the delay's write index, SWAV-ENS's chorus line and the tape's (minutes in), the render
+         * the same as with the same indices a whole number of their lines from 0 */
+        int ok = 1, r = 0;
+        for (uint32_t ph = 0; ph < 0x80000000u; ph += 0x08000000u) {
+            uint64_t y = 65535u - (ph >> 16);
+            y = (y * y) >> 16;
+            y = (y * y) >> 16;
+            ok &= lfo_shape(4, ph, &r) == (int32_t)(y >> 1);
+        }
+        static int16_t o[2][2 * (M2K_SR / 2 + M2K_SUB)];          /* (whole blocks past the half second) */
+        for (int k = 0; k < 2; k++) {
+            m2k_pattern_t *q = eng_pat(73);
+            q->glob[G_TAPE] = 64;
+            kit_default(q, 0, M_SAW);
+            kit_default(q, 1, M_ENS);
+            q->kit[0][P_DSND] = 0; q->kit[0][P_HOLD] = 127; q->kit[1][P_SYN + 5] = 64; q->kit[1][P_HOLD] = 127;
+            q->step[0][0] = (m2k_step_t){.note = 48, .flags = ST_TRIG};
+            q->step[1][0] = (m2k_step_t){.note = 60, .flags = ST_TRIG};
+            eng_go(q);
+            m2k_render(eng_out, M2K_SUB);
+            uint32_t at = (1u << 23) - 512;                            /* (a multiple of 16384, 1024 and 2048 less 512) */
+            trk[0].dw = k ? at : at & (DL_LEN - 1);
+            trk[1].ph[5] = k ? at : at & (ENS_LEN - 1);
+            bus.tw = k ? at : at & 2047u;
+            for (int f = 0; f < M2K_SR / 2; f += M2K_SUB) m2k_render(o[k] + 2 * f, M2K_SUB);
+        }
+        CHECK(ok && !memcmp(o[0], o[1], sizeof o[0]), "unsigned past 2^23: the EXP LFO, the delay's, SWAV-ENS's and the tape's positions");
     }
     printf("%s (%d failed)\n", fails ? "SELFTEST FAILED" : "selftest passed", fails);
     return fails != 0;
