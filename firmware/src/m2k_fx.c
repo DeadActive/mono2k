@@ -371,8 +371,10 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
 
 static void seq_block(void);
 static int seq_running(void);
+static void mx_gates_out(void);
 
-/* the second core's share of a block: tracks par_from..5, into their own sums (par_L ...) */
+/* the second core's share of a block: tracks par_from..5, into their own sums (par_L ...); it touches no MIDI (a
+ * gate's end only marked, its note-off sent by the first core after both) */
 int (*m2k_par_begin)(void (*job)(void));
 void (*m2k_par_end)(void);
 static int par_from = M2K_TRACKS;
@@ -435,6 +437,7 @@ void m2k_render(int16_t *lr, int frames)
             m2k_par_end();
             for (int i = 0; i < M2K_SUB; i++) { L[i] += par_L[i]; R[i] += par_R[i]; rs[i] += par_rs[i]; }
         }
+        mx_gates_out();                /* the gates ended on either core: their notes out, in track order */
         bus_block(L, R, rs, lr + 2 * f);
         PROF(4);
     }
