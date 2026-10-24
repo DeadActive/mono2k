@@ -1,0 +1,8 @@
+{
+  "what": "Six mono machines in the spirit of Elektron's Monomachine: FM, superwaves, wavetables, a SID, a voice and four drum synths, one per track. A 64-step sequencer with parameter locks, trig conditions and ratchets, a lofi bus, four demo parts and a web patch editor.",
+  "kinds": [
+    "groove"
+  ],
+  "play": "https://inigohernandez.github.io/mono2k/",
+  "editor": "https://inigohernandez.github.io/mono2k/editor.html"
+}

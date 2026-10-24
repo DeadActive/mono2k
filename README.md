@@ -5,11 +5,23 @@ a 64-step sequencer with parameter locks, trig conditions and ratchets, and a lo
 beautifully. A 1-bit screen: dithered type and machine marks, Swiss grid, PS1-era glitches.
 
 > **Status: prototype (v0.1).** The core (sound, sequencer, screen) runs in the browser and on a computer. The FM-1
-> build (`firmware/fm1/`: the open FM-1 platform around this core) builds an installable package; it has not been
-> tried on an FM-1 yet, and the first one keeps one project of 16 patterns.
+> build (`firmware/fm1/`: the open FM-1 platform around this core) makes an installable package that keeps one
+> project of 64 patterns (bank A the demos, B–D blank); it is being tried on an FM-1 before a release.
 
 **Try it in your browser:** <https://inigohernandez.github.io/mono2k/> (the firmware's own core, compiled to
 WebAssembly, with sound).
+
+## On the FM-1
+
+- **What it keeps.** MONO2K saves into its own store, the last 128 KiB of the FM-1's data area (`0xC0000`–`0xE0000`):
+  one project of 64 patterns and its sound library. It does not read the projects, presets or samples of other
+  firmwares, and its first save overwrites whatever another firmware kept in that area. Back up with the firmware
+  you are on before you switch.
+- **Back up MONO2K.** The [Patch Editor](https://inigohernandez.github.io/mono2k/editor.html) reads the FM-1's store
+  over USB (Chrome or Edge) and saves it as a `.m2ks` file; it writes one back the same way.
+- **Leave it.** Install another firmware as usual (the FM-1 Firmware Hub, or its maker's installer): MONO2K starts the
+  new package's update loader, as Felucca does, whose loader it carries.
+- **Rescue.** Hold OCT− while switching on: the FM-1 starts the updater only and waits for a package over USB.
 
 ## Run it
 
@@ -37,7 +49,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 | Machines | GND-SIN, GND-NOIS, GND-PERC, SID-6581, FM+STAT, FM+PAR, FM+DYN, SWAV-SAW, SWAV-PUL, SWAV-ENS, DIGI-WAV, VOX-6, FX-CHORUS, FX-RINGMOD, FX-DYNAMIX (on the track before): clean-room designs after the Monomachine's families, integer only. DRM-KICK, DRM-SNAR, DRM-HATS, DRM-CYMB: drums after the LXR's voices, on its laws |
 | Per track | the Monomachine's chain and pages: SYN A–H · AMP (ATK HOLD DEC REL DIST VOL PAN PORT) · FILT (HP / LP as base and width following the note, resonance, envelope) · FX (EQ, SRR, a delay of its own in 8-bit mu-law, ping-pong on positive sends) · DSTR (bits, fold, xor, SPU send) · 3 LFOs (any track's parameter) · ARP |
 | Projects | the modern Elektron way: 4 projects × 4 banks (A–D) × 16 patterns, each pattern with its own sounds. SAVE keeps the pattern (its reload point), GLO + SAVE reloads it, SAVE held keeps the project; GLO + REC / PLAY / SEQ copy, paste, clear (the pattern on HOME, the track's sound on its pages); GLO > SET picks and loads a project. On the web: a project picker, export / import as `.m2kp` files. Stored packed (a typical pattern 0.5–1 KB; the DEMO project 32 KB) |
-| Factory | project DEMO, bank A: LO-BIT CLUB, a live set in sixteen parts after the Elektron-and-handhelds club music of Berlin and Sweden (Dataline, Auvrel, Sqein, sm0hm, random_meteor) and LØSTLVLS's Monomachine sounds, the drums on the DRM- machines (`docs/bank-a.md`: reference, key and idea of each). Banks B–D blank. A store saved with earlier demos takes the new ones where the old still stand |
+| Factory | project DEMO, bank A: four parts, CIRCUIT, TIDE, SUSPEND and LANTERN (`docs/bank-a.md`: how they were made, key and idea of each), every sound picked by the owner from sound sheets; A05–A16 and banks B–D blank. A store saved with earlier demos takes the new ones where the old still stand |
 | Sequencer | 6 × 64 steps, note / accent / slide, parameter locks, the Monomachine's trig types (each step trigs the amp, the filter's envelope and the LFOs independently: step + VOL, ALL ... NONE, a trigless lock), trig conditions (chance, A:B, 1ST, PRE, FILL), ratchets, swing, live recording and step entry (REC while stopped), pages held to set the length, patterns queued at the bar |
 | Bus | SPU-style reverb at 22 kHz, beat repeat (reverse, halving, tape stop), tape wow and flutter, 4-bit ADPCM crunch, hiss and dust, drive; each control on a law measured over its whole range (GLCH a chance per sixteenth, 0.3–50 %) |
 | MIDI | tracks 1–6 on six channels from GLO > MIDI's CHAN (1–6 at first), the others play the track in view: notes and the Monomachine's CC map (SYN 48–55, AMP 56–63, FILT 72–79, FX 80–87, LFO 1/2/3 on 88/104/112, level 7, mute 3). SYNC IN follows a MIDI clock (its tempo, a step every sixth pulse, the swing kept; start, continue, stop), SYNC OUT sends one (24 a beat, start, stop), NOTES OUT each track's trigs on its channel. The emulator picks a MIDI device in and one out |
@@ -311,5 +323,6 @@ here. LXR is Erica Synths' mark.
 The 64-wave bank (`assets/waves/mono2k64/`) is the project owner's own waveforms, licensed with the project
 (GPL-3.0-only) unless the owner says otherwise.
 
-Bank A's parts are MONO2K's own: their references (Dataline, Auvrel, Sqein, sm0hm, random_meteor, L-tron, foodman,
-suesett, KUF, 0F.digital, LØSTLVLS) say what world each is after; none quotes their music.
+Bank A's parts are MONO2K's own: their sounds were drawn at random and picked by ear, their harmony and craft from
+research written up in `docs/composing.md`; the Model:Cycles demos and the IDM references there were measured or read
+about, never quoted.
