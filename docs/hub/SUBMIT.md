@@ -26,7 +26,7 @@ after the tests below have passed and the v0.1 release is on GitHub: its Reposit
 > Tested on a real FM-1, leaving it again works: yes
 >
 > It keeps its own store and does not read other firmwares' projects or samples (the README's "On the FM-1"). USB
-> port name: ______
+> port name: MONO2K FM-1 (from 0.1.1; 0.1 showed "Felucca", the platform's)
 
 ## The card
 
@@ -46,16 +46,17 @@ after the tests below have passed and the v0.1 release is on GitHub: its Reposit
 
 ## The package
 
-- **File:** MONO2K 0.1, the installer's `mono2k.fwsc` (596 KB, SHA-256
-  `27790d060c858b80b4c3cfd5fa2da9b38dcadecd9a73b1363279a97be2603342`); the release attaches the same file as
-  `mono2k-0.1.fwsc`.
+- **File:** MONO2K 0.1.1 (0.1 with the USB name), the installer's `mono2k.fwsc` (596 KB, SHA-256
+  `1f728f4b8dda671e025a1dcd482beee5637ae47637ab60f789f5ccdf97b97761`); the release v0.1.1 attaches the same file as
+  `mono2k-0.1.1.fwsc`. The hub listed v0.1 on 2026-10-25 (`mono2k-0.1.fwsc`, SHA-256 27790d06...).
 - **Release:** a GitHub release `v0.1` (under 1.0: the card says beta). The hub takes every later release by itself,
   within three hours.
 - **Identity:** FM-1_980. No other firmware on the hub uses it (its table, 2026-10-24), and it is of the form
   FM-1_9NN, so the hub resumes an interrupted update. Every release keeps it: `tools/fm1/build.py --release X.Y` sets
   only the version the FM-1 reports and the file's name (FM-1_981 and FM-1_983 are other firmwares').
 - **Update loader:** Felucca's, from the CS-1 platform the FM-1 build is made on.
-- **USB:** a MIDI device; its port name as the FM-1 shows it (read it in the tests).
+- **USB:** a MIDI device named "MONO2K FM-1", by Sequencist (from 0.1.1: "FM-1" in the name, so the hub's installer
+  probes it). The update loader keeps Felucca's names ("Felucca Update"), by which the hub finds a waiting loader.
 - **What it keeps:** its own store in the last 128 KiB of the data area; it does not read other firmwares' projects
   or samples (the README's "On the FM-1").
 

@@ -57,7 +57,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   release sets APP_VER and names the file `mono2k-X.Y.fwsc`, the one the installer and the GitHub release share) with JieLi's toolchain in a linux/amd64 container
   (`~/.jieli/toolchain`, the AC79 SDK in `~/fw-AC79_AIoT_SDK`, colima with Rosetta, `DOCKER_CONFIG` ~/.jieli/docker).
   The platform (`firmware/fm1/{hal,loader,src}`) is CS-1's (Felucca, SLOOP, Dinghy, FM-106), GPL-3.0, its headers
-  kept; `m2k_fm1.c` is the glue (the core in the main loop, the audio ISR copying a 17 ms ring), `m2k_link.c` the store
+  kept; its USB names are MONO2K's ("MONO2K FM-1" by Sequencist, `usb.c` STR1 / STR2: "FM-1" in the
+  name, so the hub's installer probes the port), the update loader's Felucca's ("Felucca Update": the hub finds a
+  waiting loader by them); `m2k_fm1.c` is the glue (the core in the main loop, the audio ISR copying a 17 ms ring), `m2k_link.c` the store
   (a stream into the flash, 0xC0000..0xE0000, when the sequencer stands; the update loader stages at 0xE0000) and the Patch Editor's link to it (SysEx
   `F0 7D 'M2K' cmd pack7(body) F7` through the platform's `APP_SYSEX` hook; `host/m2k_link_test.c` runs both on a NOR
   flash in memory, and `check.sh` with the browser's store for the FM-1, `m2k_host --web-store`, and the FM-1's read

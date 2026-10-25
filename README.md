@@ -22,6 +22,8 @@ WebAssembly, with sound).
   over USB (Chrome or Edge) and saves it as a `.m2ks` file; it writes one back the same way.
 - **Leave it.** Install another firmware as usual (the FM-1 Firmware Hub, or its maker's installer): MONO2K starts the
   new package's update loader, as Felucca does, whose loader it carries.
+- **USB.** It shows up as a MIDI device named "MONO2K FM-1" and answers the identity FM-1_980. While it updates, the
+  update loader shows up as "Felucca Update", the loader being Felucca's.
 - **Rescue.** Hold OCT− while switching on: the FM-1 starts the updater only and waits for a package over USB.
 
 ## Run it

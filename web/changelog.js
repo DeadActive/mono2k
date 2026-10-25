@@ -9,6 +9,8 @@ window.M2K_CHANGES = [
   {
     date: "2026-10-25", title: "The fixes of a deep audit: the knobs, the keys, the sequencer, the store, the sound engine",
     items: [
+      ["web", "MONO2K is on the FM-1 Firmware Hub (thefirmwarehub.com): install it from there in one click, and later releases appear there by themselves."],
+      ["fixes", "On the FM-1, MONO2K 0.1.1 shows up over USB as \"MONO2K FM-1\" instead of the platform's \"Felucca\", so DAWs and the Firmware Hub name it right. The update loader keeps its own name while it updates."],
       ["fixes", "On the FM-1 a knob, the preset knob among them, could start moving two steps a click and skip patterns: a slow turn that paused halfway through a click taught it a second resting point. It now learns only where the knob rests for half a second, as M-VAVE's own firmware does."],
       ["fixes", "A key let go after the layer changed (GLO, SEQ, HOME, OCT+ pressed meanwhile) no longer leaves its note droning, its step held or its solo on; a trig held to read its card is no longer deleted when let go, only a tap removes it."],
       ["fixes", "A question answers what it asked, even if SLOT or PROJ moved before YES; one turn of SAVE into an INIT slot saves once; the undo is forgotten when another project or the store loads; copy and paste keep every lock, or say LOCKS FULL."],
