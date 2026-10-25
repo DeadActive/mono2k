@@ -9,7 +9,7 @@ Dinghy, SLOOP and Felucca) with the few changes listed below.
 ```bash
 .venv/bin/python tools/fm1/build.py            # build/fm1/mono2k.fwsc, identity FM-1_980
 .venv/bin/python tools/fm1/build.py --diag     # build/fm1/mono2k-test.fwsc: a load meter along the screen's top
-.venv/bin/python tools/fm1/build.py --release 0.1   # build/fm1/mono2k-0.1.fwsc, identity FM-1_981
+.venv/bin/python tools/fm1/build.py --release 0.1   # build/fm1/mono2k-0.1.fwsc, version 0.1, identity FM-1_980
 ```
 
 It needs JieLi's Linux toolchain (clang 4.0.1 for pi32v2) in `~/.jieli/toolchain` (`JIELI_TOOLCHAIN`), the JieLi

@@ -88,7 +88,7 @@ rule applies to any instrument you emulate. The LXR's code is GPL-3.0 (compatibl
 ```bash
 .venv/bin/python tools/fm1/build.py                 # build/fm1/mono2k.fwsc, identity FM-1_980
 .venv/bin/python tools/fm1/build.py --diag          # a CPU meter along the screen's top
-.venv/bin/python tools/fm1/build.py --release 0.1   # identity FM-1_981
+.venv/bin/python tools/fm1/build.py --release 0.1   # mono2k-0.1.fwsc, version 0.1, identity FM-1_980
 ```
 
 - **Compiler:** JieLi's clang 4.0.1 for pi32v2 (`~/.jieli/toolchain`), Linux only, so on a Mac it runs in a

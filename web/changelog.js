@@ -28,7 +28,7 @@ window.M2K_CHANGES = [
       ["fixes", "A slide up reaches its note (at PORT 0 it ended 30 cents flat; at PORT 110 an octave up never moved)."],
       ["fixes", "A machine changed under a sounding track (SET MACHINE, a sound loaded, another pattern) starts from rest: it carried the old machine's state, with full-scale blocks or FX-DYNMX silent for seconds."],
       ["fixes", "A held PERFORM repeat keeps repeating; an LFO or a lock moving DSND across 64 no longer wipes the delay; two SWAV-SAW tracks no longer share their drift; GND-PERC's METAL, DRM-SNAR and the phaser no longer overflow at their extremes."],
-      ["web", "The installer's MONO2K 0.1 package is rebuilt with every fix above."],
+      ["web", "The installer's MONO2K 0.1 is rebuilt with every fix above, as the very file its GitHub release will carry: it reports version 0.1 and identity FM-1_980. The installer no longer takes other firmwares' numbers (FM-1_981, FM-1_983) for MONO2K's, and names only the identities it can be sure of."],
     ],
   },
   {

@@ -6,8 +6,9 @@
 
 After CS-1's tools/build.py (on Felucca's, Leo Kuroshita, Hügelton Instruments, GPL-3.0-only): the same steps, the
 same checks. Outputs in build/fm1/: mono2k.bin (the app), loader/ota.bin (the update loader), mono2k.fwsc (the
-package; mono2k-X.Y.fwsc for a release). The package's identity is FM-1_980 (FM-1_98Y for release 0.Y), as the
-installer page reads it.
+package; mono2k-X.Y.fwsc for a release). The package's identity is FM-1_980 for every build and release (the hub's
+FM-1_981 and FM-1_983 are other firmwares'; FM-1_9NN keeps the hub's resume of an interrupted update), as the
+installer page reads it; a release sets the version the FM-1 reports (APP_VER) and the file's name.
 
 JieLi's toolchain (clang 4.0.1 for pi32v2) runs on Linux x86-64 only: on a Mac each tool runs in a linux/amd64
 container (colima with Rosetta, or Docker). JIELI_TOOLCHAIN (default ~/.jieli/toolchain), AC79_SDK (default
@@ -45,7 +46,7 @@ SDK_SHA256 = {                      # AC79NN_SDK_V1.2.1_2023-12-13, the version 
     "cfg_tool.bin": "276579954f076886a6a7694f65dc71c034a63a2c204b76749065c0ac7b010d1b",
     "cfg/eq_cfg_hw.bin": "41167491bffed4651750719c973d2758adeb9021a5670d02d6a53c85ed80ea7d",
 }
-PRODUCT = "FM-1_980"                # MONO2K: 98N (Felucca 9XY, CoralFlower 930, CS-1 95N, zp12 97N, Dinghy 99N)
+PRODUCT = "FM-1_980"                # MONO2K's, every release (Felucca 9XY, CoralFlower 930, CS-1 95N, zp12 97N, Dinghy 99N)
 VERSION = "0.0"
 # helpers the core must not need: the chip has no FPU and the build no libgcc (soft float, 64-bit division)
 BANNED = re.compile(r"\b__(?:(?:u?(?:div|mod)di3)|(?:add|sub|mul|div)[sd]f3|(?:fix|float)\w*|(?:eq|ne|lt|le|gt|ge|un)[sd]f2|extendsfdf2|truncdfsf2)\b")
@@ -263,9 +264,9 @@ def check(img, syms, dis, rt):
 
 
 def main():
-    global PRODUCT, VERSION
+    global VERSION
     ap = argparse.ArgumentParser()
-    ap.add_argument("--release", metavar="0.Y", help="a release: identity FM-1_98Y, version 0.Y")
+    ap.add_argument("--release", metavar="X.Y[.Z]", help="a release: version X.Y[.Z], mono2k-X.Y[.Z].fwsc (identity FM-1_980)")
     ap.add_argument("--sdk", type=Path, help="the JieLi AC79 SDK (default: $AC79_SDK or ~/fw-AC79_AIoT_SDK)")
     ap.add_argument("--diag", action="store_true", help="a test build: the render's load along the top edge")
     a = ap.parse_args()
@@ -274,10 +275,9 @@ def main():
         CORE.extend(["-DM2K_FM1_DIAG=1"])
         name = "mono2k-test.fwsc"
     if a.release:
-        m = re.fullmatch(r"0\.(\d)", a.release)
-        if not m:
-            raise SystemExit(f"--release {a.release}: 0.Y, one digit")
-        PRODUCT, VERSION, name = "FM-1_98" + m[1], a.release, f"mono2k-{a.release}.fwsc"
+        if not re.fullmatch(r"\d+\.\d+(\.\d+)?", a.release):
+            raise SystemExit(f"--release {a.release}: X.Y or X.Y.Z")
+        VERSION, name = a.release, f"mono2k-{a.release}.fwsc"
     fm1pkg_make.SDK = a.sdk or os.environ.get("AC79_SDK") or str(Path.home() / "fw-AC79_AIoT_SDK")
     for rel, sha in SDK_SHA256.items():
         if hashlib.sha256(fm1pkg_make.sdk_file(rel)).hexdigest() != sha:

@@ -105,7 +105,7 @@ import { Updater } from "./fm1/fm1ota.js?v=1";
 import { productOf, logicalImage, validateStockPackage, sha256hex } from "./fm1/fm1pkg.js?v=1";
 
 const $ = (id) => document.getElementById(id);
-const MONO2K = /^FM-1_98\d$/;                          /* MONO2K's identities: FM-1_98N, N the build's minor version */
+const MONO2K = /^FM-1_980$/;                           /* MONO2K's identity, every release (FM-1_981, _983 are others') */
 
 /* what an identity says the FM-1 runs ("FM-1_015", "ota-FM-1_981", ...): the numbers the open firmwares claim */
 function describe(id) {
@@ -114,13 +114,8 @@ function describe(id) {
   if (id.model !== "FM-1") return `Another device (${id.text})`;
   if (v === 0) return "USB rescue mode";
   if (v < 100) return `M-VAVE's official firmware, V${v}`;
-  if (v >= 980 && v <= 989) return `MONO2K 0.${v - 980}`;
-  if (v === 930) return "CoralFlower";
-  if (v >= 950 && v <= 959) return "CS-1";
-  if (v >= 970 && v <= 979) return "zp12";
-  if (v >= 990) return "Dinghy";
-  if (v === 906) return "FM-106";
-  if (v >= 900 && v <= 929) return v === 900 ? "Felucca, or a firmware built on it (FM-1_900 is their shared identity)" : `Felucca ${Math.floor((v - 900) / 10)}.${v % 10}`;
+  if (v === 980) return "MONO2K";
+  if (v === 900) return "Felucca, or a firmware built on it (FM-1_900 is their shared identity)";
   return `Another open firmware (${id.text})`;
 }
 

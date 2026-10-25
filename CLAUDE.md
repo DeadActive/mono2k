@@ -34,7 +34,7 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   and a sub-header: the emulator (`index.html`, `app.js`), the manual (`manual.html`, `manual.js`: one page at a time,
   the machines and knobs read off `m2k.wasm`, the screens `web/manual/*.png` from the host's tour and its manual
   scenes, `m2k_host DIR`, each PBM saved as a 1-bit PNG of the same name), the installer
-  (`installer.html`: no FM-1 build published yet) and the patch editor (`editor.html`, `editor.js`: the same worklet and
+  (`installer.html`: installs `web/firmware/mono2k.fwsc`, or a `.fwsc` from a file) and the patch editor (`editor.html`, `editor.js`: the same worklet and
   saves; the FM-1 link's client, the FM-1's patterns a session of their own under `mono2k.fm1.v1`, `.m2ks` store files).
   `panel.js` is the FM-1's layout, `site.js` the subpages' theme and textures. Every push adds what it changes for a
   player to `web/changelog.js` (the manual's Change log: an entry per day of updates, newest first, a kind on every
@@ -52,8 +52,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   the wave banks (`tools/wave_check.py`); the bus's controls (`tools/bus_curves.py`: `m2k_host DIR --bus` measures
   every value of GLCH HISS ADPC DRIV TAPE, held to `tools/ref/bus_m2k.json`, and each old value through `T_V9_*` to
   the old engine's, `tools/ref/bus_v8.json`).
-- The FM-1 build (`firmware/fm1/README.md`): `.venv/bin/python tools/fm1/build.py [--diag] [--release 0.Y]` makes
-  `build/fm1/mono2k.fwsc` (identity FM-1_980, a release FM-1_98Y) with JieLi's toolchain in a linux/amd64 container
+- The FM-1 build (`firmware/fm1/README.md`): `.venv/bin/python tools/fm1/build.py [--diag] [--release X.Y]` makes
+  `build/fm1/mono2k.fwsc` (identity FM-1_980 for every build and release: the hub's FM-1_981 and _983 are others'; a
+  release sets APP_VER and names the file `mono2k-X.Y.fwsc`, the one the installer and the GitHub release share) with JieLi's toolchain in a linux/amd64 container
   (`~/.jieli/toolchain`, the AC79 SDK in `~/fw-AC79_AIoT_SDK`, colima with Rosetta, `DOCKER_CONFIG` ~/.jieli/docker).
   The platform (`firmware/fm1/{hal,loader,src}`) is CS-1's (Felucca, SLOOP, Dinghy, FM-106), GPL-3.0, its headers
   kept; `m2k_fm1.c` is the glue (the core in the main loop, the audio ISR copying a 17 ms ring), `m2k_link.c` the store
