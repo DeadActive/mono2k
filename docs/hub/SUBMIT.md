@@ -46,10 +46,10 @@ after the tests below have passed and the v0.1 release is on GitHub: its Reposit
 
 ## The package
 
-- **File:** MONO2K 1.0, the installer's `mono2k.fwsc` (596 KB, SHA-256
-  `48a923b7fbd359783bd9a6124cb6e24b20a08c15544fc7a29bf654e95eba24f8`); the release v1.0 attaches the same file as
-  `mono2k-1.0.fwsc` (the USB name "MONO2K FM-1" included; v0.1.1 was never released). The hub listed v0.1 on 2026-10-25 (`mono2k-0.1.fwsc`, SHA-256 27790d06...).
-- **Release:** GitHub releases `v0.1` (beta on the card), then `v1.0` (out of beta). The hub takes every later release by itself,
+- **File:** MONO2K 1.0.1, the installer's `mono2k.fwsc` (596 KB, SHA-256
+  `8822b8453b9397184145c9b8e5c80a7b648c294a1880af7caa3d352ab292bbac`); the release v1.0.1 attaches the same file as
+  `mono2k-1.0.1.fwsc` (v1.0 had `mono2k-1.0.fwsc`, SHA-256 48a923b7...; v0.1.1 was never released). The hub listed v0.1 on 2026-10-25 (`mono2k-0.1.fwsc`, SHA-256 27790d06...).
+- **Release:** GitHub releases `v0.1` (beta on the card), then `v1.0` (out of beta), `v1.0.1` (PADS at each track's root). The hub takes every later release by itself,
   within three hours.
 - **Identity:** FM-1_980. No other firmware on the hub uses it (its table, 2026-10-24), and it is of the form
   FM-1_9NN, so the hub resumes an interrupted update. Every release keeps it: `tools/fm1/build.py --release X.Y` sets

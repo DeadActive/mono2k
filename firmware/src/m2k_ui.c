@@ -819,6 +819,23 @@ static void set_machine(int m)
     syn_sub_check();
 }
 
+/* a track's root, the note PADS plays it at: the one its trigs sit on most within the pattern's length (the lowest
+ * of equals), so a drum tuned to the key by its note keeps it and a line plays its home note; a track without trigs
+ * plays the note new trigs take */
+static int track_root(const m2k_pattern_t *p, int t)
+{
+    uint8_t cnt[128];
+    m_set(cnt, 0, sizeof cnt);
+    int best = -1, len = seq_len();
+    for (int st = 0; st < len; st++) {
+        if (!(p->step[t][st].flags & ST_TRIG)) continue;
+        int n = p->step[t][st].note & 127;
+        if (cnt[n] < 255) cnt[n]++;
+        if (best < 0 || cnt[n] > cnt[best] || (cnt[n] == cnt[best] && n < best)) best = n;
+    }
+    return best < 0 ? ui.note[t] : best;
+}
+
 /* the keys let go of every note they hold: the keys' track changes, or the keys become steps or pads (a note left
  * in sq.held drones, and the sequence skips its track) */
 static void keys_off(void) { for (int i = 0; i < 8 && sq.nheld; i++) live_off(sq.held[0]); }
@@ -1078,12 +1095,10 @@ static void key_event(int k, int down)
         }
         return;
     }
-    if (ui.pads && w >= 0) {           /* PADS: white 1-6 and 9-14 hit T1-T6, each at its note */
+    if (ui.pads && w >= 0) {           /* PADS: white 1-6 and 9-14 hit T1-T6, each at its root */
         int t = w < M2K_TRACKS ? w : w >= 8 && w < 8 + M2K_TRACKS ? w - 8 : -1;
         if (t >= 0) {
-            int note = ui.note[t];
-            for (int st = 0; st < M2K_STEPS; st++) if (p->step[t][st].flags & ST_TRIG) { note = p->step[t][st].note; break; }
-            pad_hit(t, note);
+            pad_hit(t, track_root(p, t));
             ui.flash_t[t] = ui.now;
         }
         return;

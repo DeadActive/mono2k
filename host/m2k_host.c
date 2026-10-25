@@ -2064,6 +2064,21 @@ static int selftest(void)
         for (int st = 0; st < M2K_STEPS; st++) written += pat[0].step[0][st].flags & ST_TRIG ? 1 : 0;
         seq_play(0);
         CHECK(pads && hit && written == 1, "PADS (GLO + ARP): white keys hit T1-T6, each on its own; with REC, a trig written");
+        /* a pad plays its track's root: the note its trigs sit on most (not the first trig's), the lowest of equals;
+         * a trig past the pattern's length does not count; a track without trigs, the note new trigs take */
+        m2k_init(37);
+        m2k_button(B_GLO, 1); m2k_button(B_ARP, 1); m2k_button(B_ARP, 0); m2k_button(B_GLO, 0);
+        for (int t = 0; t < M2K_TRACKS; t++) for (int st = 0; st < M2K_STEPS; st++) pat[0].step[t][st].flags = 0;
+        pat[0].glob[G_LEN] = 16;
+        static const uint8_t RN[6][2] = {{0, 57}, {4, 45}, {8, 45}, {12, 52}, {20, 40}, {24, 40}};   /* T1 */
+        for (int i = 0; i < 6; i++) { pat[0].step[0][RN[i][0]].flags = ST_TRIG; pat[0].step[0][RN[i][0]].note = RN[i][1]; }
+        pat[0].step[2][3].flags = pat[0].step[2][9].flags = ST_TRIG;                                   /* T3: a tie */
+        pat[0].step[2][3].note = 64; pat[0].step[2][9].note = 59;
+        m2k_key(0, 1); m2k_key(0, 0);                 /* T1 */
+        m2k_key(4, 1); m2k_key(4, 0);                 /* T3 */
+        m2k_key(2, 1); m2k_key(2, 0);                 /* T2: no trigs */
+        CHECK(trk[0].note == 45 && trk[2].note == 59 && trk[1].note == ui.note[1],
+              "PADS: a pad plays its track's root (its trigs' most common note, the lowest of equals, within the length)");
         /* GLO > SET: WIPE asks, OCT+ makes every pattern INIT (the sounds kept), OCT- or any other button keeps them;
          * DEMO asks, OCT+ brings bank A's back */
         m2k_init(38);

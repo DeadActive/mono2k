@@ -10,6 +10,7 @@ window.M2K_CHANGES = [
     date: "2026-10-25", title: "MONO2K 1.0 on the Firmware Hub, and the fixes of a deep audit",
     items: [
       ["web", "MONO2K 1.0, out of beta, tried on the FM-1: on the FM-1 Firmware Hub (thefirmwarehub.com), one click to install, and on the installer page. Later releases appear on the hub by themselves."],
+      ["workflow", "PADS (GLO + ARP): each pad plays its track at its root, the note the track's trigs sit on most in the pattern, so drums stay in the key they are tuned to and a bass plays its home note. Before, a pad took the track's first trig, whatever it was."],
       ["fixes", "On the FM-1, MONO2K 1.0 shows up over USB as \"MONO2K FM-1\" instead of the platform's \"Felucca\", so DAWs and the Firmware Hub name it right. The update loader keeps its own name while it updates."],
       ["fixes", "On the FM-1 a knob, the preset knob among them, could start moving two steps a click and skip patterns: a slow turn that paused halfway through a click taught it a second resting point. It now learns only where the knob rests for half a second, as M-VAVE's own firmware does."],
       ["fixes", "A key let go after the layer changed (GLO, SEQ, HOME, OCT+ pressed meanwhile) no longer leaves its note droning, its step held or its solo on; a trig held to read its card is no longer deleted when let go, only a tap removes it."],
