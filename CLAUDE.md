@@ -73,7 +73,8 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   run on an FM-1, unless the owner asks: then it goes in `web/firmware/` (the package and `mono2k.json`, its file,
   SHA-256, identity, version, date and a note the installer shows). 2026-10-24: `mono2k.fwsc`, 0.1, FM-1_980, the
   new bank, published at the owner's request (first as a test build, then as the latest at their word) before any
-  FM-1 had run it. The installer page (`installer.html`, Felucca's `web/fm1/fm1ota.js`, `fm1pkg.js`, unchanged) installs
+  FM-1 had run it. 2026-10-25: the hub listed v0.1; 1.0 (out of the hub's beta, which marks anything under 1.0)
+  released after the owner had tried it on their FM-1. The installer page (`installer.html`, Felucca's `web/fm1/fm1ota.js`, `fm1pkg.js`, unchanged) installs
   a package from a file meanwhile.
 - The FM-1's budget: Felucca's heaviest patch is ~1570 Mac instructions a sample (its tests/cpu_baseline.txt) and
   runs on one core; count MONO2K's the same way, built as the FM-1 builds it (`cc -O2 -fno-builtin -fno-vectorize

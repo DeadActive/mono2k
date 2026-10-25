@@ -7,10 +7,10 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-25", title: "The fixes of a deep audit: the knobs, the keys, the sequencer, the store, the sound engine",
+    date: "2026-10-25", title: "MONO2K 1.0 on the Firmware Hub, and the fixes of a deep audit",
     items: [
-      ["web", "MONO2K is on the FM-1 Firmware Hub (thefirmwarehub.com): install it from there in one click, and later releases appear there by themselves."],
-      ["fixes", "On the FM-1, MONO2K 0.1.1 shows up over USB as \"MONO2K FM-1\" instead of the platform's \"Felucca\", so DAWs and the Firmware Hub name it right. The update loader keeps its own name while it updates."],
+      ["web", "MONO2K 1.0, out of beta, tried on the FM-1: on the FM-1 Firmware Hub (thefirmwarehub.com), one click to install, and on the installer page. Later releases appear on the hub by themselves."],
+      ["fixes", "On the FM-1, MONO2K 1.0 shows up over USB as \"MONO2K FM-1\" instead of the platform's \"Felucca\", so DAWs and the Firmware Hub name it right. The update loader keeps its own name while it updates."],
       ["fixes", "On the FM-1 a knob, the preset knob among them, could start moving two steps a click and skip patterns: a slow turn that paused halfway through a click taught it a second resting point. It now learns only where the knob rests for half a second, as M-VAVE's own firmware does."],
       ["fixes", "A key let go after the layer changed (GLO, SEQ, HOME, OCT+ pressed meanwhile) no longer leaves its note droning, its step held or its solo on; a trig held to read its card is no longer deleted when let go, only a tap removes it."],
       ["fixes", "A question answers what it asked, even if SLOT or PROJ moved before YES; one turn of SAVE into an INIT slot saves once; the undo is forgotten when another project or the store loads; copy and paste keep every lock, or say LOCKS FULL."],
@@ -30,7 +30,7 @@ window.M2K_CHANGES = [
       ["fixes", "A slide up reaches its note (at PORT 0 it ended 30 cents flat; at PORT 110 an octave up never moved)."],
       ["fixes", "A machine changed under a sounding track (SET MACHINE, a sound loaded, another pattern) starts from rest: it carried the old machine's state, with full-scale blocks or FX-DYNMX silent for seconds."],
       ["fixes", "A held PERFORM repeat keeps repeating; an LFO or a lock moving DSND across 64 no longer wipes the delay; two SWAV-SAW tracks no longer share their drift; GND-PERC's METAL, DRM-SNAR and the phaser no longer overflow at their extremes."],
-      ["web", "The installer's MONO2K 0.1 is rebuilt with every fix above, as the very file its GitHub release will carry: it reports version 0.1 and identity FM-1_980. The installer no longer takes other firmwares' numbers (FM-1_981, FM-1_983) for MONO2K's, and names only the identities it can be sure of."],
+      ["web", "The installer's MONO2K is rebuilt with every fix above, as the very file its GitHub release carries: it reports its version and identity FM-1_980. The installer no longer takes other firmwares' numbers (FM-1_981, FM-1_983) for MONO2K's, and names only the identities it can be sure of."],
     ],
   },
   {

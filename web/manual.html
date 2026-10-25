@@ -89,7 +89,7 @@
   <div class="panelfig" data-panel="home"></div>
   <p>Each of the six tracks plays one machine: a sine, two kinds of noise, a chip, three kinds of FM, a supersaw and a pulse, a chord, digital waves, a voice, and three FX machines that work on the track before them. Every track has the Monomachine's chain after its machine: an amp envelope, a band of filters, distortion, an EQ, rate reduction and a delay of its own, then MONO2K's bits, wavefold and XOR.</p>
   <p>The sequencer is the Monomachine's, with the modern Elektron conditions: each step trigs the amp, the filter's envelope and the LFOs independently, carries locks, a chance or an A:B condition, and up to four ratchets.</p>
-  <div class="callout"><b>Prototype</b><p>The firmware runs in the browser, and on its author's FM-1 while it is tried there: see <a href="#status">Status and safety</a>.</p></div>
+  <div class="callout"><b>MONO2K 1.0</b><p>The same firmware runs in the browser and on the FM-1; install it from The Firmware Hub or the <a href="installer.html">installer</a>: see <a href="#status">Status and safety</a>.</p></div>
   <div class="callout"><b>Finding a function</b><p>On the FM-1, hold GLO, HOME, EDIT, SEQ, FX or LFO for a moment: the screen lists what each does held with the other buttons and the keys; hold any other button a second for its card. Every combination is on one page here: <a href="#commands">Commands</a>; the common jobs step by step: <a href="#workflows">Workflows</a>.</p></div>
   <h2>Quick links</h2>
   <div class="cards">
@@ -112,8 +112,8 @@
   <h1>Status and safety</h1>
   <p class="sub">What runs where today, and what installing will mean.</p>
   <h2>Today</h2>
-  <p>MONO2K is a prototype. Its C core runs in your browser on the <a href="./">emulator page</a> and, in the FM-1 build, on the FM-1 itself, on the open FM-1 platform (Felucca's, through CS-1): the same sound, sequencer and screen in both. The FM-1 build, MONO2K 0.1, is on the <a href="installer.html">installer</a> page. On the FM-1 it keeps one project of 64 patterns (bank A the demos, B–D INIT, with room for some 20 to 30 patterns of your own beside the demos; it says when it is full) and the 128 sounds; the emulator keeps four projects of 64.</p>
-  <p>Saves are kept in your browser and can be exported as files; the FM-1 keeps its own in its flash, and the <a href="editor.html">Patch Editor</a> reads them and sends them back (<a href="#fm1-link">The FM-1 and the Patch Editor</a>). The save format may still change; older saves are converted as they load.</p>
+  <p>MONO2K is at 1.0. Its C core runs in your browser on the <a href="./">emulator page</a> and, in the FM-1 build, on the FM-1 itself, on the open FM-1 platform (Felucca's, through CS-1): the same sound, sequencer and screen in both. MONO2K 1.0 for the FM-1 installs from <a href="https://thefirmwarehub.com" target="_blank" rel="noopener">The Firmware Hub</a> or the <a href="installer.html">installer</a> page. On the FM-1 it keeps one project of 64 patterns (bank A the demos, B–D INIT, with room for some 20 to 30 patterns of your own beside the demos; it says when it is full) and the 128 sounds; the emulator keeps four projects of 64.</p>
+  <p>Saves are kept in your browser and can be exported as files; the FM-1 keeps its own in its flash, and the <a href="editor.html">Patch Editor</a> reads them and sends them back (<a href="#fm1-link">The FM-1 and the Patch Editor</a>). When the save format grows, older saves are converted as they load.</p>
   <h2>Installing</h2>
   <p>The FM-1 build installs from the <a href="installer.html">Installer</a> page, over USB, in Chrome or Edge, as Felucca does. Back up what your FM-1 holds first; installing other firmware is at your own risk. M-VAVE's own updater, or the installer's return to the official firmware, takes the FM-1 back to how it shipped; holding OCT− while it powers on always reaches the installer.</p>
   <div class="callout"><b>Note</b><p>MONO2K is not affiliated with Elektron or M-VAVE. Monomachine is Elektron's; FM-1 is M-VAVE's. MONO2K's machines are written from scratch and measured against a Monomachine's output; none of Elektron's code or samples are in it.</p></div>
@@ -756,7 +756,7 @@
 </footer>
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=20"></script>
+<script src="changelog.js?v=21"></script>
 <script src="manual.js?v=22"></script>
 </body>
 </html>
