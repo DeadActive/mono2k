@@ -38,7 +38,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   saves; the FM-1 link's client, the FM-1's patterns a session of their own under `mono2k.fm1.v1`, `.m2ks` store files).
   `panel.js` is the FM-1's layout, `site.js` the subpages' theme and textures. Every push adds what it changes for a
   player to `web/changelog.js` (the manual's Change log: an entry per day of updates, newest first, a kind on every
-  line: machines sound sequencer workflow patterns screen web fixes), and bumps `changelog.js?v=` in `manual.html`. After a wasm build bump `m2k.wasm?v=` in
+  line: machines sound sequencer workflow patterns screen web fixes), and bumps `changelog.js?v=` in `manual.html`. Every
+  update also adds what it taught to `../FM1-FIRMWARE-HANDBOOK.md` (outside the repo: the owner's handbook of MONO2K's
+  and Demake's lessons, for the next firmware), in its section and its Updates log. After a wasm build bump `m2k.wasm?v=` in
   `app.js`, `manual.js` and `editor.js` alike (and `worklet.js?v=` in `app.js` and `editor.js` with the worklet).
 - The screen's grid (m2k_ui.c): five bands, the header 0-15, the knobs 16-57, the stage 58-186 (the value's column GX
   wide, the picture `PIC_W` x 125), the steps 188-211, the footer 213-239; held windows (GLO, HOME, EDIT, SEQ) over the
