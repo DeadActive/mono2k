@@ -51,12 +51,12 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 |---|---|
 | Machines | GND-SIN, GND-NOIS, GND-PERC, SID-6581, FM+STAT, FM+PAR, FM+DYN, SWAV-SAW, SWAV-PUL, SWAV-ENS, DIGI-WAV, VOX-6, FX-CHORUS, FX-RINGMOD, FX-DYNAMIX (on the track before): clean-room designs after the Monomachine's families, integer only. DRM-KICK, DRM-SNAR, DRM-HATS, DRM-CYMB: drums after the LXR's voices, on its laws |
 | Per track | the Monomachine's chain and pages: SYN A–H · AMP (ATK HOLD DEC REL DIST VOL PAN PORT) · FILT (HP / LP as base and width following the note, resonance, envelope) · FX (EQ, SRR, a delay of its own in 8-bit mu-law, ping-pong on positive sends) · DSTR (bits, fold, xor, SPU send) · 3 LFOs (any track's parameter) · ARP |
-| Projects | the modern Elektron way: 4 projects × 4 banks (A–D) × 16 patterns, each pattern with its own sounds. SAVE keeps the pattern (its reload point), GLO + SAVE reloads it, SAVE held keeps the project; GLO + REC / PLAY / SEQ copy, paste, clear (the pattern on HOME, the track's sound on its pages); GLO > SET picks and loads a project. On the web: a project picker, export / import as `.m2kp` files. Stored packed (a typical pattern 0.5–1 KB; the DEMO project 32 KB) |
+| Projects | the modern Elektron way: 4 projects × 4 banks (A–D) × 16 patterns (on the FM-1, one project of 64), each pattern with its own sounds. SAVE keeps the pattern (its reload point), GLO + SAVE reloads it, SAVE held keeps the project; GLO + REC / PLAY / SEQ copy, paste, clear (the pattern on HOME, the track's sound on its pages); GLO > SET picks and loads a project. On the web: a project picker, export / import as `.m2kp` files. Stored packed (a typical pattern 0.5–1 KB; the DEMO project 32 KB) |
 | Factory | project DEMO, bank A: four parts, CIRCUIT, TIDE, SUSPEND and LANTERN (`docs/bank-a.md`: how they were made, key and idea of each), every sound picked by the owner from sound sheets; A05–A16 and banks B–D blank. A store saved with earlier demos takes the new ones where the old still stand |
 | Sequencer | 6 × 64 steps, note / accent / slide, parameter locks, the Monomachine's trig types (each step trigs the amp, the filter's envelope and the LFOs independently: step + VOL, ALL ... NONE, a trigless lock), trig conditions (chance, A:B, 1ST, PRE, FILL), ratchets, swing, live recording and step entry (REC while stopped), pages held to set the length, patterns queued at the bar |
 | Bus | SPU-style reverb at 22 kHz, beat repeat (reverse, halving, tape stop), tape wow and flutter, 4-bit ADPCM crunch, hiss and dust, drive; each control on a law measured over its whole range (GLCH a chance per sixteenth, 0.3–50 %) |
 | MIDI | tracks 1–6 on six channels from GLO > MIDI's CHAN (1–6 at first), the others play the track in view: notes and the Monomachine's CC map (SYN 48–55, AMP 56–63, FILT 72–79, FX 80–87, LFO 1/2/3 on 88/104/112, level 7, mute 3). SYNC IN follows a MIDI clock (its tempo, a step every sixth pulse, the swing kept; start, continue, stop), SYNC OUT sends one (24 a beat, start, stop), NOTES OUT each track's trigs on its channel. The emulator picks a MIDI device in and one out |
-| Screen | 240 × 240 at 1 bit (a 7.2 KB framebuffer): Orbitron in outline-and-dither (one size for every big value), Model:Cycles-style machine cards, machine marks as one family of cut-out stamps after Fors' isotypes (flat, and extruded with dithered sides), dissolves, glitches, live envelopes, filters, LFOs and scopes; light or dark (GLO > SET > SCRN; on the web it follows the page's theme) |
+| Screen | 240 × 240 at 1 bit (a 7.2 KB framebuffer): Orbitron in solid ink (one size for every big value), Model:Cycles-style machine cards, machine marks as one family of isotypes on a 12-unit grid, each moving in its own way in time with the pattern, dissolves, glitches, live envelopes, filters, LFOs and scopes; light or dark (GLO > SET > SCRN; on the web it follows the page's theme) |
 
 ## Where things are
 
@@ -66,19 +66,19 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
   store, `m2k_gfx.c` 1-bit drawing, `m2k_ui.c` pages and controls.
 - `tools/gen_tables.py`, `gen_font.py`, `gen_icons.py`: the tables, fonts and marks, into `firmware/gen/` (Pillow and
   numpy in `.venv`).
-- `web/`: the site: the emulator page, the manual, the installer (no FM-1 build to install yet) and the patch editor; `m2k_web.c` is the core plus exports, `worklet.js` runs it, `app.js` draws the panel, `manual.js` and `editor.js` read the machines and their knobs off the core.
+- `web/`: the site: the emulator page, the manual, the installer (MONO2K for the FM-1, the same file as the latest GitHub release; it is on The Firmware Hub too) and the patch editor; `m2k_web.c` is the core plus exports, `worklet.js` runs it, `app.js` draws the panel, `manual.js` and `editor.js` read the machines and their knobs off the core.
 - `host/m2k_host.c`: the host harness.
 
 ## The next steps
 
-1. **The FM-1 build** (`firmware/fm1/README.md`): the first package is built (`tools/fm1/build.py`) and is to be tried
-   on an FM-1. Next: four projects of 64 patterns (a pattern cache in the core: RAM keeps the playing patterns, not
-   all 64 unpacked), the sound on the second core if the first is short of time, then a release on the site.
+1. **On the FM-1** (`firmware/fm1/README.md`): MONO2K 1.0.1 is released, on the installer, as GitHub releases and on
+   The Firmware Hub. Next: the CPU load read on the device with a `--diag` build (A03 SUSPEND and A04 LANTERN are over
+   Felucca's yardstick on paper), and a store that survives a power cut during a save (two slots in the flash).
 2. **Calibration against the Monomachine**, machine by machine: levels, spectra, the machines' own envelopes. The amp
    envelope, SWAV-SAW, SWAV-PUL, SWAV-ENS, the three FM+, SID-6581, GND-SIN, GND-NOIS, FX-RING, VO-6's voice and the
    whole track chain are done (below); VO-6's consonants and V-SW's switch are next. Driven hard, all of them meet its
    ceilings.
-3. More machines (DPRO-BBOX, FX-REVERB and the rest of the FX family), songs, a keyboard split to play every track.
+3. More machines (DPRO-BBOX, FX-REVERB and the rest of the FX family) and songs.
 
 ## Author
 

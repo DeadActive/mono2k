@@ -160,5 +160,5 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
 
 ## Style
 
-C99, 4 spaces, unity build, static everything, short comments that say why. The screen's grid: header 0..15, focus
-18..121 (the value left of x 104, the page's picture right of it, PIC_W wide), step strip 124..146, knobs 148..239.
+C99, 4 spaces, unity build, static everything, short comments that say why. The screen's grid is the five bands above
+(header 0..15, knobs 16..57 under the physical knobs, stage 58..186, steps 188..211, footer 213..239).
