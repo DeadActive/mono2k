@@ -132,6 +132,12 @@ KNOWN_2C = {
     "midi_out_event": ("core_ble_api.c core_midi_out is a second user of usb.c's midi_out_event, so it is a function "
                        "of its own (inlined into its callers in the plain build)", set(), set()),
 }
+# .. and in the serial test build (--diag-serial: FELUCCA_CDC=1, BLE_CONSOLE=1), never a package to ship
+KNOWN_2C_SERIAL = {
+    "usb_poll": ("the serial test build: the BLE unit's console reads the USB serial port's input ring (core_ble_api.c "
+                 "bt_con_poll) and writes its output ring (core_con_puts), so usb_poll's inlined CDC code reaches those "
+                 "rings from other registers (the same callees)", set(), set()),
+}
 # .. and with one core (DUAL=0), where the plain build's fm1_reboot has fewer users (the second core's AW_FAULT is one)
 KNOWN_2C_ONE_CORE = {
     "fm1_reboot": ("core_ble_api.c core_reboot is a second user of fm1_reboot, so it is a function of its own",
@@ -401,7 +407,8 @@ def source_errors(base):
         if not (status == "A" and path in NEW_OK):
             errors.append(f"update path source {path} differs from {base} ({status})")
     for path in GUARDED:
-        if plain_view(read_now(path)) != git("show", f"{base}:{path}"):
+        if plain_view(read_now(path)) != plain_view(git("show", f"{base}:{path}")):   # (a base on this branch may
+                                                                                      # carry FELUCCA_BLE blocks)
             errors.append(f"update path source {path}: its plain view (without its FELUCCA_BLE blocks) differs "
                           f"from {base}")
     return errors

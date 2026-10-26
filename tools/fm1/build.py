@@ -49,6 +49,9 @@ LOADER_NAME = b"usb_hid_ota.bin"    # the file name the SPL looks for
 DOCKER_IMAGE = os.environ.get("JIELI_DOCKER_IMAGE", "debian:bookworm-slim")
 SDK_MOUNT = None                    # Bluetooth builds: the JieLi BT SDK (tools/ble_libs.py), mounted read-only at /sdk
 BLE_RAM_FLOOR = 4096                # Bluetooth builds keep this much of .data + .bss spare (PORTING.md rule 2)
+BLE_RAM_FLOOR_SERIAL = 1024         # .. but the serial test build (--diag-serial), never packaged to ship: its USB serial
+                                    # port (usb.c's CDC rings, 2.3 KB) and console take that room (the floor is a margin
+                                    # for what comes later; the region itself still holds: the link fails past it)
 BLE_POOL_FLOOR = 8192               # .. and this much of the pool
 CFLAGS = ["-Os", "-ffunction-sections", "-fno-builtin", "-Wall", "-Wno-unused-function"]
 LINE = re.compile(r"^\s*([0-9a-f]+):\s+((?:[0-9a-f]{2} )+)\s*\t(.*)$")
@@ -507,8 +510,12 @@ def check(img, syms, dis, rt, ble=False, measure=False):
         notes.append(f"image {len(img)} B of {APP_SLOT} ({APP_SLOT - len(img)} B free); RAM .data+.bss {ram} B of "
                      f"98304 ({98304 - ram} B spare); pool {pool} B of 344064 ({344064 - pool} B spare); "
                      f"RAM code {sym('_rt_end') - 0x01C00000} B of 24576")
-        if 98304 - ram < BLE_RAM_FLOOR:
-            soft.append(f"RAM headroom {98304 - ram} B < {BLE_RAM_FLOOR} B")
+        floor = BLE_RAM_FLOOR_SERIAL if "-DFELUCCA_CDC=1" in CORE else BLE_RAM_FLOOR
+        if 98304 - ram < floor:
+            soft.append(f"RAM headroom {98304 - ram} B < {floor} B")
+        elif floor != BLE_RAM_FLOOR:
+            notes.append(f"the serial test build: RAM headroom {98304 - ram} B against its own floor, {floor} B "
+                         f"(a shipping build keeps {BLE_RAM_FLOOR} B)")
         if 344064 - pool < BLE_POOL_FLOOR:
             soft.append(f"pool headroom {344064 - pool} B < {BLE_POOL_FLOOR} B")
         placed = ble_placement((OUT / "mono2k.map").read_text(), syms, ld_regions(), dual=bool(DUAL))
@@ -548,13 +555,17 @@ def main():
     if a.diag_serial:
         CORE.extend(["-DM2K_FM1_DIAG=2", "-DFELUCCA_CDC=1"])
         name = "mono2k-test-serial.fwsc"
+        if ble:                     # (a serial port: the BLE unit's console words too, unless BLE_CONSOLE says not)
+            BLE_FLAGS[:] = [f"-DBLE_CONSOLE={os.environ.get('BLE_CONSOLE', '1')}"]
     if a.release:
         if not re.fullmatch(r"\d+\.\d+(\.\d+)?", a.release):
             raise SystemExit(f"--release {a.release}: X.Y or X.Y.Z")
         VERSION, name = a.release, f"mono2k-{a.release}.fwsc"
     if ble:                         # a gated Bluetooth build: its own version and name, never the release's
         VERSION = (a.release or VERSION) + "-ble"
-        name = f"mono2k-{VERSION}{'-test' if a.diag else ''}.fwsc"
+        if a.diag or a.diag_serial:
+            VERSION += ("2core" if DUAL else "1core") + "-test"
+        name = f"mono2k-{VERSION}{'-serial' if a.diag_serial else ''}.fwsc"
     fm1pkg_make.SDK = a.sdk or os.environ.get("AC79_SDK") or str(Path.home() / "fw-AC79_AIoT_SDK")
     for rel, sha in SDK_SHA256.items():
         if hashlib.sha256(fm1pkg_make.sdk_file(rel)).hexdigest() != sha:
@@ -575,6 +586,8 @@ def main():
         e2b = cup.compare(dis, cup.render(ref))
         if not DUAL:                # (one core: what its single users make of fm1_reboot)
             cup.KNOWN_2C.update(cup.KNOWN_2C_ONE_CORE)
+        if "-DFELUCCA_CDC=1" in CORE and "-DBLE_CONSOLE=1" in BLE_FLAGS:
+            cup.KNOWN_2C.update(cup.KNOWN_2C_SERIAL)   # (the serial test build's console)
         e2c, same2c, known2c = cup.compare_builds(plain_nm, ble_nm)
         e3 = cbb.reachable_starts(dis)
         import check_core1 as cc1

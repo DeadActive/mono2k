@@ -1,6 +1,7 @@
 # The Bluetooth build's base (FELUCCA_BLE=1, tools/fm1/build.py; BLE MIDI: 2026 DEADACTIVE).
 # UPSTREAM: the release whose update path this tree carries unchanged (gate 2a, tools/check_update_path.py).
 # LOADER_SHA256: that release's update loader, build/fm1/loader/ota.bin (gate 1): a Bluetooth build stops on any other.
-# After merging a later release: name its commit and its loader's hash here.
-UPSTREAM 583b513
+# After merging a later release: name its commit and its loader's hash here. d7ba917: 1.0.1 (583b513) with the serial
+# test build (--diag-serial, b307b7a): the plain build byte-identical to 583b513's, the update loader the same.
+UPSTREAM d7ba917
 LOADER_SHA256 37d982d010c14cb1e2dc1d664846923e8a071548c1e71080c1c812e72895a42a

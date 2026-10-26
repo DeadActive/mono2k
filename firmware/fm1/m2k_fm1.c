@@ -45,6 +45,12 @@ static volatile uint32_t ring_short;            /* halves the interrupt found th
  * longest gap between two halves (the BT libraries hold the interrupts off up to ~12 ms; a half is 5.8 ms): since the
  * page opened, for its dim line */
 static volatile uint32_t bt_a_t0, bt_a_r0, bt_a_gap;
+#if BLE_CONSOLE
+static volatile uint32_t bt_a_gap_con;           /* (the console's core_audio_gap_us: read and cleared) */
+#endif
+#if M2K_FM1_DIAG == 2
+static volatile uint32_t bt_a_gap_line;          /* (the serial test build's line: since the last line) */
+#endif
 #endif
 
 static void app_audio(int32_t *out, uint32_t n)
@@ -54,6 +60,12 @@ static void app_audio(int32_t *out, uint32_t n)
     {
         uint32_t t = fm1_ticks(), g = t - bt_a_t0;
         if (bt_a_t0 && g > bt_a_gap) bt_a_gap = g;
+#if BLE_CONSOLE
+        if (bt_a_t0 && g > bt_a_gap_con) bt_a_gap_con = g;
+#endif
+#if M2K_FM1_DIAG == 2
+        if (bt_a_t0 && g > bt_a_gap_line) bt_a_gap_line = g;
+#endif
         bt_a_t0 = t;
         bt_a_r0 = ring_r;
     }
@@ -236,6 +248,16 @@ static void diag_tick(void)
             p = diag_kv(p, " blk_us ", blk_max / FM1_TICKS_PER_US);
             p = diag_kv(p, " pass_us ", pass_max / FM1_TICKS_PER_US);
             p = diag_kv(p, " short ", ring_short);
+#if FELUCCA_BLE
+            /* the Bluetooth build: the longest gap between two audio halves since the last line (2902 us a half: more,
+             * the interrupts were held off), the halves late since power-on (platform.c), the BLE unit's state
+             * (ble_core.h BLE_ST_*: 0 off, 1 starting, 2 idle .. 6 subscribed, 8 failed); `ble` typed on the port
+             * gives the rest (the libraries' longest interrupts-off: irq_off max) */
+            p = diag_kv(p, " gap_us ", bt_a_gap_line / FM1_TICKS_PER_US);
+            bt_a_gap_line = 0;
+            p = diag_kv(p, " late ", audio_lates);
+            p = diag_kv(p, " bt ", ble_ui_state());
+#endif
             p = diag_kv(p, " ms ", fm1_ms);
             *p++ = '\r';
             *p++ = '\n';
