@@ -74,6 +74,9 @@ static void app_audio(int32_t *out, uint32_t n)
 /* at most half the ring a pass: were the core slower than the sound, the loop still reaches the panel and the
  * watchdog (the sound would stutter, the FM-1 would not reset) */
 static uint32_t load_ticks, load_frames;        /* render time against the frames rendered, the meter's */
+#if M2K_FM1_DIAG == 2
+static uint32_t blk_max, pass_max, pass_t0;     /* the serial test build: the longest render, main-loop pass */
+#endif
 
 #if FELUCCA_BLE
 static uint32_t bt_blk_t;                       /* the tick the next control block is heard at (m2k_bt_block) */
@@ -89,7 +92,14 @@ static void render_ahead(void)
         bt_heard(ring_w);
 #endif
         m2k_render(ring[ring_w % RING], (int)BLK);
+#if M2K_FM1_DIAG == 2
+        t0 = fm1_ticks() - t0;
+        load_ticks += t0;
+        if (t0 > blk_max)
+            blk_max = t0;                       /* (the serial test build: the longest block, against its 2.9 ms) */
+#else
         load_ticks += fm1_ticks() - t0;
+#endif
         load_frames += BLK;
         RING_PUBLISH();
         ring_w++;
@@ -178,16 +188,62 @@ static void diag_num(char *o, uint32_t v)
     *o = 0;
 }
 
+#if M2K_FM1_DIAG == 2
+/* the serial test build: a line into the USB serial port's out ring (usb.c: TIMER5 sends it while a host has the port
+ * open); what does not fit is dropped */
+static void diag_puts(const char *s)
+{
+    while (*s && co_w - co_r < CO_N) {
+        cdc_out[co_w % CO_N] = (uint8_t)*s++;
+        RING_PUBLISH();
+        co_w++;
+    }
+}
+static char *diag_kv(char *o, const char *k, uint32_t v)
+{
+    while (*k)
+        *o++ = *k++;
+    diag_num(o, v);
+    while (*o)
+        o++;
+    return o;
+}
+#endif
+
 static void diag_tick(void)
 {
 #if M2K_FM1_DIAG
     uint32_t now = fm1_ticks(), span = now - diag_t0;
+#if M2K_FM1_DIAG == 2
+    if (pass_t0 && now - pass_t0 > pass_max)
+        pass_max = now - pass_t0;               /* (from the last pass's start: the whole loop) */
+    pass_t0 = now;
+#endif
     if (span >= 500u * 1000u * FM1_TICKS_PER_US) {      /* every half second */
         uint32_t w = 0;
 #if DINGHY_DUAL_CORE
         w = job_ticks;
         job_ticks = 0;
 #endif
+#if M2K_FM1_DIAG == 2
+        {   /* "cpu 63 w 0 f 12 blk_us 1830 pass_us 4100 short 0 ms 81234": shares of real time in %, the longest
+             * render block (of 2902 us) and main-loop pass since the last line, the halves the sound ran short for
+             * (total since power-on), the uptime */
+            char l[96], *p = l;
+            p = diag_kv(p, "cpu ", load_ticks / (span / 100u));
+            p = diag_kv(p, " w ", w / (span / 100u));
+            p = diag_kv(p, " f ", frame_ticks / (span / 100u));
+            p = diag_kv(p, " blk_us ", blk_max / FM1_TICKS_PER_US);
+            p = diag_kv(p, " pass_us ", pass_max / FM1_TICKS_PER_US);
+            p = diag_kv(p, " short ", ring_short);
+            p = diag_kv(p, " ms ", fm1_ms);
+            *p++ = '\r';
+            *p++ = '\n';
+            *p = 0;
+            diag_puts(l);
+            blk_max = pass_max = 0;
+        }
+#else
         char *o = diag_txt;
         *o++ = 'C'; *o++ = 'P'; *o++ = 'U'; *o++ = ' ';
         diag_num(o, load_ticks / (span / 100u)); while (*o) o++;
@@ -195,6 +251,7 @@ static void diag_tick(void)
         diag_num(o, w / (span / 100u)); while (*o) o++;
         *o++ = ' '; *o++ = ' '; *o++ = 'F'; *o++ = ' ';
         diag_num(o, frame_ticks / (span / 100u)); while (*o) o++;
+#endif
         load_ticks = load_frames = frame_ticks = 0;
         diag_t0 = now;
     }
@@ -293,7 +350,7 @@ static void screen_send(void)                   /* one strip, if the last has go
 #else
     memcpy(shown + s * ROWS * 30u, src, ROWS * 30u);
 #endif
-    if (M2K_FM1_DIAG && s < 2u) {               /* the meter over the first two strips (resent each frame) */
+    if (M2K_FM1_DIAG == 1 && s < 2u) {          /* the meter over the first two strips (resent each frame) */
         uint16_t red = be16(RGB(255, 0, 0));
         uint32_t c, gx = 2;
         for (c = 0; diag_txt[c] && gx + 6u < 230u; c++, gx += 8u) {
