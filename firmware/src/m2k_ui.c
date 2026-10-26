@@ -16,6 +16,9 @@ enum {
     K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD, K_MCH, K_SSEL, K_SLOAD, K_SSAVE, K_SCAT, K_WIPE, K_DEMO, K_SPD,
     K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ, K_ONOFF, K_MSRC, K_MFRQ,
     K_DWV4, K_DWV5, K_DRA, K_DRD, K_DOPN, K_DMUL, K_DNHZ, K_DCNT          /* the DRM- drums' */
+#if M2K_BT
+    , K_BSYN                                                                /* SYNC IN in four (m2k_bt.c) */
+#endif
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -62,6 +65,19 @@ static const pi_t PI_SET[13] = {
     {"WIPE", "EVERY PATTERN INIT", K_WIPE},   /* GLO > SET */
     {"DEMO", "BANK A'S DEMOS BACK", K_DEMO},
 };
+#if M2K_BT
+/* the FM-1's Bluetooth build (m2k_bt.c): GLO > MIDI's SYNC IN in four, kept by the platform (SETTING(24)) */
+static const pi_t PI_BSYN = {"SYIN", "SYNC IN", K_BSYN};
+static const char *const BSYN_N[4] = {"OFF", "ON", "BLE", "LINK"};
+static const uint8_t *icon_frame(int m, int f);
+static int bt_page_up(void);
+static void bt_page_track(void);
+static int bt_page_enc(int e, int d);
+static int bt_page_btn(int b, int down);
+static void bt_page_draw(void);
+static int bt_head(int xr);
+static void bt_sync_put(int c);
+#endif
 
 typedef struct {
     const char *name, *badge, *style, *cls;
@@ -163,6 +179,9 @@ static const pi_t PI_NONE = {"-", "-", K_NUM};     /* a knob a page leaves free 
 static const pi_t *pinfo(int t, int id)
 {
     if (id == 0xFF) return &PI_NONE;
+#if M2K_BT
+    if (id == (0xC0 | 24)) return &PI_BSYN;          /* (SETTING(24)) */
+#endif
     if (id >= 0xC0) { int s = id & 0x3F; return &PI_SET[s == 16 ? 1 : s == 17 ? 2 : s >= 18 && s <= 23 ? 7 + s - 18 : s >= S_MCH && s <= S_NOTO ? 3 + s - S_MCH : 0]; }
     if (id >= 0x80) return &PI_GLOB[id & 0x7F];
     if (id < 8) return &MI[PAT(cur_pat)->machine[t]].syn[id];
@@ -187,6 +206,9 @@ static int kind_choices(int k)
     case K_FR24: return 24;
     case K_SIDW: return 5;
     case K_ONOFF: case K_MSRC: return 2;
+#if M2K_BT
+    case K_BSYN: return 4;
+#endif
     case K_SIDM: case K_ALGO: case K_ASPD: case K_ARNG: return 4;
     case K_SCRN: return 2;
     case K_MCH: return 16;
@@ -352,6 +374,9 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_SIDW: s_cpy(out, SIDW_N[c]); break;
     case K_SIDM: s_cpy(out, SIDM_N[c]); break;
     case K_ONOFF: s_cpy(out, c ? "ON" : "OFF"); break;
+#if M2K_BT
+    case K_BSYN: s_cpy(out, BSYN_N[c & 3]); *unit = c == 2 ? "BT DEVICE" : c == 3 ? "FM-LINK" : ""; break;
+#endif
     case K_MSRC: s_cpy(out, c ? "PRCH" : "MFRQ"); *unit = c ? "PREV TRACK" : ""; break;
     case K_MFRQ: s_note(out, 48 + (v * 3 + 4) / 8); *unit = "NOTE"; break;     /* C3 at 0, an octave every 32 */
     case K_ALGO: s_cpy(out, ALGO_N[c]); break;
@@ -402,7 +427,11 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
 /* -------------------------------------------------------------------------------------------- the pages */
 
 enum { PG_HOME, PG_SYN, PG_AMP, PG_FILT, PG_FX, PG_LFO, PG_ARP, PG_GLO, PG_COUNT };
-static const uint8_t NSUB[PG_COUNT] = {1, 3, 2, 2, 4, 6, 1, 5};   /* SYN: its two, then SND (BANK before it) */
+#if M2K_BT
+static const uint8_t NSUB[PG_COUNT] = {1, 3, 2, 2, 4, 6, 1, 6};   /* (GLO's sixth: BT, m2k_bt.c) */
+#else
+static const uint8_t NSUB[PG_COUNT] = {1, 3, 2, 2, 4, 6, 1, 5};
+#endif   /* SYN: its two, then SND (BANK before it) */
 static int nsub(int page);                     /* SYN has a third page, the bank, where the machine plays waves */
 #define SETTING(i) (0xC0 | (i))
 #define GL(g) (0x80 | (g))
@@ -419,7 +448,13 @@ static int knob_param(int page, int sub, int k)
     case PG_FX: return sub < 3 ? P_EQF + sub * 4 + k : P_MODT + k;
     case PG_LFO: return P_LFO + (sub >> 1) * 8 + (sub & 1) * 4 + k;
     case PG_ARP: return P_AMOD + k;
-    case PG_GLO: return sub < 3 ? GL(sub * 4 + k) : sub == 4 ? SETTING(S_MCH + k)      /* PROJ and LOAD only with */
+#if M2K_BT
+    case PG_GLO: if (sub == 5) return NONE;                                /* BT: the page's own keys */
+                 if (sub == 4 && k == 1) return SETTING(24);              /* SYNC IN in four */
+                 return sub < 3 ? GL(sub * 4 + k) : sub == 4 ? SETTING(S_MCH + k)
+#else
+    case PG_GLO: return sub < 3 ? GL(sub * 4 + k) : sub == 4 ? SETTING(S_MCH + k)
+#endif      /* PROJ and LOAD only with */
                         : k == 0 ? SETTING(S_SCREEN) : M2K_PROJECTS < 2 ? (k == 1 ? SETTING(22) : k == 2 ? SETTING(23) : NONE)
                         : k == 1 ? SETTING(16) : k == 2 ? SETTING(17) : k == 3 ? SETTING(22) : NONE;   /* projects to choose */
     default: return NONE;
@@ -432,7 +467,11 @@ static void page_label(int page, int sub, char *o)
     switch (page) {
     case PG_FX: s_cpy(o, sub == 0 ? "FX" : sub == 1 ? "DELAY" : sub == 2 ? "DSTR" : "MOD"); break;
     case PG_LFO: { char *e = s_cpy(o, "LFO"); e = s_int(e, (sub >> 1) + 1); s_cpy(e, (sub & 1) ? "B" : "A"); break; }
+#if M2K_BT
+    case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "GLITCH" : sub == 2 ? "VERB" : sub == 3 ? "SET" : sub == 4 ? "MIDI" : "BT"); break;
+#else
     case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "GLITCH" : sub == 2 ? "VERB" : sub == 3 ? "SET" : "MIDI"); break;
+#endif
     case PG_SYN: s_cpy(o, sub >= 2 && sub == nsub(PG_SYN) - 1 ? "SND" : sub == 2 ? "BANK" : "SYN"); break;
     default: s_cpy(o, N[page]); break;
     }
@@ -684,6 +723,9 @@ static int knob_value(int code)
     if (code == SETTING(18)) { int n = 0, at = snd_list(ui.snd_sel, &n); return enc(at, n ? n : 1); }
     if (code == SETTING(19) || code == SETTING(20) || code == SETTING(22) || code == SETTING(23)) return 0;
     if (code == SETTING(21)) return enc(ui.snd_cat, CAT_COUNT);
+#if M2K_BT
+    if (code == SETTING(24)) return enc(m2k_bt_sync() & 3, 4);
+#endif
     if (code >= 0xC0) return store_.set[code & 0x3F];
     if (code >= 0x80) return p->glob[code & 0x7F];
     if (ui.grid && ui.nheld) {
@@ -738,6 +780,11 @@ static void edit(int k, int d)
     int n = kind_choices(pi->kind), nv;
     if (n) nv = enc(CLAMP(choice_of(pi->kind, v) + d, 0, n - 1), n);
     else nv = CLAMP(v + d, kind_min(pi->kind), kind_max(pi->kind));
+#if M2K_BT
+    if (code == SETTING(24)) {
+        bt_sync_put(choice_of(K_BSYN, nv));
+    } else
+#endif
     if (code == SETTING(16)) {
         ui.proj_sel = (uint8_t)((nv * M2K_PROJECTS) >> 7);
         ui.load_t = 0;
@@ -1798,7 +1845,11 @@ static void button_event(int b, int down)
         break;
     case B_ARP: go(PG_ARP); break;
 
+#if M2K_BT
+    case B_PLAY: bt_ui = sq.playing ? 2u : 1u; break;      /* (FM-Link acts on it: m2k_bt_block, the next block) */
+#else
     case B_PLAY: seq_play(!sq.playing); break;
+#endif
     case B_OCTD: case B_OCTU: {
         int d = b == B_OCTU ? 1 : -1;
         if (ui.grid && ui.nheld) held_step_edit(0, d);
@@ -1813,6 +1864,9 @@ static void button_event(int b, int down)
 void m2k_button(int b, int down)
 {
     if (b < 0 || b >= B_COUNT) return;
+#if M2K_BT
+    if (bt_page_btn(b, down)) return;
+#endif
     syn_sub_check();
     button_event(b, down);
     syn_sub_check();
@@ -1870,6 +1924,9 @@ void m2k_tempo(int d)
 void m2k_encoder(int e, int d)
 {
     if (!d) return;
+#if M2K_BT
+    if (bt_page_enc(e, d)) return;
+#endif
     syn_sub_check();
     if (e != E_MASTER) ui.card_used = 1;          /* (the master is a pot: it can drift) */
     m2k_pattern_t *p = PAT(cur_pat);
@@ -1983,6 +2040,9 @@ static void header(void)
     if (ui.grid) { int w = text_w(&F_S, "GRID", 1) + 6; tag(xr - w, 0, "GRID", 0); xr -= w + 4; }
     if (ui.pads) { int w = text_w(&F_S, "PADS", 1) + 6; tag(xr - w, 0, "PADS", 0); xr -= w + 4; }
     if (sq.fill) { int w = text_w(&F_S, "FILL", 1) + 6; tag(xr - w, 0, "FILL", 1); xr -= w + 4; }
+#if M2K_BT
+    xr -= bt_head(xr);                                 /* the Bluetooth's: none, struck, solid */
+#endif
     /* left: the page, the track, its machine; what does not fit is left out */
     char o[24];
     page_label(ui.page, ui.sub, o);
@@ -2130,7 +2190,11 @@ static void mark_3d(int x, int y, int m)
         }
         return;
     }
+#if M2K_BT
+    blit(icon_frame(m, f), ICON_N, ICON_N, x, y - lift, 1);   /* (run-length coded in this build) */
+#else
     blit(ICON_BITS[m][f], ICON_N, ICON_N, x, y - lift, 1);
+#endif
 }
 
 /* one mark a machine, the current one filled; 5 px apart, so all of them fit the column (fifteen: 75 px of its 88) */
@@ -2837,6 +2901,9 @@ static void step_card(void)
 static void param_page(void)
 {
     /* the knob turned last, while its value shows; one a layer gave (PERFORM's, SEQ's) and the page has not is none */
+#if M2K_BT
+    if (bt_page_up()) { bt_page_draw(); return; }
+#endif
     int fcode = knob_at(ui.focus), fresh = ui.focus_t && ui.now - ui.focus_t < 2500 && fcode != NONE;
     if (ui.grid && ui.nheld && !fresh) step_card();
     else if (ui.page == PG_SYN && (!fresh || (ui.card_t && ui.now - ui.card_t < 1500))) machine_card();
@@ -3172,6 +3239,9 @@ static void overlays(void)
     hline(0, hgt, 240, 1);
 }
 
+#if M2K_BT
+static const uint8_t *present(void) { return fb_out; }   /* (the platform shows the negative: m2k_frame_negative) */
+#else
 static uint8_t fb_show[M2K_FB_BYTES];
 
 static const uint8_t *present(void)
@@ -3180,6 +3250,7 @@ static const uint8_t *present(void)
     for (int i = 0; i < M2K_FB_BYTES; i++) fb_show[i] = (uint8_t)~fb_out[i];
     return fb_show;
 }
+#endif
 
 void m2k_render_ui_tick(void);
 
@@ -3188,6 +3259,9 @@ const uint8_t *m2k_frame(uint32_t ms)
     uint32_t dt = ui.now ? ms - ui.now : 16;
     if (ui.boot_t0 == 0xFFFFFFFFu) ui.boot_t0 = ms;
     ui.now = ms;
+#if M2K_BT
+    bt_page_track();
+#endif
     if (sq.full) { sq.full = 0; toast("PATTERNS FULL", "THE NEXT DID NOT OPEN"); }
     /* what the audio did */
     int boost = 0;

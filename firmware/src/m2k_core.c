@@ -5,6 +5,9 @@
 #include "m2k_waves64.h"
 #include "m2k_fonts.h"
 #include "m2k_icons.h"
+#if M2K_BT
+#include "m2k_icons_rle.h"                      /* (the FM-1's Bluetooth build: tools/fm1/gen_icons_rle.py, at build) */
+#endif
 
 #define CLAMP(v, lo, hi) ((v) < (lo) ? (lo) : (v) > (hi) ? (hi) : (v))
 
@@ -114,3 +117,6 @@ static uint32_t prof_t;
 #include "m2k_seq.c"
 #include "m2k_gfx.c"
 #include "m2k_ui.c"
+#if M2K_BT
+#include "m2k_bt.c"                             /* the FM-1's Bluetooth build: the core's side */
+#endif

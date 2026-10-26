@@ -219,7 +219,12 @@ static void img_clear(m2k_img_t *im, const char *name)
     m_set(im->len, 0, sizeof im->len);
 }
 
+#if M2K_BT
+static m2k_pattern_t pat_tmp;                /* (the FM-1's Bluetooth build: in RAM, the pool has the BT heap and the
+                                              * second core's stacks) */
+#else
 static m2k_pattern_t pat_tmp POOL;           /* scratch: the factory's blank, an old demo read back */
+#endif
 static void pattern_init_blank(m2k_pattern_t *p);
 
 /* a blank pattern (INIT) packed: in an image it takes no bytes (its length 0), as an empty slot reads */

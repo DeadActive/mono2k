@@ -153,4 +153,46 @@ void m2k_track(int t);                              /* select a track, as SELECT
 void m2k_mute(int t);                               /* mute or unmute a track of the pattern */
 void m2k_tempo(int d);                              /* the tempo up or down by d BPM */
 
+#if M2K_BT
+/* ---- the FM-1's Bluetooth build (tools/fm1/build.py FELUCCA_BLE=1 sets M2K_BT; BLE MIDI: 2026 DEADACTIVE): the
+ * core's side of it. The Bluetooth itself is the platform's (firmware/fm1/bt_*.c); the browser's and the host's builds
+ * never set M2K_BT (the host's Bluetooth tests do, with stand-ins for the platform's half) */
+/* the core's, for the platform */
+int m2k_frame_negative(void);                       /* the frame is to be shown as its negative (S_SCREEN dark): the
+                                                     * platform swaps ink and paper (no second frame buffer) */
+void m2k_toast(const char *a, const char *b);       /* a message, as the core's own */
+int m2k_ext_clock(void);                            /* 1 while the sequencer plays to a MIDI clock in */
+void m2k_bt_tempo(uint32_t bpm);                    /* FM-Link's follower: the leader's tempo (0: the pattern's own) */
+void m2k_smc_in(uint32_t pkt);                      /* the M-VAVE SMC-Mixer's DAW layout: a USB-MIDI packet from it */
+void m2k_smc_link(int up);                          /* its link up / down (everything sent again on the next) */
+void m2k_smc_frame(void);                           /* its LEDs and fader positions, through m2k_bt_send */
+/* the platform's, for the core */
+int m2k_bt_send(const uint8_t *m, int n);           /* MIDI out to the BLE device now: 1 queued, 0 no room (try later) */
+/* each control block, before the sequencer: FM-Link's transport. ui: the panel's request since the last block (0 none,
+ * 1 PLAY, 2 STOP); playing, the tempo (BPM) and the samples a beat; returns the request to act on (0 none, 1 PLAY,
+ * 2 STOP, 3 PLAY from the top) and in *adv the frames the sequencer advances this block (M2K_SUB, one more or less) */
+uint32_t m2k_bt_block(uint32_t ui, int playing, uint32_t bpm, uint32_t spb, uint32_t *adv);
+/* the Bluetooth page, GLO's sixth (BT): the platform keeps its rows and what they do, the core draws them */
+#define M2K_BT_LINES 10
+typedef struct {
+    char label[24], tag[6], value[8];
+    uint8_t sel, lit, dot;                          /* the cursor's; the value lit; 2 a connected device's dot, 1 a ring */
+} m2k_bt_line_t;
+typedef struct {
+    char state[32], dim[32], timing[32], keys[32];  /* the state line, the dim line (the last error, else the audio's
+                                                     * longest gap), the timing line (the late and short halves), the
+                                                     * key line */
+    uint8_t ask;                                    /* the state line asks (FORGET <name>?) */
+    uint8_t n, rule;                                /* lines; a rule above line `rule` (the devices; 0 none) */
+    m2k_bt_line_t line[M2K_BT_LINES];
+} m2k_bt_view_t;
+const m2k_bt_view_t *m2k_bt_view(void);             /* the page as it stands */
+void m2k_bt_page(int open);                         /* GLO > BT shown / left */
+void m2k_bt_input(int cursor, int knob, int oct);   /* on the page: PRESETS' detents, KNOB 1..4's (summed), OCT- 1 OCT+ 2 */
+int m2k_bt_icon(void);                              /* the header's BT: 0 none (off), 1 struck (on, no link), 2 lit */
+int m2k_bt_sync(void);                              /* GLO > MIDI's SYNC IN: 0 OFF, 1 ON (any clock), 2 BLE (the BLE
+                                                     * device's only), 3 LINK (FM-Link's follower) */
+void m2k_bt_sync_set(int v);
+#endif
+
 #endif

@@ -156,7 +156,13 @@ static void delay_block(int ti, const int32_t *restrict in, int32_t *restrict L,
 
 /* ------------------------------------------------------------------------------------------------ the bus */
 
+#if M2K_BT
+#define GL_LEN 8192u                   /* the FM-1's Bluetooth build: half the ring (0.37 s at half rate), the pool's room
+                                        * for the BT stack's heap; a slice is at most half the ring, as below */
+#else
 #define GL_LEN 16384u
+#endif
+#define GL_SLICE (GL_LEN / 2u)         /* a repeat's longest slice: a repeat never reads what the ring wrote over */
 static int16_t gl_buf[GL_LEN][2] POOL;
 static int16_t tp_buf[2048][2] POOL;
 static const uint16_t CB_LEN[4] = {557, 593, 641, 677};
@@ -220,7 +226,7 @@ static void bus_perform(int k, int down)
     static const uint8_t SIXT[4] = {16, 8, 4, 2};        /* a quarter, an eighth, a sixteenth, a thirty-second, in eighths of a sixteenth */
     uint32_t half_step = sps_q8 >> 9;                     /* a sixteenth in half-rate samples */
     uint32_t len = k <= PF_R32 ? (half_step * SIXT[k]) >> 2 : half_step * 4;
-    len = CLAMP(len, 64u, 8192u);
+    len = CLAMP(len, 64u, GL_SLICE);
     bus.g_len = len;
     bus.g_start = bus.gw - len;
     bus.g_left = 0x7FFFFFFFu;                             /* until it is let go */
@@ -241,7 +247,7 @@ static void bus_step(void)
     int n = (g[G_GSIZ] * 5) >> 7;
     uint32_t half_step = sps_q8 >> 9;                           /* a sixteenth in half-rate samples */
     uint32_t len = (half_step * frac4[n]) >> 2;
-    len = CLAMP(len, 64u, 8192u);
+    len = CLAMP(len, 64u, GL_SLICE);
     uint32_t dur = half_step > len ? half_step : len * 2;
     if (rnd32() & 1) dur *= 2;
     dur = CLAMP(dur, len, GL_LEN - len - 256);

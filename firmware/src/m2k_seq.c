@@ -103,6 +103,19 @@ static inline const uint8_t *G(void) { return PAT(cur_pat)->glob; }
 static inline uint32_t seq_bpm(void) { return ext_bpm ? ext_bpm : 30u + G()[G_TMPO]; }
 static inline int seq_len(void) { int l = G()[G_LEN]; return l < 1 ? 1 : l > 64 ? 64 : l; }
 
+#if M2K_BT
+/* the FM-1's Bluetooth build: FM-Link (the platform's m2k_bt_block) holds the panel's PLAY / STOP until it acts on
+ * them, sets the follower's tempo and advances a block by a sample more or less */
+static uint32_t bt_bpm;                /* the leader's tempo (m2k_bt_tempo; 0 none) */
+static uint32_t bt_adv = M2K_SUB;      /* this block's advance */
+static uint8_t bt_ui;                  /* the panel's request: 1 PLAY, 2 STOP */
+#define SEQ_ADV ((int32_t)bt_adv << 8)
+void m2k_bt_tempo(uint32_t bpm) { bt_bpm = bpm >= 30u && bpm <= 300u ? bpm : 0u; }
+int m2k_ext_clock(void) { return mx.ext; }
+#else
+#define SEQ_ADV (M2K_SUB << 8)
+#endif
+
 static void seq_tempo(void)
 {
     if (mx.ext && mx.per_q8) {         /* the clock in's: 24 pulses a beat, six a step */
@@ -111,6 +124,14 @@ static void seq_tempo(void)
         ext_bpm = (bpm10 + 5u) / 10u;
         return;
     }
+#if M2K_BT
+    if (bt_bpm) {                      /* FM-Link's follower: the leader's */
+        ext_bpm = bt_bpm;
+        bpm10 = bt_bpm * 10u;
+        sps_q8 = 169344000u / bt_bpm;
+        return;
+    }
+#endif
     ext_bpm = 0;
     uint32_t b = seq_bpm();
     bpm10 = b * 10u;
@@ -327,7 +348,7 @@ static void tracks_off_1x(void)
             }
         }
         if (c == 4 || sq.relock) continue;              /* (after a continue: placed by the first step) */
-        sq.tctr[t] -= M2K_SUB << 8;
+        sq.tctr[t] -= SEQ_ADV;
         while (sq.tctr[t] <= 0) {
             uint32_t k = sq.tk[t], p = k * SPD_NUM[c] / SPD_DEN[c];
             if (p >= sq.n1x && track_meets(c, k, p)) { sq.tctr[t] = 0; break; }
@@ -389,10 +410,26 @@ static int step_fire(int32_t ph)
     return s;
 }
 
+static void seq_play(int on);
+
 static void seq_block(void)
 {
     sq.tick++;
     mx.now += M2K_SUB;
+#if M2K_BT
+    {
+        uint32_t req, adv = M2K_SUB, ui_req = bt_ui;
+        bt_ui = 0;
+        req = m2k_bt_block(ui_req, sq.playing, seq_bpm() > 255u ? 255u : seq_bpm(), (sps_q8 * 4u) >> 8, &adv);
+        if (req == 1u || req == 3u) {
+            if (sq.playing) seq_play(0);
+            seq_play(1);
+        } else if (req == 2u && sq.playing) {
+            seq_play(0);
+        }
+        bt_adv = adv <= 2u * M2K_SUB ? adv : M2K_SUB;
+    }
+#endif
     seq_tempo();
     if (sq.playing && mx.ext) {        /* the clock in's pulse armed the step; an odd step waits for its swing */
         if (sq.ctr > 0) sq.ctr -= M2K_SUB << 8;   /* (the next step as expected, for REC; no further than due) */
@@ -402,7 +439,7 @@ static void seq_block(void)
         }
         tracks_off_1x();                /* (off 1x: on the tempo the clock gives, put back on its steps) */
     } else if (sq.playing) {
-        sq.ctr -= M2K_SUB << 8;
+        sq.ctr -= SEQ_ADV;
         while (sq.ctr <= 0) {
             int s = step_fire(sq.ctr + (M2K_SUB << 8));
             sq.ctr += step_len(s);
