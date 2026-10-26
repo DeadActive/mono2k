@@ -18,8 +18,20 @@
 #define BANK_LEN 0x00020000u
 #define CV_MAX (240u * 18u)                     /* the platform's text: a line of FONT_S at a time (crash, update, rescue) */
 #define APP_SYSEX app_sysex                     /* the Patch Editor's link (below) */
+#ifndef FELUCCA_BLE
+#define FELUCCA_BLE 0                           /* the Bluetooth build (tools/fm1/build.py FELUCCA_BLE=1, one core): BLE MIDI,
+                                                 * FM-Link, the SMC-Mixer; firmware/src/ble/ (its own unit) and bt_*.c here */
+#endif
+#if FELUCCA_BLE
+#define M2K_BT 1                                /* (m2k.h: the core's Bluetooth API, the core built with it too) */
+#define BTS_AT 0x000BE000u                      /* the Bluetooth record, two copies: the two sectors under the store (the
+                                                 * family's data area, which MONO2K leaves unused below BANK_AT) */
+#endif
 #include "platform.c"
 #include "m2k.h"                                 /* the core: its own unit (core.o), its API alone */
+#if FELUCCA_BLE
+#include "ble/ble_core.h"                       /* the BLE unit's entry points (ble/ble.c, its own object) */
+#endif
 
 /* ---- the sound: the ring the main loop fills and the audio interrupt empties */
 #define BLK 128u                                /* frames a render */
@@ -28,9 +40,24 @@ static int16_t ring[RING][BLK * 2u];           /* (RAM, not the pool: the core's
 static volatile uint32_t ring_w, ring_r;        /* blocks written / read, free-running */
 static volatile uint32_t ring_short;            /* halves the interrupt found the ring short for */
 
+#if FELUCCA_BLE
+/* the Bluetooth build: each half's tick (FM-Link: when a block rendered ahead is heard) and the ring's place then; the
+ * longest gap between two halves (the BT libraries hold the interrupts off up to ~12 ms; a half is 5.8 ms): since the
+ * page opened, for its dim line */
+static volatile uint32_t bt_a_t0, bt_a_r0, bt_a_gap;
+#endif
+
 static void app_audio(int32_t *out, uint32_t n)
 {
     uint32_t i, f = 0;
+#if FELUCCA_BLE
+    {
+        uint32_t t = fm1_ticks(), g = t - bt_a_t0;
+        if (bt_a_t0 && g > bt_a_gap) bt_a_gap = g;
+        bt_a_t0 = t;
+        bt_a_r0 = ring_r;
+    }
+#endif
     while (f < n) {
         if (ring_w == ring_r) {                 /* the loop fell behind: silence, counted */
             ring_short++;
@@ -48,11 +75,19 @@ static void app_audio(int32_t *out, uint32_t n)
  * watchdog (the sound would stutter, the FM-1 would not reset) */
 static uint32_t load_ticks, load_frames;        /* render time against the frames rendered, the meter's */
 
+#if FELUCCA_BLE
+static uint32_t bt_blk_t;                       /* the tick the next control block is heard at (m2k_bt_block) */
+static void bt_heard(uint32_t w);               /* bt_fml.c */
+#endif
+
 static void render_ahead(void)
 {
     uint32_t k;
     for (k = 0; k < RING / 2u && ring_w - ring_r < RING; k++) {
         uint32_t t0 = fm1_ticks();
+#if FELUCCA_BLE
+        bt_heard(ring_w);
+#endif
         m2k_render(ring[ring_w % RING], (int)BLK);
         load_ticks += fm1_ticks() - t0;
         load_frames += BLK;
@@ -73,11 +108,23 @@ static void par_end(void) { audio_worker_join(); job_ticks += audio_worker.last_
 /* ---- MIDI out (GLO > MIDI's clock and notes): each message once the interrupt has taken the sound it belongs to
  * (the ring runs ahead of the speaker; sent at render time it would run 17 ms ahead of the sound). USB only: the
  * FM-1's TRS jack is an input */
+#if FELUCCA_BLE
+static void bt_out_mirror(const uint8_t *m, int n);   /* bt_midi.c: to the BLE device too (MIDI mode) */
+static int bt_rx_get(uint8_t *st, uint8_t *d1, uint8_t *d2);   /* bt_midi.c: the BLE device's MIDI */
+static int bt_rt_ok(uint32_t st, int ble);      /* bt_set.c: a realtime byte from USB / TRS (0) or BLE (1) followed */
+#endif
 static void midi_drain(void)
 {
     uint8_t m[3];
     int n;
+#if FELUCCA_BLE
+    while ((n = m2k_midi_out(m, ring_r * BLK)) > 0) {
+        midi_send(m[0], n > 1 ? m[1] : 0u, n > 2 ? m[2] : 0u);
+        bt_out_mirror(m, n);
+    }
+#else
     while ((n = m2k_midi_out(m, ring_r * BLK)) > 0) midi_send(m[0], n > 1 ? m[1] : 0u, n > 2 ? m[2] : 0u);
+#endif
 }
 
 /* ---- the panel: the platform's ids (platform.c) to the core's (m2k.h) */
@@ -100,7 +147,14 @@ static void take_panel(void)
         if (d) m2k_encoder(ENC_OF[i], d);
     }
     uint8_t st, d1, d2;
+#if FELUCCA_BLE
+    while (midi_get(&st, &d1, &d2))
+        if (bt_rt_ok(st, 0)) m2k_midi(st, d1, d2);
+    while (bt_rx_get(&st, &d1, &d2))            /* the BLE device's, after USB's and TRS's */
+        if (bt_rt_ok(st, 1)) m2k_midi(st, d1, d2);
+#else
     while (midi_get(&st, &d1, &d2)) m2k_midi(st, d1, d2);
+#endif
 }
 
 /* ---- a test build's meter (M2K_FM1_DIAG): over the top 16 lines, in red, shares of real time in %: CPU the first
@@ -168,8 +222,22 @@ static const uint16_t *diag_glyph(char c)
  * of ROWS lines where they changed since the last sent */
 #define ROWS 8u
 #define NSTRIP (240u / ROWS)
+#if FELUCCA_BLE
+/* the Bluetooth build (its RAM): what the panel shows as a checksum a strip (the negative in it), and one strip
+ * buffer (screen_send fills one only once the last has gone out: lcd_idle) */
+static uint32_t shown_sum[NSTRIP];
+static uint16_t strip[1][240u * ROWS];
+static uint8_t frame_neg;                       /* the frame shown as its negative (the core's S_SCREEN dark) */
+static uint32_t strip_sum(const uint8_t *p)
+{
+    uint32_t h = 2166136261u ^ frame_neg, i;
+    for (i = 0; i < ROWS * 30u; i++) h = (h ^ p[i]) * 16777619u;
+    return h;
+}
+#else
 static uint8_t shown[M2K_FB_BYTES];             /* what the panel shows */
 static uint16_t strip[2][240u * ROWS];          /* two: one fills while the other goes out */
+#endif
 static uint8_t todo[NSTRIP], pending, sbuf;
 static const uint8_t *frame;
 
@@ -183,6 +251,14 @@ static void screen_frame(void)
     frame_ms = fm1_ms;
     frame = m2k_frame(fm1_ms);
     frame_ticks += fm1_ticks() - t0;
+#if FELUCCA_BLE
+    frame_neg = (uint8_t)m2k_frame_negative();
+    (void)i;
+    for (s = 0; s < NSTRIP; s++) {
+        todo[s] = strip_sum(frame + s * ROWS * 30u) != shown_sum[s];
+        pending += todo[s];
+    }
+#else
     for (s = 0; s < NSTRIP; s++) {
         const uint8_t *a = frame + s * ROWS * 30u, *b = shown + s * ROWS * 30u;
         for (i = 0; i < ROWS * 30u && a[i] == b[i]; i++)
@@ -190,12 +266,17 @@ static void screen_frame(void)
         todo[s] = i < ROWS * 30u;
         pending += todo[s];
     }
+#endif
 }
 
 static void screen_send(void)                   /* one strip, if the last has gone out */
 {
     uint32_t s, x, y;
+#if FELUCCA_BLE
+    uint16_t ink = be16(frame_neg ? 0xFFFFu : 0x0000u), paper = be16(frame_neg ? 0x0000u : 0xFFFFu);   /* (the negative) */
+#else
     uint16_t ink = be16(0x0000u), paper = be16(0xFFFFu);   /* pure black and white: the panel's most contrast */
+#endif
     if (!pending || !lcd_idle())
         return;
     for (s = 0; s < NSTRIP && !todo[s]; s++)
@@ -207,7 +288,11 @@ static void screen_send(void)                   /* one strip, if the last has go
     for (y = 0; y < ROWS; y++)
         for (x = 0; x < 240u; x++)
             px[y * 240u + x] = src[y * 30u + (x >> 3)] >> (7u - (x & 7u)) & 1u ? ink : paper;
+#if FELUCCA_BLE
+    shown_sum[s] = strip_sum(src);
+#else
     memcpy(shown + s * ROWS * 30u, src, ROWS * 30u);
+#endif
     if (M2K_FM1_DIAG && s < 2u) {               /* the meter over the first two strips (resent each frame) */
         uint16_t red = be16(RGB(255, 0, 0));
         uint32_t c, gx = 2;
@@ -221,10 +306,18 @@ static void screen_send(void)                   /* one strip, if the last has go
         }
         if (fm1_ms - diag_short_ms < 1000u && diag_last_short)
             for (y = 0; y < ROWS; y++) for (x = 232; x < 240u; x++) px[y * 240u + x] = red;
+#if FELUCCA_BLE
+        shown_sum[s] ^= 1u;                     /* so the next frame sends this strip again */
+#else
         shown[s * ROWS * 30u] ^= 0x01u;         /* so the next frame sends this strip again */
+#endif
     }
     lcd_blit(0, s * ROWS, 240, ROWS, px);
+#if FELUCCA_BLE
+    sbuf = 0;
+#else
     sbuf ^= 1u;
+#endif
     todo[s] = 0;
     pending--;
 }
@@ -239,9 +332,27 @@ static void lights(void)
 }
 
 #include "m2k_link.c"                          /* the store and the Patch Editor's link */
+#if FELUCCA_BLE
+/* BLE MIDI: 2026 DEADACTIVE. The Bluetooth build's features, on the platform and the core's M2K_BT API */
+static uint8_t bt_boot_clean;                   /* (bt_page.c AUTOSTART: the start before this one was clean) */
+#include "bt_store.c"                           /* the Bluetooth record: two copies, BTS_AT */
+#include "bt_set.c"                             /* MODE, AUTOSTART, ROLE, RECONNECT, SYNC IN's BLE / LINK */
+#include "bt_midi.c"                            /* MIDI mode: in (its ring, take_panel), out (the core's MIDI out mirrored) */
+#include "bt_fml.c"                             /* FM-Link: two FM-1s in time (fmlink.c, Felucca's) */
+#include "bt_devs.c"                            /* the saved devices, this FM-1's address, the radio calibration's copy */
+#include "bt_page.c"                            /* the Bluetooth page's rows and keys (the core draws it), the header's BT */
+#include "core_ble_api.c"                       /* the core functions the BLE unit calls (ble/ble_core.h), bt_service */
+#endif
 
+#if FELUCCA_BLE
+__attribute__((noinline))                       /* (a function of its own: gate 3 walks the main loop from it) */
+#endif
 static void app_init(void)
 {
+#if FELUCCA_BLE
+    bt_boot_clean = !(fm1_boot.p3_rst & (4u | 0x40u));   /* (AUTOSTART: no watchdog, no soft reset before this start) */
+    bts_load();                                 /* the Bluetooth record, before the first render (no flash read in one) */
+#endif
 #if DINGHY_DUAL_CORE
     if (audio_worker_online) { m2k_par_begin = par_begin; m2k_par_end = par_end; }
 #endif
@@ -252,9 +363,15 @@ static void app_init(void)
     screen_frame();
 }
 
+#if FELUCCA_BLE
+__attribute__((noinline))                       /* (a function of its own: gate 3 walks the main loop from it) */
+#endif
 static void app_loop(void)
 {
     if (M2K_FM1_DIAG) diag_tick();
+#if FELUCCA_BLE
+    bt_service();                               /* the BT stack's slice (at most 5 ms) and the Bluetooth features' work */
+#endif
     render_ahead();
     take_panel();
     midi_drain();
@@ -271,4 +388,7 @@ static void app_loop(void)
         store_save();
         save_due = 0;
     }
+#if FELUCCA_BLE
+    bt_store_frame(!m2k_playing() && !lk_open && !save_due);   /* the Bluetooth record, saved as the store is */
+#endif
 }

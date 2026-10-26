@@ -13,7 +13,7 @@
  * enter/exit_wifi_rf_trim_region turn interrupts off; build.py's reach check: .ram_text reaches nothing in XIP).
  * build.py fails the link on any other *ram_code* section.
  * BLE MIDI: 2026 DEADACTIVE (from Felucca's ble-kit app_ble.ld, as OberVave's; Hortator, fm1-lsdj 548ce73)
- * Felucca memory map (MONO2K's app.ld, CS-1's; one core: no .cpu1_stacks, so a second core's stacks fail the link).
+ * Felucca memory map (MONO2K's app.ld, CS-1's: the second core's stacks after the pool's buffers, as there).
  * Code + constants execute in place from XIP (app.bin offset 0 = 0x02000120).
  * 0x01C00000..0x01C06000 holds .ram_text (code that must run while the flash
  * is busy: the flash driver; here also the radio calibration); 0x01C06000..0x01C08000 stays for RAM-run debug.
@@ -65,6 +65,13 @@ SECTIONS
         . = ALIGN(4); _bss_end = .;
     } > RAM
     .pool (NOLOAD) : { _pool_start = .; *(.pool*) . = ALIGN(4); _pool_end = .; } > POOL
+    .cpu1_stacks (NOLOAD) : {                 /* dual-core: CPU1's 4 KiB user + 4 KiB supervisor stacks (as app.ld) */
+        . = ALIGN(32); _cpu1_stacks_lo = .;
+        KEEP(*(.cpu1_stacks))
+        . = ALIGN(32); _cpu1_stacks_hi = .;
+    } > POOL
+    _cpu1_ustack_top = _cpu1_stacks_lo + 4096;
+    _cpu1_sstack_top = _cpu1_stacks_lo + 8192;
     .noinit (NOLOAD) : { *(.noinit*) } > NOINIT
     _guard0 = 0x01C74000; _ustack_lo = 0x01C74100; _ustack_top = 0x01C7A000;
     _guard1 = 0x01C7A000; _sstack_lo = 0x01C7A100; _sstack_top = 0x01C7C000;

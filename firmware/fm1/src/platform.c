@@ -133,9 +133,23 @@ static volatile uint32_t fm1_ms;                /* milliseconds since power-on (
 #define BANK_AT 0x00098000u                     /* the user presets: one 4 KiB sector of the family's data area */
 #define BANK_LEN 0x1000u
 #endif
+#if FELUCCA_BLE
+/* the Bluetooth build (BLE MIDI: 2026 DEADACTIVE): the Bluetooth record's two sectors too (the app's BTS_AT). Nothing
+ * of the stock config store (0xE5000..0xFBFFF, where the radio calibration the Bluetooth start needs is kept): the
+ * update's staging ends below it, the settings sector is above it */
+#define FL_RANGE_OK(off, n) (FL_IN(off, n, FL_OTA_LO, FL_OTA_HI) || FL_IN(off, n, SETTINGS_AT, SETTINGS_AT + 0x1000u) || \
+                             FL_IN(off, n, BANK_AT, BANK_AT + BANK_LEN) || FL_IN(off, n, BTS_AT, BTS_AT + 0x2000u))
+#else
 #define FL_RANGE_OK(off, n) (FL_IN(off, n, FL_OTA_LO, FL_OTA_HI) || FL_IN(off, n, SETTINGS_AT, SETTINGS_AT + 0x1000u) || \
                              FL_IN(off, n, BANK_AT, BANK_AT + BANK_LEN))
+#endif
 #include "fm1_flash.h"
+#if FELUCCA_BLE
+_Static_assert(BTS_AT + 0x2000u <= BANK_AT || BTS_AT >= BANK_AT + BANK_LEN, "the Bluetooth record: outside the store");
+_Static_assert(BTS_AT >= 0x93000u && BTS_AT + 0x2000u <= 0xE0000u, "the Bluetooth record: in the data area, below the staging");
+_Static_assert(FL_OTA_HI <= 0xE5000u && SETTINGS_AT >= 0xFC000u && (BANK_AT + BANK_LEN <= 0xE5000u),
+               "no write range in the stock config store (the radio calibration)");
+#endif
 static uint8_t flash_ok;
 static int st_read(uint32_t off, void *dst, uint32_t n)
 {
