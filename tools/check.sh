@@ -81,5 +81,8 @@ echo "== the wave banks"
 echo "== the bus's controls"
 .venv/bin/python tools/bus_curves.py > "$B/bus.log" 2>&1 && tail -1 "$B/bus.log" | sed 's/^/  /' || { cat "$B/bus.log"; FAIL=1; }
 
+echo "== the FM-1's Bluetooth build: its host tests (BLE MIDI: 2026 DEADACTIVE)"
+PYTHON=.venv/bin/python sh tests/run_bt_tests.sh > "$B/bt.log" 2>&1 && tail -1 "$B/bt.log" | sed 's/^/  /' || { grep -E "FAIL" "$B/bt.log"; FAIL=1; }
+
 [ "$FAIL" -eq 0 ] && echo "check: passed" || echo "check: FAILED"
 exit "$FAIL"

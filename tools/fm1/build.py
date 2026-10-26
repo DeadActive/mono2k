@@ -210,11 +210,14 @@ def gate2c_listings(flags):
     g.mkdir(exist_ok=True)
     nomerge = ["-mllvm", "-enable-global-merge=false"]
     out = {}
-    for tag, fl, extra in (("plain", [f for f in flags if f != "-DFELUCCA_BLE=1"], []),
-                           ("ble", flags, [OUT / "ble_stub.o"])):
+    # the plain glue with the plain core (the core's M2K_BT side calls into the Bluetooth glue)
+    tc("cc", *[f for f in CFLAGS if f != "-Os"], "-O2", *CORE, "-Ifirmware/src", "-Ifirmware/gen", "-c",
+       ROOT / "firmware" / "src" / "m2k_core.c", "-o", g / "core_plain.o")
+    for tag, fl, core, extra in (("plain", [f for f in flags if f not in ("-DFELUCCA_BLE=1", *BLE_FLAGS)], g / "core_plain.o", []),
+                                 ("ble", flags, OUT / "core.o", [OUT / "ble_stub.o"])):
         tc("cc", *fl, *nomerge, "-c", FW / "m2k_fm1.c", "-o", g / f"{tag}.o")
         tc("pi32v2/bin/ld", "--gc-sections", "-e", "_start", "-T", FW / "app.ld", OUT / "crt0.o", OUT / "fm1_vec.o",
-           OUT / "fm1_isr.o", g / f"{tag}.o", OUT / "core.o", *extra, "-o", g / f"{tag}.elf")
+           OUT / "fm1_isr.o", g / f"{tag}.o", core, *extra, "-o", g / f"{tag}.elf")
         out[tag] = tc("common/bin/objdump", "-d", g / f"{tag}.elf")
         (g / f"{tag}.dis").write_text(out[tag])
     return out["plain"], out["ble"]
@@ -227,9 +230,12 @@ DUAL = 0 if os.environ.get("DUAL") == "0" else 1
 # the FM-1's build: one project of 64 patterns (bank A the demos, B-D INIT), two of them unpacked at a time, the rest
 # packed in a 46 KB working image (README: the FM-1 build)
 CORE = ["-DM2K_FW=1", "-DM2K_PATTERNS=64", "-DM2K_PAT_SLOTS=2", "-DM2K_PROJECTS=1", "-DM2K_IMG_DATA=47104"]
-# the Bluetooth build (FELUCCA_BLE=1): one core (DUAL 0: the BLE unit assumes one, and SLOOP's two-core Bluetooth build
-# lost its sound), the core's side of the Bluetooth page (M2K_BT), and the fit tools of PORTING.md section 7: no
-# console words (MONO2K has no serial console: BLE_CONSOLE=0), the BLE unit at -Oz
+# the Bluetooth build (FELUCCA_BLE=1): both cores, as the plain build (the user, 2026-10-26: one core cannot carry the
+# heavy demos, measured on the FM-1). The second core only runs the render's jobs, from inside m2k_render (the main
+# loop), joined before it returns; the BT stack, its tasks and every flash access run in the main loop outside the
+# render, so no flash access ever meets a job (tools/check_core1.py, gate 6). The core's side of the Bluetooth page
+# (M2K_BT), and the fit tools of PORTING.md section 7: no console words unless a serial port is built in (MONO2K has
+# none: BLE_CONSOLE=0; --diag-serial: 1), the BLE unit at -Oz
 BLE_FLAGS = ["-DBLE_CONSOLE=0"]
 BLE_CORE = ["-DM2K_BT=1"]
 BLE_OPT = "-Oz"
@@ -243,7 +249,10 @@ def build_app():
     core = [*CORE]
     if ble:                         # (the glue's unit, the BLE unit and the core agree on BLE_FLAGS)
         flags += ["-DFELUCCA_BLE=1", *BLE_FLAGS]
-        core += BLE_CORE
+        core += [*BLE_CORE, "-Ibuild/fm1/gen"]
+        # the machine marks run-length coded (the flash's room): made from firmware/gen/m2k_icons.h at every build
+        subprocess.run([sys.executable, str(ROOT / "tools" / "fm1" / "gen_icons_rle.py"), str(OUT / "gen" / "m2k_icons_rle.h")],
+                       check=True)
     cmds = [("cc", f"-DDINGHY_DUAL_CORE={DUAL}", "-c", FW / "crt0.S", "-o", OUT / "crt0.o"),
             ("cc", "-c", FW / "hal" / "fm1_vec.S", "-o", OUT / "fm1_vec.o"),
             ("cc", "-c", FW / "hal" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),
@@ -374,10 +383,15 @@ def rt_reach(rt):
     """Bluetooth builds (the radio calibration runs from .ram_text and calls within it; fm1-lsdj 548ce73): RAM code
     may call and jump only inside .ram_text, never through a register, and use no XIP address as data"""
     def in_rt(a): return 0x01C00000 <= a < 0x01C06000
-    bad, calls = [], 0
+    bad, calls, fn = [], 0, ""
     for ln in rt.splitlines():
+        lab = re.match(r"^([A-Za-z_$][\w.$]*):\s*$", ln)
+        if lab:
+            fn = lab.group(1)
         if not LINE.match(ln):
             continue
+        if fn == "audio_worker_loop" and re.search(r"\bcall\s+r\d+\b", ln):
+            continue                # (the second core's loop calls its job, from XIP by design: check()'s CPU1 part)
         if re.search(r"\b(call|goto)\s+r\d+\b", ln):
             bad.append(ln)
             continue
@@ -391,34 +405,51 @@ def rt_reach(rt):
 # the BT memory's place (OberVave's gate, after SLOOP's Bluetooth build lost its sound): every BT library section with
 # data the controller or the radio uses, and the BLE unit's heap and task stacks, where Felucca keeps them (the layout
 # the FM-1 has run Bluetooth with): the libraries' zeroed data (.bd_base, *_bss) in .bss of the RAM region, the heap
-# and stacks in .pool, nothing of either in the SRAM below the RAM region (0x01C00000..0x01C08000: RAM code only),
-# and no second core (no CPU1 entry, loop or stacks: the BLE unit runs on one core)
+# and stacks in .pool, nothing of either in the SRAM below the RAM region (0x01C00000..0x01C08000: RAM code only).
+# MONO2K's Bluetooth build keeps its second core (CS-1's audio worker): its loop in .ram_text (check()), its stacks
+# in .cpu1_stacks after the pool's buffers, overlapping none of the BT memory; one core (DUAL=0) has none of it
 BT_RAM_SECTIONS = re.compile(r"^ (\.bd_base|\.\w+_bss|\.btstack_pool|\.\w+_bulk)\s+(0x[0-9a-f]+)\s+(0x[0-9a-f]+)", re.M)
 CPU1_SYMS = re.compile(r"\s(fm1_core1_start|fm1_core1_main|audio_worker_loop|cpu1_stacks|_cpu1_stacks_lo)$", re.M)
 
 
-def ble_placement(mapfile, syms, regions):
-    """-> errors: a BT library's RAM section, the BLE heap or a task stack outside its region, or a second core"""
-    errors = []
+def ble_placement(mapfile, syms, regions, dual=False):
+    """-> errors: a BT library's RAM section, the BLE heap or a task stack outside its region, the second core's
+    stacks over any of them (two cores), or a second core at all (one core)"""
+    errors, bt = [], []
     ram_org, ram_len = regions["RAM"]
     pool_org, pool_len = regions["POOL"]
     for name, at, size in BT_RAM_SECTIONS.findall(mapfile):
         a, n = int(at, 16), int(size, 16)
         if n and not (ram_org <= a and a + n <= ram_org + ram_len):
             errors.append(f"BT section {name} at {a:#x} ({n} B) is outside the RAM region")
+        if n:
+            bt.append((name, a, n))
 
     def sym(name):
-        m = re.search(r"^([0-9a-f]+) .*\s" + re.escape(name) + r"$", syms, re.M)
-        return int(m.group(1), 16) if m else None
+        m = re.search(r"^([0-9a-f]+) .*\s([0-9a-f]+)\s+" + re.escape(name) + r"$", syms, re.M)
+        return (int(m.group(1), 16), int(m.group(2), 16)) if m else None
     for name in ("ble_heap", "tasks"):           # (ble.c, ble_os.c: both in .pool)
         a = sym(name)
         if a is None:
             errors.append(f"BLE unit's {name} not found")
-        elif not pool_org <= a < pool_org + pool_len:
-            errors.append(f"BLE unit's {name} at {a:#x} is outside the pool")
-    c1 = CPU1_SYMS.findall(syms)
-    if c1:
-        errors.append(f"second-core code or stack linked ({', '.join(sorted(set(c1)))}): the BLE unit runs on one core")
+        elif not pool_org <= a[0] < pool_org + pool_len:
+            errors.append(f"BLE unit's {name} at {a[0]:#x} is outside the pool")
+        else:
+            bt.append((name, a[0], a[1]))
+    c1 = sorted(set(CPU1_SYMS.findall(syms)))
+    if not dual and c1:
+        errors.append(f"second-core code or stack linked ({', '.join(c1)}): this build runs one core")
+    if dual:
+        st = sym("cpu1_stacks")
+        if st is None:
+            errors.append("two cores: the second core's stacks (cpu1_stacks) not found")
+        else:
+            lo, hi = st[0], st[0] + st[1]
+            if not pool_org <= lo and hi <= pool_org + pool_len:
+                errors.append(f"the second core's stacks at {lo:#x} are outside the pool region")
+            for name, a, n in bt:
+                if a < hi and lo < a + n:
+                    errors.append(f"the second core's stacks ({lo:#x}..{hi:#x}) overlap {name} ({a:#x}, {n} B)")
     return errors
 
 
@@ -471,7 +502,7 @@ def check(img, syms, dis, rt, ble=False, measure=False):
     if len(img) > APP_SLOT:
         soft.append(f"the image, {len(img)} B, is bigger than the app slot ({APP_SLOT} B)")
     ram = sym("_bss_end") - 0x01C08000
-    pool = sym("_pool_end") - (sym("_pool_start") if measure else 0x01C20000)
+    pool = max(sym("_pool_end"), sym("_cpu1_stacks_hi")) - (sym("_pool_start") if measure else 0x01C20000)
     if ble:
         notes.append(f"image {len(img)} B of {APP_SLOT} ({APP_SLOT - len(img)} B free); RAM .data+.bss {ram} B of "
                      f"98304 ({98304 - ram} B spare); pool {pool} B of 344064 ({344064 - pool} B spare); "
@@ -480,11 +511,12 @@ def check(img, syms, dis, rt, ble=False, measure=False):
             soft.append(f"RAM headroom {98304 - ram} B < {BLE_RAM_FLOOR} B")
         if 344064 - pool < BLE_POOL_FLOOR:
             soft.append(f"pool headroom {344064 - pool} B < {BLE_POOL_FLOOR} B")
-        placed = ble_placement((OUT / "mono2k.map").read_text(), syms, ld_regions())
+        placed = ble_placement((OUT / "mono2k.map").read_text(), syms, ld_regions(), dual=bool(DUAL))
         (notes if measure else errors).extend(placed)
         if not placed:
             notes.append("BT memory: the libraries' zeroed data in .bss of the RAM region, the heap and task stacks "
-                         "in .pool, nothing below 0x01C08000 but RAM code, one core")
+                         "in .pool, nothing below 0x01C08000 but RAM code" +
+                         (", the second core's stacks clear of all of it" if DUAL else ", one core"))
     else:
         notes.append(f"image {len(img)} B of {APP_SLOT}; RAM .data+.bss {ram} B of 98304; pool {pool} B of 344064; "
                      f"RAM code {sym('_rt_end') - 0x01C00000} B of 24576")
@@ -507,8 +539,6 @@ def main():
     global DUAL
     ble = is_ble()
     measure = ble and os.environ.get("BLE_MEASURE") == "1"
-    if ble:
-        DUAL = 0
     name = "mono2k.fwsc"
     if a.diag:
         CORE.extend(["-DM2K_FM1_DIAG=1"])
@@ -538,8 +568,16 @@ def main():
         ref = cup.selected(cup.functions(ref_dis))
         e2a = cup.source_errors(base)
         e2b = cup.compare(dis, cup.render(ref))
+        if not DUAL:                # (one core: what its single users make of fm1_reboot)
+            cup.KNOWN_2C.update(cup.KNOWN_2C_ONE_CORE)
         e2c, same2c, known2c = cup.compare_builds(plain_nm, ble_nm)
         e3 = cbb.reachable_starts(dis)
+        import check_core1 as cc1
+        e6 = cc1.errors(dis) if DUAL else []
+        errors += [f"gate 6: {e}" for e in e6]
+        if DUAL and not e6:
+            notes.append("gate 6: no flash access and no BT service where the second core may run a job (the render); "
+                         "no interrupt waits for it")
         errors += [f"gate 2a: {e}" for e in e2a] + [f"gate 2b: {e}" for e in e2b] + [f"gate 2c: {e}" for e in e2c]
         errors += [f"gate 3: BT start-up reachable at boot: {', '.join(e3)}"] if e3 else []
         notes.append("gate 1: the update loader = the pinned one (tools/ble_base.txt)")
