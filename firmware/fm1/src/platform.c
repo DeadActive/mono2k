@@ -117,7 +117,9 @@ static volatile uint32_t fm1_ms;                /* milliseconds since power-on (
 #define HALF_FRAMES 256u                        /* I2S half buffer: 5.8 ms (as sloopDX: the USB audio band is set for it) */
 #define HALF_WORDS (HALF_FRAMES * 2u)
 #define FELUCCA_OTA 1
-#define FELUCCA_CDC 0
+#ifndef FELUCCA_CDC
+#define FELUCCA_CDC 0                           /* (1: the serial test build, --diag-serial) */
+#endif
 #define FELUCCA_UAC 1
 #ifndef FELUCCA_UART
 #define FELUCCA_UART 1                          /* MIDI IN on the TRS jack */
@@ -448,6 +450,9 @@ void fm1_cstart(void)
     fm1_guard_enable(FM1_GUARD_PC);             /* only now: CPU1 ran the mask ROM to reach our RAM loop */
 #endif
     fm1_audio_init(abuf, HALF_WORDS, isr_alnk0, 3);   /* (abuf is zero: .bss) */
+#if FELUCCA_CDC
+    usb_cdc_on = 1;                             /* (the serial test build: the port from the start) */
+#endif
     usb_start();
 #if FELUCCA_UART
     uart_midi_init();                           /* before timer5_start: it polls the ring */

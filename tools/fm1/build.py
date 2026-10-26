@@ -269,11 +269,16 @@ def main():
     ap.add_argument("--release", metavar="X.Y[.Z]", help="a release: version X.Y[.Z], mono2k-X.Y[.Z].fwsc (identity FM-1_980)")
     ap.add_argument("--sdk", type=Path, help="the JieLi AC79 SDK (default: $AC79_SDK or ~/fw-AC79_AIoT_SDK)")
     ap.add_argument("--diag", action="store_true", help="a test build: the render's load along the top edge")
+    ap.add_argument("--diag-serial", action="store_true", help="a test build: the render's load over the USB serial "
+                    "port twice a second (115200 8N1), nothing drawn on the screen")
     a = ap.parse_args()
     name = "mono2k.fwsc"
     if a.diag:
         CORE.extend(["-DM2K_FM1_DIAG=1"])
         name = "mono2k-test.fwsc"
+    if a.diag_serial:
+        CORE.extend(["-DM2K_FM1_DIAG=2", "-DFELUCCA_CDC=1"])
+        name = "mono2k-test-serial.fwsc"
     if a.release:
         if not re.fullmatch(r"\d+\.\d+(\.\d+)?", a.release):
             raise SystemExit(f"--release {a.release}: X.Y or X.Y.Z")
